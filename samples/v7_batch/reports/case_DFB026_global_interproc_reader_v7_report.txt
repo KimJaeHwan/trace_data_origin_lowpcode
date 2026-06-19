@@ -1,0 +1,186 @@
+==================================================
+V7 MEMORY OBJECT TRANSFER REPORT: case_DFB026_global_interproc_reader
+==================================================
+
+ V7 notes
+--------------------------------------------------
+- v6 source/sink binding and generated helper summary DB behavior is preserved.
+- v7 recovers nested EBP-relative stack addresses before memory linking.
+- v7 models memcpy, memmove, strcpy, and memset as narrow stack transfer summaries.
+- Full heap objects, byte ranges, and indirect-call resolution remain future work.
+
+ SSA Low P-Code with CallSite Bindings
+--------------------------------------------------
+// --- 00401a30: PUSH EBP ---
+Unique_0x41500#1 = COPY(EBP#0)
+ESP#1 = INT_SUB(ESP#0, 0x4)
+STORE(0x1a1, ESP#1, Unique_0x41500#1)
+// --- 00401a31: MOV EBP,ESP ---
+EBP#1 = COPY(ESP#1)
+// --- 00401a33: CALL 0x00401a00 ---
+Memory_GLOBAL_4066bc#1 = CALL_GLOBAL_STORE_SUMMARY(dfb_write_global_values, GLOBAL_4066bc, EAX#1)
+Memory_GLOBAL_4066c0#1 = CALL_GLOBAL_STORE_SUMMARY(dfb_write_global_values, GLOBAL_4066c0, EAX#2)
+EAX#4 = CALL_RET_SUMMARY_DB(dfb_write_global_values, EAX#3)
+CALL_CLOBBER(ECX#1, EDX#1)
+// --- 00401a38: CALL 0x00401a20 ---
+EAX#5 = CALL_RET_SUMMARY_DB(dfb_read_global_main_value, Memory_GLOBAL_4066bc#1)
+CALL_CLOBBER(ECX#2, EDX#2)
+// --- 00401a3d: PUSH EAX ---
+Unique_0x41500#2 = COPY(EAX#5)
+ESP#2 = INT_SUB(ESP#1, 0x4)
+STORE(0x1a1, ESP#2, Unique_0x41500#2)
+// --- 00401a3e: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#2'])
+CALL_RESET(EAX#6, ECX#3, EDX#3, Memory_MEMORY_GLOBAL#1)
+// --- 00401a43: ADD ESP,0x4 ---
+CF#1 = INT_CARRY(ESP#2, 0x4)
+OF#1 = INT_SCARRY(ESP#2, 0x4)
+ESP#3 = INT_ADD(ESP#2, 0x4)
+SF#1 = INT_SLESS(ESP#3, 0x0)
+ZF#1 = INT_EQUAL(ESP#3, 0x0)
+Unique_0x49800#1 = INT_AND(ESP#3, 0xff)
+Unique_0x49900#1 = POPCOUNT(Unique_0x49800#1)
+Unique_0x49a00#1 = INT_AND(Unique_0x49900#1, 0x1)
+PF#1 = INT_EQUAL(Unique_0x49a00#1, 0x0)
+// --- 00401a46: POP EBP ---
+Unique_0x87300#1 = COPY(0x0)
+Unique_0x87300#2 = LOAD(0x1a1, ESP#3)
+ESP#4 = INT_ADD(ESP#3, 0x4)
+EBP#2 = COPY(Unique_0x87300#2)
+// --- 00401a47: RET ---
+Register_0x284#1 = LOAD(0x1a1, ESP#4)
+ESP#5 = INT_ADD(ESP#4, 0x4)
+RETURN(Register_0x284#1)
+
+ Backward DATA slice tree (Target: Unique_0x41500#2)
+--------------------------------------------------
+├── Unique_0x41500#2                [addr: 00401a3d] [op: COPY]
+    ├── EAX#5                           [addr: 00401a38] [op: CALL_RET_SUMMARY]
+        ├── Memory_GLOBAL_4066bc#1          [addr: 00401a33] [op: CALL_GLOBAL_STORE]
+            ├── EAX#1                           [addr: 00401a33] [op: SOURCE_RET]
+
+ Actual data sources
+--------------------------------------------------
+- dfb_source_A.ret
+
+ Expected validation
+--------------------------------------------------
+{
+  "actual_sources": [
+    "dfb_source_A.ret"
+  ],
+  "allowed_warnings": [],
+  "case_id": "DFB026",
+  "expected_features": [
+    "global_variable",
+    "interprocedural"
+  ],
+  "expected_file": "D:\\githubProject\\01_tdo_testbed\\tdo_testbed\\expected\\dfbench_win_core.expected.json",
+  "expected_sources": [
+    "dfb_source_A.ret"
+  ],
+  "forbidden_sources": [
+    "dfb_source_B.ret"
+  ],
+  "forbidden_sources_found": [],
+  "function": "case_DFB026_global_interproc_reader",
+  "missing_expected_sources": [],
+  "program": "dfbench_win_core",
+  "verdict": "PASS"
+}
+
+ Sink anchors
+--------------------------------------------------
+[
+  {
+    "addr": "00401a3e",
+    "anchor_arg0": "Unique_0x41500#2",
+    "args": [
+      "Unique_0x41500#2"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  }
+]
+
+ CallSite bindings
+--------------------------------------------------
+[
+  {
+    "addr": "00401a33",
+    "args": [],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "dfb_write_global_values"
+  },
+  {
+    "addr": "00401a38",
+    "args": [],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "dfb_read_global_main_value"
+  },
+  {
+    "addr": "00401a3e",
+    "args": [
+      "Unique_0x41500#2"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  }
+]
+
+ Function Boundary Summary Skeleton
+--------------------------------------------------
+{
+  "callsites": [
+    {
+      "addr": "00401a33",
+      "args": [],
+      "assembly": "CALL 0x00401a00",
+      "model": "dynamic_summary_db_v6",
+      "target": "dfb_write_global_values"
+    },
+    {
+      "addr": "00401a38",
+      "args": [],
+      "assembly": "CALL 0x00401a20",
+      "model": "dynamic_summary_db_v6",
+      "target": "dfb_read_global_main_value"
+    },
+    {
+      "addr": "00401a3e",
+      "args": [
+        "Unique_0x41500#2"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    }
+  ],
+  "function": "case_DFB026_global_interproc_reader",
+  "inputs": {
+    "Register_0x10L": [
+      {
+        "addr": "00401a30",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x14L": [
+      {
+        "addr": "00401a30",
+        "reason": "use_before_def"
+      }
+    ]
+  },
+  "memory_accesses": [],
+  "notes": [
+    "v5 summary is derived from Low P-Code use-before-def and writes.",
+    "Current JSON lacks stack-frame, symbol/import, xref, and memory-block metadata.",
+    "CALL effects are still opaque until CallSite Binder is implemented.",
+    "v6 adds source/sink-aware CallSite Binder v1.",
+    "v7 adds recursive stack-address recovery and narrow libc transfer summaries."
+  ],
+  "outputs": {}
+}

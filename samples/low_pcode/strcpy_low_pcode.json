@@ -1,0 +1,221 @@
+{
+  "instructions": [
+    {
+      "address": "004034d3", 
+      "length": 6, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x4034d3, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "004040e4", 
+              "offset": "0x4040e4L", 
+              "is_unique": false, 
+              "type": "Address", 
+              "space": "ram:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": true
+            }
+          ], 
+          "opcode": "BRANCHIND", 
+          "output": null
+        }
+      ], 
+      "flow_type": "COMPUTED_JUMP", 
+      "call_targets": [], 
+      "bytes": [
+        "ff", 
+        "25", 
+        "e4", 
+        "40", 
+        "40", 
+        "00"
+      ], 
+      "assembly": "JMP dword ptr [0x004040e4]", 
+      "mnemonic": "JMP", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "INDIRECTION", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": true, 
+          "from": "004034d3", 
+          "to": "004040e4", 
+          "is_jump": false
+        }, 
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "COMPUTED_JUMP", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": -1, 
+          "is_flow": true, 
+          "from": "004034d3", 
+          "to": "EXTERNAL:00000010", 
+          "is_jump": true
+        }
+      ], 
+      "flow_targets": [
+        "004040e4", 
+        "EXTERNAL:00000010"
+      ], 
+      "fallthrough": null
+    }
+  ], 
+  "dumper": "lowpcode_json_dumper_v2_reachable_helpers", 
+  "program": {
+    "default_pointer_size": 4, 
+    "language_id": "x86:LE:32:default", 
+    "image_base": "00400000", 
+    "processor": "x86", 
+    "compiler_spec_id": "windows", 
+    "memory_blocks": [
+      {
+        "is_execute": false, 
+        "start": "00400000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1024, 
+        "is_volatile": false, 
+        "name": "Headers", 
+        "end": "004003ff"
+      }, 
+      {
+        "is_execute": true, 
+        "start": "00401000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".text", 
+        "end": "004035ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00404000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 7680, 
+        "is_volatile": false, 
+        "name": ".rdata", 
+        "end": "00405dff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00406000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2696, 
+        "is_volatile": false, 
+        "name": ".data", 
+        "end": "00406a87"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00407000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".rsrc", 
+        "end": "004071ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00408000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1024, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004083ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "ffdff000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 4096, 
+        "is_volatile": false, 
+        "name": "tdb", 
+        "end": "ffdfffff"
+      }
+    ], 
+    "name": "dfbench_win_core.exe", 
+    "executable_path": "/D:/githubProject/01_tdo_testbed/tdo_testbed/build/win-release/dfbench_win_core.exe"
+  }, 
+  "schema_version": 2, 
+  "function_name": "strcpy", 
+  "start_address": "004034d3", 
+  "compatibility": {
+    "new_fields_are_optional_hints": true, 
+    "legacy_v1_fields_preserved": true, 
+    "legacy_instruction_low_pcode_shape_preserved": true
+  }, 
+  "ghidra_hints": {
+    "function": {
+      "body_ranges": [
+        {
+          "max": "004034d8", 
+          "min": "004034d3"
+        }
+      ], 
+      "calling_convention": "__cdecl", 
+      "signature": "char * __cdecl strcpy(char * _Dest, char * _Source)", 
+      "local_variables": [], 
+      "entry": "004034d3", 
+      "is_thunk": true, 
+      "name": "strcpy", 
+      "stack_frame": {
+        "grows_negative": true, 
+        "local_size": 4, 
+        "frame_size": 12, 
+        "parameter_size": 8, 
+        "return_address_offset": 0
+      }, 
+      "parameters": [
+        {
+          "is_unique": false, 
+          "storage": "Stack[0x4]:4", 
+          "is_register": false, 
+          "stack_offset": 4, 
+          "name": "_Dest", 
+          "data_type": "char *", 
+          "first_use_offset": 0, 
+          "is_stack": true, 
+          "is_memory": false, 
+          "ordinal": 0
+        }, 
+        {
+          "is_unique": false, 
+          "storage": "Stack[0x8]:4", 
+          "is_register": false, 
+          "stack_offset": 8, 
+          "name": "_Source", 
+          "data_type": "char *", 
+          "first_use_offset": 0, 
+          "is_stack": true, 
+          "is_memory": false, 
+          "ordinal": 1
+        }
+      ], 
+      "thunked_function": {
+        "entry": "EXTERNAL:00000010", 
+        "name": "strcpy"
+      }
+    }
+  }
+}

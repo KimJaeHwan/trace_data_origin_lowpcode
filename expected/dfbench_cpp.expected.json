@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "program": "dfbench_cpp",
+  "generated_from": "manifests/cases_manifest.json",
+  "cases": [
+    {
+      "id": "DFB080",
+      "binary": "dfbench_cpp",
+      "function": "case_DFB080_cpp_virtual_call",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "cpp",
+        "virtual_call",
+        "vtable"
+      ],
+      "allowed_warnings": [
+        "unresolved_virtual"
+      ]
+    },
+    {
+      "id": "DFB081",
+      "binary": "dfbench_cpp",
+      "function": "case_DFB081_cpp_lambda_capture",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "cpp",
+        "lambda",
+        "closure"
+      ],
+      "allowed_warnings": []
+    }
+  ]
+}

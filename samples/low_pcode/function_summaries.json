@@ -1,0 +1,1143 @@
+{
+  "schema_version": 1,
+  "summaries": {
+    "FUN_00401cc0": {
+      "calls": [
+        {
+          "addr": "00401cc9",
+          "target": "dfb_sink_int"
+        }
+      ],
+      "function": "FUN_00401cc0",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00401cc0_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_sink_int"
+          }
+        }
+      ]
+    },
+    "FUN_00401ce0": {
+      "calls": [
+        {
+          "addr": "00401cfb",
+          "target": "FUN_00401cc0"
+        }
+      ],
+      "function": "FUN_00401ce0",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00401ce0_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_00401cc0"
+          }
+        }
+      ]
+    },
+    "FUN_00401d10": {
+      "calls": [
+        {
+          "addr": "00401d2b",
+          "target": "FUN_00401ce0"
+        }
+      ],
+      "function": "FUN_00401d10",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00401d10_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_00401ce0"
+          }
+        }
+      ]
+    },
+    "FUN_00402080": {
+      "calls": [
+        {
+          "addr": "00402087",
+          "target": "dfb_sink_int"
+        }
+      ],
+      "function": "FUN_00402080",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00402080_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_sink_int"
+          }
+        }
+      ]
+    },
+    "FUN_00402540": {
+      "calls": [],
+      "function": "FUN_00402540",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00402540_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "base": {
+              "arg": 0,
+              "kind": "arg"
+            },
+            "kind": "field",
+            "offset": 55
+          }
+        }
+      ]
+    },
+    "FUN_00402550": {
+      "calls": [],
+      "function": "FUN_00402550",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00402550_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "FUN_00402712": {
+      "calls": [
+        {
+          "addr": "00402717",
+          "target": "SetUnhandledExceptionFilter"
+        },
+        {
+          "addr": "00402720",
+          "target": "UnhandledExceptionFilter"
+        },
+        {
+          "addr": "0040272b",
+          "target": "GetCurrentProcess"
+        },
+        {
+          "addr": "00402732",
+          "target": "TerminateProcess"
+        }
+      ],
+      "function": "FUN_00402712",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00402712_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "TerminateProcess"
+          }
+        }
+      ]
+    },
+    "FUN_0040273a": {
+      "calls": [
+        {
+          "addr": "00402745",
+          "target": "IsProcessorFeaturePresent"
+        },
+        {
+          "addr": "0040282d",
+          "target": "FUN_00402712"
+        }
+      ],
+      "function": "FUN_0040273a",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x406810",
+          "value": {
+            "kind": "call_ret",
+            "target": "IsProcessorFeaturePresent"
+          }
+        },
+        {
+          "address": "0x40680c",
+          "value": {
+            "kind": "unknown",
+            "reason": "load_from_unknown"
+          }
+        },
+        {
+          "address": "0x406808",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x8L"
+          }
+        },
+        {
+          "address": "0x406804",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0xcL"
+          }
+        },
+        {
+          "address": "0x406800",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x18L"
+          }
+        },
+        {
+          "address": "0x4067fc",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x1cL"
+          }
+        },
+        {
+          "address": "0x406828",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x104L"
+          }
+        },
+        {
+          "address": "0x40681c",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x102L"
+          }
+        },
+        {
+          "address": "0x4067f8",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x106L"
+          }
+        },
+        {
+          "address": "0x4067f4",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x100L"
+          }
+        },
+        {
+          "address": "0x4067f0",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x108L"
+          }
+        },
+        {
+          "address": "0x4067ec",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x10aL"
+          }
+        },
+        {
+          "address": "0x406820",
+          "value": {
+            "kind": "unknown",
+            "reason": "load_from_unknown"
+          }
+        },
+        {
+          "address": "0x406814",
+          "value": {
+            "kind": "unknown",
+            "reason": "load_from_frame_base"
+          }
+        },
+        {
+          "address": "0x406818",
+          "value": {
+            "kind": "local_stack",
+            "offset": 4
+          }
+        },
+        {
+          "address": "0x406824",
+          "value": {
+            "kind": "stack_addr",
+            "offset": 8
+          }
+        },
+        {
+          "address": "0x406760",
+          "value": {
+            "kind": "const",
+            "value": "0x10001"
+          }
+        },
+        {
+          "address": "0x40671c",
+          "value": {
+            "address": "0x406818",
+            "kind": "global"
+          }
+        },
+        {
+          "address": "0x406710",
+          "value": {
+            "kind": "const",
+            "value": "0xc0000409"
+          }
+        },
+        {
+          "address": "0x406714",
+          "value": {
+            "kind": "const",
+            "value": "0x1"
+          }
+        },
+        {
+          "address": "0x406720",
+          "value": {
+            "kind": "const",
+            "value": "0x1"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/FUN_0040273a_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_00402712"
+          }
+        }
+      ]
+    },
+    "FUN_00402835": {
+      "calls": [
+        {
+          "addr": "0040283a",
+          "target": "FUN_00402842"
+        }
+      ],
+      "function": "FUN_00402835",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/FUN_00402835_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_00402842"
+          }
+        }
+      ]
+    },
+    "FUN_00402842": {
+      "calls": [
+        {
+          "addr": "0040284d",
+          "target": "IsProcessorFeaturePresent"
+        },
+        {
+          "addr": "0040290a",
+          "target": "FUN_00402712"
+        }
+      ],
+      "function": "FUN_00402842",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x406810",
+          "value": {
+            "kind": "call_ret",
+            "target": "IsProcessorFeaturePresent"
+          }
+        },
+        {
+          "address": "0x40680c",
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        },
+        {
+          "address": "0x406808",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x8L"
+          }
+        },
+        {
+          "address": "0x406804",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0xcL"
+          }
+        },
+        {
+          "address": "0x406800",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x18L"
+          }
+        },
+        {
+          "address": "0x4067fc",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x1cL"
+          }
+        },
+        {
+          "address": "0x406828",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x104L"
+          }
+        },
+        {
+          "address": "0x40681c",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x102L"
+          }
+        },
+        {
+          "address": "0x4067f8",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x106L"
+          }
+        },
+        {
+          "address": "0x4067f4",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x100L"
+          }
+        },
+        {
+          "address": "0x4067f0",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x108L"
+          }
+        },
+        {
+          "address": "0x4067ec",
+          "value": {
+            "kind": "unknown",
+            "reason": "unbound_Register:0x10aL"
+          }
+        },
+        {
+          "address": "0x406820",
+          "value": {
+            "kind": "unknown",
+            "reason": "load_from_unknown"
+          }
+        },
+        {
+          "address": "0x406814",
+          "value": {
+            "kind": "unknown",
+            "reason": "load_from_frame_base"
+          }
+        },
+        {
+          "address": "0x406818",
+          "value": {
+            "kind": "local_stack",
+            "offset": 4
+          }
+        },
+        {
+          "address": "0x406824",
+          "value": {
+            "kind": "stack_addr",
+            "offset": 8
+          }
+        },
+        {
+          "address": "0x40671c",
+          "value": {
+            "address": "0x406818",
+            "kind": "global"
+          }
+        },
+        {
+          "address": "0x406710",
+          "value": {
+            "kind": "const",
+            "value": "0xc0000409"
+          }
+        },
+        {
+          "address": "0x406714",
+          "value": {
+            "kind": "const",
+            "value": "0x1"
+          }
+        },
+        {
+          "address": "0x406720",
+          "value": {
+            "kind": "const",
+            "value": "0x1"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/FUN_00402842_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_00402712"
+          }
+        }
+      ]
+    },
+    "__security_check_cookie": {
+      "calls": [
+        {
+          "addr": "0040270d",
+          "target": "FUN_0040273a"
+        }
+      ],
+      "function": "__security_check_cookie",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/__security_check_cookie_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "FUN_0040273a"
+          }
+        }
+      ]
+    },
+    "dfb_copy_arg_to_out": {
+      "calls": [],
+      "function": "dfb_copy_arg_to_out",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_copy_arg_to_out_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 1,
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_fp_target": {
+      "calls": [],
+      "function": "dfb_fp_target",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_fp_target_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "base": {
+              "arg": 0,
+              "kind": "arg"
+            },
+            "kind": "field",
+            "offset": 10
+          }
+        }
+      ]
+    },
+    "dfb_identity_int": {
+      "calls": [],
+      "function": "dfb_identity_int",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_identity_int_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_longjmp_writer": {
+      "calls": [
+        {
+          "addr": "00402432",
+          "target": "longjmp"
+        }
+      ],
+      "function": "dfb_longjmp_writer",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x406708",
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/dfb_longjmp_writer_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "longjmp"
+          }
+        }
+      ]
+    },
+    "dfb_make_big_struct": {
+      "calls": [
+        {
+          "addr": "00401bcd",
+          "target": "__security_check_cookie"
+        }
+      ],
+      "function": "dfb_make_big_struct",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_make_big_struct_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "kind": "local_stack",
+            "offset": -20
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "__security_check_cookie"
+          }
+        }
+      ]
+    },
+    "dfb_nested_1": {
+      "calls": [
+        {
+          "addr": "00401ac7",
+          "target": "dfb_nested_2"
+        }
+      ],
+      "function": "dfb_nested_1",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_nested_1_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_nested_2"
+          }
+        }
+      ]
+    },
+    "dfb_nested_2": {
+      "calls": [
+        {
+          "addr": "00401aa7",
+          "target": "dfb_transform_int"
+        }
+      ],
+      "function": "dfb_nested_2",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_nested_2_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_transform_int"
+          }
+        }
+      ]
+    },
+    "dfb_pick_first_vararg": {
+      "calls": [],
+      "function": "dfb_pick_first_vararg",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_pick_first_vararg_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "local_stack",
+            "offset": -8
+          }
+        }
+      ]
+    },
+    "dfb_read_global_main_value": {
+      "calls": [],
+      "function": "dfb_read_global_main_value",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_read_global_main_value_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "address": "0x4066bc",
+            "kind": "global"
+          }
+        }
+      ]
+    },
+    "dfb_recursive_transform": {
+      "calls": [
+        {
+          "addr": "00401efc",
+          "target": "dfb_recursive_transform"
+        }
+      ],
+      "function": "dfb_recursive_transform",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_recursive_transform_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_recursive_transform"
+          }
+        }
+      ]
+    },
+    "dfb_register_callback": {
+      "calls": [],
+      "function": "dfb_register_callback",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x4066c4",
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/dfb_register_callback_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_same_identity": {
+      "calls": [],
+      "function": "dfb_same_identity",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_same_identity_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_status_out_writer": {
+      "calls": [],
+      "function": "dfb_status_out_writer",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_status_out_writer_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ],
+      "returns": []
+    },
+    "dfb_store_through_double_pointer": {
+      "calls": [],
+      "function": "dfb_store_through_double_pointer",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_store_through_double_pointer_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 1,
+          "out_arg": 0,
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_summary_arg_to_out": {
+      "calls": [],
+      "function": "dfb_summary_arg_to_out",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_summary_arg_to_out_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_summary_arg_to_ret": {
+      "calls": [],
+      "function": "dfb_summary_arg_to_ret",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_summary_arg_to_ret_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_summary_field_to_ret": {
+      "calls": [],
+      "function": "dfb_summary_field_to_ret",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_summary_field_to_ret_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "base": {
+              "arg": 0,
+              "kind": "arg"
+            },
+            "kind": "deref"
+          }
+        }
+      ]
+    },
+    "dfb_summary_inout_update": {
+      "calls": [],
+      "function": "dfb_summary_inout_update",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_summary_inout_update_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_tail_target": {
+      "calls": [],
+      "function": "dfb_tail_target",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_tail_target_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_tail_wrapper": {
+      "calls": [
+        {
+          "addr": "00402387",
+          "target": "dfb_tail_target"
+        }
+      ],
+      "function": "dfb_tail_wrapper",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_tail_wrapper_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_tail_target"
+          }
+        }
+      ]
+    },
+    "dfb_transform_int": {
+      "calls": [],
+      "function": "dfb_transform_int",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_transform_int_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "base": {
+              "arg": 0,
+              "kind": "arg"
+            },
+            "kind": "field",
+            "offset": 1
+          }
+        }
+      ]
+    },
+    "dfb_write_global_values": {
+      "calls": [
+        {
+          "addr": "00401a03",
+          "target": "dfb_source_A"
+        },
+        {
+          "addr": "00401a0d",
+          "target": "dfb_source_B"
+        }
+      ],
+      "function": "dfb_write_global_values",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x4066bc",
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_A"
+          }
+        },
+        {
+          "address": "0x4066c0",
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_B"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/dfb_write_global_values_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_B"
+          }
+        }
+      ]
+    },
+    "dfb_write_source_to_out": {
+      "calls": [
+        {
+          "addr": "004015c3",
+          "target": "dfb_source_A"
+        }
+      ],
+      "function": "dfb_write_source_to_out",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_write_source_to_out_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_A"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_A"
+          }
+        }
+      ]
+    },
+    "longjmp": {
+      "calls": [],
+      "function": "longjmp",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/longjmp_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "memcpy": {
+      "calls": [],
+      "function": "memcpy",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/memcpy_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "memmove": {
+      "calls": [],
+      "function": "memmove",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/memmove_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "memset": {
+      "calls": [],
+      "function": "memset",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/memset_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "setjmp3": {
+      "calls": [],
+      "function": "setjmp3",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/setjmp3_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "strcpy": {
+      "calls": [],
+      "function": "strcpy",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/strcpy_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    }
+  }
+}

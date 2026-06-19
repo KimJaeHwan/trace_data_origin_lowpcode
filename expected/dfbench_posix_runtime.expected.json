@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "program": "dfbench_posix_runtime",
+  "generated_from": "manifests/cases_manifest.json",
+  "cases": [
+    {
+      "id": "DFB090",
+      "binary": "dfbench_posix_runtime",
+      "function": "case_DFB090_thread_shared_memory",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "thread",
+        "shared_memory"
+      ],
+      "allowed_warnings": [
+        "unresolved_thread_dispatch"
+      ]
+    },
+    {
+      "id": "DFB092",
+      "binary": "dfbench_posix_runtime",
+      "function": "case_DFB092_pthread_table_dispatch",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_B.ret"
+      ],
+      "expected_features": [
+        "thread",
+        "indirect_call",
+        "function_pointer_table"
+      ],
+      "allowed_warnings": [
+        "unresolved_indirect",
+        "unresolved_thread_dispatch"
+      ]
+    }
+  ]
+}

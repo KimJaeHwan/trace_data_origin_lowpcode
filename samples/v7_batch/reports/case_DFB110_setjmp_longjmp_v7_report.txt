@@ -1,0 +1,345 @@
+==================================================
+V7 MEMORY OBJECT TRANSFER REPORT: case_DFB110_setjmp_longjmp
+==================================================
+
+ V7 notes
+--------------------------------------------------
+- v6 source/sink binding and generated helper summary DB behavior is preserved.
+- v7 recovers nested EBP-relative stack addresses before memory linking.
+- v7 models memcpy, memmove, strcpy, and memset as narrow stack transfer summaries.
+- Full heap objects, byte ranges, and indirect-call resolution remain future work.
+
+ SSA Low P-Code with CallSite Bindings
+--------------------------------------------------
+// --- 00402440: PUSH EBP ---
+Unique_0x41500#1 = COPY(EBP#0)
+ESP#1 = INT_SUB(ESP#0, 0x4)
+STORE(0x1a1, ESP#1, Unique_0x41500#1)
+// --- 00402441: MOV EBP,ESP ---
+EBP#1 = COPY(ESP#1)
+// --- 00402443: PUSH ECX ---
+Unique_0x41500#2 = COPY(ECX#0)
+ESP#2 = INT_SUB(ESP#1, 0x4)
+STORE(0x1a1, ESP#2, Unique_0x41500#2)
+// --- 00402444: CALL 0x00401310 ---
+EAX#1 = SOURCE_RET(dfb_source_A)
+CALL_CLOBBER(ECX#1, EDX#1, Memory_MEMORY_GLOBAL#1)
+// --- 00402449: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#1 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#1 = COPY(EAX#1)
+Memory_EBP_0xfffffffc#1 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#1) [local_stack]
+// --- 0040244c: PUSH 0x0 ---
+Unique_0x87b00#1 = COPY(0x0)
+ESP#3 = INT_SUB(ESP#2, 0x4)
+STORE(0x1a1, ESP#3, Unique_0x87b00#1)
+// --- 0040244e: PUSH 0x4066c8 ---
+Unique_0x87f00#1 = COPY(0x4066c8)
+ESP#4 = INT_SUB(ESP#3, 0x4)
+STORE(0x1a1, ESP#4, Unique_0x87f00#1)
+// --- 00402453: CALL 0x004034b5 ---
+CALL_RESET(EAX#2, ECX#2, EDX#2, Memory_MEMORY_GLOBAL#2)
+// --- 00402458: ADD ESP,0x8 ---
+CF#1 = INT_CARRY(ESP#4, 0x8)
+OF#1 = INT_SCARRY(ESP#4, 0x8)
+ESP#5 = INT_ADD(ESP#4, 0x8)
+SF#1 = INT_SLESS(ESP#5, 0x0)
+ZF#1 = INT_EQUAL(ESP#5, 0x0)
+Unique_0x49800#1 = INT_AND(ESP#5, 0xff)
+Unique_0x49900#1 = POPCOUNT(Unique_0x49800#1)
+Unique_0x49a00#1 = INT_AND(Unique_0x49900#1, 0x1)
+PF#1 = INT_EQUAL(Unique_0x49a00#1, 0x0)
+// --- 0040245b: TEST EAX,EAX ---
+CF#2 = COPY(0x0)
+OF#2 = COPY(0x0)
+Unique_0xae400#1 = INT_AND(EAX#2, EAX#2)
+SF#2 = INT_SLESS(Unique_0xae400#1, 0x0)
+ZF#2 = INT_EQUAL(Unique_0xae400#1, 0x0)
+Unique_0x49800#2 = INT_AND(Unique_0xae400#1, 0xff)
+Unique_0x49900#2 = POPCOUNT(Unique_0x49800#2)
+Unique_0x49a00#2 = INT_AND(Unique_0x49900#2, 0x1)
+PF#2 = INT_EQUAL(Unique_0x49a00#2, 0x0)
+// --- 0040245d: JNZ 0x0040246b ---
+CBRANCH(IF NOT ZF#2 GOTO TARGET)
+// --- 0040245f: MOV EAX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#2 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#1 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#1 [local_stack]
+EAX#3 = COPY(Unique_0x17200#1)
+// --- 00402462: PUSH EAX ---
+Unique_0x41500#3 = COPY(EAX#3)
+ESP#6 = INT_SUB(ESP#5, 0x4)
+STORE(0x1a1, ESP#6, Unique_0x41500#3)
+// --- 00402463: CALL 0x00402420 ---
+Memory_GLOBAL_406708#1 = CALL_GLOBAL_STORE_SUMMARY(dfb_longjmp_writer, GLOBAL_406708, Unique_0x41500#3)
+CALL_CLOBBER(ECX#3, EDX#3)
+// --- 00402468: ADD ESP,0x4 ---
+CF#3 = INT_CARRY(ESP#6, 0x4)
+OF#3 = INT_SCARRY(ESP#6, 0x4)
+ESP#7 = INT_ADD(ESP#6, 0x4)
+SF#3 = INT_SLESS(ESP#7, 0x0)
+ZF#3 = INT_EQUAL(ESP#7, 0x0)
+Unique_0x49800#3 = INT_AND(ESP#7, 0xff)
+Unique_0x49900#3 = POPCOUNT(Unique_0x49800#3)
+Unique_0x49a00#3 = INT_AND(Unique_0x49900#3, 0x1)
+PF#3 = INT_EQUAL(Unique_0x49a00#3, 0x0)
+
+[phi] EAX#4 = MLIL_VAR_PHI(EAX#2, EAX#3) [path condition: ZF#2]
+
+[phi] ESP#8 = MLIL_VAR_PHI(ESP#5, ESP#7) [path condition: ZF#2]
+
+[phi] CF#4 = MLIL_VAR_PHI(CF#2, CF#3) [path condition: ZF#2]
+
+[phi] PF#4 = MLIL_VAR_PHI(PF#2, PF#3) [path condition: ZF#2]
+
+[phi] ZF#4 = MLIL_VAR_PHI(ZF#2, ZF#3) [path condition: ZF#2]
+
+[phi] SF#4 = MLIL_VAR_PHI(SF#2, SF#3) [path condition: ZF#2]
+
+[phi] OF#4 = MLIL_VAR_PHI(OF#2, OF#3) [path condition: ZF#2]
+
+[phi] ECX#4 = MLIL_VAR_PHI(ECX#2, ECX#3) [path condition: ZF#2]
+
+[phi] EDX#4 = MLIL_VAR_PHI(EDX#2, EDX#3) [path condition: ZF#2]
+// --- 0040246b: MOV ECX,dword ptr [0x00406708] ---
+ECX#5 = COPY(Address_0x406708#0)
+// --- 00402471: PUSH ECX ---
+Unique_0x41500#4 = COPY(ECX#5)
+ESP#9 = INT_SUB(ESP#8, 0x4)
+STORE(0x1a1, ESP#9, Unique_0x41500#4)
+// --- 00402472: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#4'])
+CALL_RESET(EAX#5, ECX#6, EDX#5, Memory_MEMORY_GLOBAL#3)
+// --- 00402477: ADD ESP,0x4 ---
+CF#5 = INT_CARRY(ESP#9, 0x4)
+OF#5 = INT_SCARRY(ESP#9, 0x4)
+ESP#10 = INT_ADD(ESP#9, 0x4)
+SF#5 = INT_SLESS(ESP#10, 0x0)
+ZF#5 = INT_EQUAL(ESP#10, 0x0)
+Unique_0x49800#4 = INT_AND(ESP#10, 0xff)
+Unique_0x49900#4 = POPCOUNT(Unique_0x49800#4)
+Unique_0x49a00#4 = INT_AND(Unique_0x49900#4, 0x1)
+PF#5 = INT_EQUAL(Unique_0x49a00#4, 0x0)
+// --- 0040247a: MOV ESP,EBP ---
+ESP#11 = COPY(EBP#1)
+// --- 0040247c: POP EBP ---
+Unique_0x87300#1 = COPY(0x0)
+Unique_0x87300#2 = LOAD(0x1a1, ESP#11)
+ESP#12 = INT_ADD(ESP#11, 0x4)
+EBP#2 = COPY(Unique_0x87300#2)
+// --- 0040247d: RET ---
+Register_0x284#1 = LOAD(0x1a1, ESP#12)
+ESP#13 = INT_ADD(ESP#12, 0x4)
+RETURN(Register_0x284#1)
+
+ Backward DATA slice tree (Target: Unique_0x41500#4)
+--------------------------------------------------
+├── Unique_0x41500#4                [addr: 00402471] [op: COPY]
+    ├── ECX#5                           [addr: 0040246b] [op: COPY]
+        ├── Address_0x406708#0              [addr: 0040246b] [op: Constant]
+
+ Actual data sources
+--------------------------------------------------
+- (none)
+
+ Expected validation
+--------------------------------------------------
+{
+  "actual_sources": [],
+  "allowed_warnings": [
+    "unresolved_nonlocal_jump"
+  ],
+  "case_id": "DFB110",
+  "expected_features": [
+    "exceptional_flow",
+    "setjmp"
+  ],
+  "expected_file": "D:\\githubProject\\01_tdo_testbed\\tdo_testbed\\expected\\dfbench_win_core.expected.json",
+  "expected_sources": [
+    "dfb_source_A.ret"
+  ],
+  "forbidden_sources": [],
+  "forbidden_sources_found": [],
+  "function": "case_DFB110_setjmp_longjmp",
+  "missing_expected_sources": [
+    "dfb_source_A.ret"
+  ],
+  "program": "dfbench_win_core",
+  "verdict": "FAIL"
+}
+
+ Sink anchors
+--------------------------------------------------
+[
+  {
+    "addr": "00402472",
+    "anchor_arg0": "Unique_0x41500#4",
+    "args": [
+      "Unique_0x41500#4"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  }
+]
+
+ CallSite bindings
+--------------------------------------------------
+[
+  {
+    "addr": "00402444",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#1",
+    "target": "dfb_source_A"
+  },
+  {
+    "addr": "00402463",
+    "args": [
+      "Unique_0x41500#3"
+    ],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "dfb_longjmp_writer"
+  },
+  {
+    "addr": "00402472",
+    "args": [
+      "Unique_0x41500#4"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  }
+]
+
+ Function Boundary Summary Skeleton
+--------------------------------------------------
+{
+  "callsites": [
+    {
+      "addr": "00402444",
+      "assembly": "CALL 0x00401310",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#1",
+      "target": "dfb_source_A"
+    },
+    {
+      "addr": "00402453",
+      "assembly": "CALL 0x004034b5",
+      "flow_targets": [
+        "004034b5"
+      ],
+      "model": "opaque_call_reset_v5_temporary",
+      "next_step": "replace with CallSite Binder + callee FunctionSummary application"
+    },
+    {
+      "addr": "00402463",
+      "args": [
+        "Unique_0x41500#3"
+      ],
+      "assembly": "CALL 0x00402420",
+      "model": "dynamic_summary_db_v6",
+      "target": "dfb_longjmp_writer"
+    },
+    {
+      "addr": "00402472",
+      "args": [
+        "Unique_0x41500#4"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    }
+  ],
+  "function": "case_DFB110_setjmp_longjmp",
+  "inputs": {
+    "Register_0x10L": [
+      {
+        "addr": "00402440",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x14L": [
+      {
+        "addr": "00402440",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x4L": [
+      {
+        "addr": "00402443",
+        "reason": "use_before_def"
+      }
+    ]
+  },
+  "memory_accesses": [
+    {
+      "addr": "00402449",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#1",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040245f",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#1",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040246b",
+      "confidence": "address_varnode",
+      "offset": "0x406708L",
+      "opcode": "COPY",
+      "region": "global_or_code_address"
+    }
+  ],
+  "notes": [
+    "v5 summary is derived from Low P-Code use-before-def and writes.",
+    "Current JSON lacks stack-frame, symbol/import, xref, and memory-block metadata.",
+    "CALL effects are still opaque until CallSite Binder is implemented.",
+    "v6 adds source/sink-aware CallSite Binder v1.",
+    "v7 adds recursive stack-address recovery and narrow libc transfer summaries."
+  ],
+  "outputs": {
+    "Memory_MEMORY_GLOBAL": [
+      {
+        "addr": "00402453",
+        "confidence": "opaque_call",
+        "node": "Memory_MEMORY_GLOBAL#2",
+        "reason": "opaque_call_clobber",
+        "region": "unknown_external_memory"
+      }
+    ],
+    "Register_0x0L": [
+      {
+        "addr": "00402453",
+        "confidence": "opaque_call",
+        "node": "EAX#2",
+        "reason": "opaque_call_clobber",
+        "region": "register"
+      }
+    ],
+    "Register_0x4L": [
+      {
+        "addr": "00402453",
+        "confidence": "opaque_call",
+        "node": "ECX#2",
+        "reason": "opaque_call_clobber",
+        "region": "register"
+      }
+    ],
+    "Register_0x8L": [
+      {
+        "addr": "00402453",
+        "confidence": "opaque_call",
+        "node": "EDX#2",
+        "reason": "opaque_call_clobber",
+        "region": "register"
+      }
+    ]
+  }
+}

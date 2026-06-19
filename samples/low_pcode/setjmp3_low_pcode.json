@@ -1,0 +1,196 @@
+{
+  "instructions": [
+    {
+      "address": "004034b5", 
+      "length": 6, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x4034b5, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "0040404c", 
+              "offset": "0x40404cL", 
+              "is_unique": false, 
+              "type": "Address", 
+              "space": "ram:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": true
+            }
+          ], 
+          "opcode": "BRANCHIND", 
+          "output": null
+        }
+      ], 
+      "flow_type": "COMPUTED_JUMP", 
+      "call_targets": [], 
+      "bytes": [
+        "ff", 
+        "25", 
+        "4c", 
+        "40", 
+        "40", 
+        "00"
+      ], 
+      "assembly": "JMP dword ptr [0x0040404c]", 
+      "mnemonic": "JMP", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "INDIRECTION", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": true, 
+          "from": "004034b5", 
+          "to": "0040404c", 
+          "is_jump": false
+        }, 
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "COMPUTED_JUMP", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": -1, 
+          "is_flow": true, 
+          "from": "004034b5", 
+          "to": "EXTERNAL:00000009", 
+          "is_jump": true
+        }
+      ], 
+      "flow_targets": [
+        "0040404c", 
+        "EXTERNAL:00000009"
+      ], 
+      "fallthrough": null
+    }
+  ], 
+  "dumper": "lowpcode_json_dumper_v2_reachable_helpers", 
+  "program": {
+    "default_pointer_size": 4, 
+    "language_id": "x86:LE:32:default", 
+    "image_base": "00400000", 
+    "processor": "x86", 
+    "compiler_spec_id": "windows", 
+    "memory_blocks": [
+      {
+        "is_execute": false, 
+        "start": "00400000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1024, 
+        "is_volatile": false, 
+        "name": "Headers", 
+        "end": "004003ff"
+      }, 
+      {
+        "is_execute": true, 
+        "start": "00401000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".text", 
+        "end": "004035ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00404000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 7680, 
+        "is_volatile": false, 
+        "name": ".rdata", 
+        "end": "00405dff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00406000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2696, 
+        "is_volatile": false, 
+        "name": ".data", 
+        "end": "00406a87"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00407000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".rsrc", 
+        "end": "004071ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00408000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1024, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004083ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "ffdff000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 4096, 
+        "is_volatile": false, 
+        "name": "tdb", 
+        "end": "ffdfffff"
+      }
+    ], 
+    "name": "dfbench_win_core.exe", 
+    "executable_path": "/D:/githubProject/01_tdo_testbed/tdo_testbed/build/win-release/dfbench_win_core.exe"
+  }, 
+  "schema_version": 2, 
+  "function_name": "setjmp3", 
+  "start_address": "004034b5", 
+  "compatibility": {
+    "new_fields_are_optional_hints": true, 
+    "legacy_v1_fields_preserved": true, 
+    "legacy_instruction_low_pcode_shape_preserved": true
+  }, 
+  "ghidra_hints": {
+    "function": {
+      "body_ranges": [
+        {
+          "max": "004034ba", 
+          "min": "004034b5"
+        }
+      ], 
+      "calling_convention": "__cdecl", 
+      "signature": "undefined __cdecl setjmp3(void)", 
+      "local_variables": [], 
+      "entry": "004034b5", 
+      "is_thunk": true, 
+      "name": "setjmp3", 
+      "stack_frame": {
+        "grows_negative": true, 
+        "local_size": 4, 
+        "frame_size": 4, 
+        "parameter_size": 0, 
+        "return_address_offset": 0
+      }, 
+      "parameters": [], 
+      "thunked_function": {
+        "entry": "EXTERNAL:00000009", 
+        "name": "setjmp3"
+      }
+    }
+  }
+}

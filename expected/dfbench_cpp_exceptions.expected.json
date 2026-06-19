@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "program": "dfbench_cpp_exceptions",
+  "generated_from": "manifests/cases_manifest.json",
+  "cases": [
+    {
+      "id": "DFB111",
+      "binary": "dfbench_cpp_exceptions",
+      "function": "case_DFB111_cpp_exception_flow",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "cpp",
+        "exception",
+        "exceptional_flow"
+      ],
+      "allowed_warnings": [
+        "unresolved_exception_flow"
+      ]
+    }
+  ]
+}

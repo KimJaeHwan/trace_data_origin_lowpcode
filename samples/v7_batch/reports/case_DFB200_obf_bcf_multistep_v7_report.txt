@@ -1,0 +1,946 @@
+==================================================
+V7 MEMORY OBJECT TRANSFER REPORT: case_DFB200_obf_bcf_multistep
+==================================================
+
+ V7 notes
+--------------------------------------------------
+- v6 source/sink binding and generated helper summary DB behavior is preserved.
+- v7 recovers nested EBP-relative stack addresses before memory linking.
+- v7 models memcpy, memmove, strcpy, and memset as narrow stack transfer summaries.
+- Full heap objects, byte ranges, and indirect-call resolution remain future work.
+
+ SSA Low P-Code with CallSite Bindings
+--------------------------------------------------
+// --- 00402570: PUSH EBP ---
+Unique_0x41500#1 = COPY(EBP#0)
+ESP#1 = INT_SUB(ESP#0, 0x4)
+STORE(0x1a1, ESP#1, Unique_0x41500#1)
+// --- 00402571: MOV EBP,ESP ---
+EBP#1 = COPY(ESP#1)
+// --- 00402573: SUB ESP,0x8 ---
+CF#1 = INT_LESS(ESP#1, 0x8)
+OF#1 = INT_SBORROW(ESP#1, 0x8)
+ESP#2 = INT_SUB(ESP#1, 0x8)
+SF#1 = INT_SLESS(ESP#2, 0x0)
+ZF#1 = INT_EQUAL(ESP#2, 0x0)
+Unique_0x49800#1 = INT_AND(ESP#2, 0xff)
+Unique_0x49900#1 = POPCOUNT(Unique_0x49800#1)
+Unique_0x49a00#1 = INT_AND(Unique_0x49900#1, 0x1)
+PF#1 = INT_EQUAL(Unique_0x49a00#1, 0x0)
+// --- 00402576: CALL 0x00401310 ---
+EAX#1 = SOURCE_RET(dfb_source_A)
+CALL_CLOBBER(ECX#1, EDX#1, Memory_MEMORY_GLOBAL#1)
+// --- 0040257b: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#1 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#1 = COPY(EAX#1)
+Memory_EBP_0xfffffffc#1 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#1) [local_stack]
+// --- 0040257e: CMP dword ptr [0x0040670c],0x1 ---
+Unique_0x66100#1 = COPY(Address_0x40670c#0)
+CF#2 = INT_LESS(Unique_0x66100#1, 0x1)
+OF#2 = INT_SBORROW(Unique_0x66100#1, 0x1)
+Unique_0x66300#1 = INT_SUB(Unique_0x66100#1, 0x1)
+SF#2 = INT_SLESS(Unique_0x66300#1, 0x0)
+ZF#2 = INT_EQUAL(Unique_0x66300#1, 0x0)
+Unique_0x49800#2 = INT_AND(Unique_0x66300#1, 0xff)
+Unique_0x49900#2 = POPCOUNT(Unique_0x49800#2)
+Unique_0x49a00#2 = INT_AND(Unique_0x49900#2, 0x1)
+PF#2 = INT_EQUAL(Unique_0x49a00#2, 0x0)
+// --- 00402585: JNZ 0x004025a7 ---
+CBRANCH(IF NOT ZF#2 GOTO TARGET)
+// --- 00402587: MOV EAX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#2 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#1 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#1 [local_stack]
+EAX#2 = COPY(Unique_0x17200#1)
+// --- 0040258a: PUSH EAX ---
+Unique_0x41500#2 = COPY(EAX#2)
+ESP#3 = INT_SUB(ESP#2, 0x4)
+STORE(0x1a1, ESP#3, Unique_0x41500#2)
+// --- 0040258b: CALL 0x00402540 ---
+EAX#3 = CALL_RET_SUMMARY_DB(FUN_00402540, Unique_0x41500#2)
+CALL_CLOBBER(ECX#2, EDX#2)
+// --- 00402590: ADD ESP,0x4 ---
+CF#3 = INT_CARRY(ESP#3, 0x4)
+OF#3 = INT_SCARRY(ESP#3, 0x4)
+ESP#4 = INT_ADD(ESP#3, 0x4)
+SF#3 = INT_SLESS(ESP#4, 0x0)
+ZF#3 = INT_EQUAL(ESP#4, 0x0)
+Unique_0x49800#3 = INT_AND(ESP#4, 0xff)
+Unique_0x49900#3 = POPCOUNT(Unique_0x49800#3)
+Unique_0x49a00#3 = INT_AND(Unique_0x49900#3, 0x1)
+PF#3 = INT_EQUAL(Unique_0x49a00#3, 0x0)
+// --- 00402593: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#3 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#2 = COPY(EAX#3)
+Memory_EBP_0xfffffffc#2 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#2) [local_stack]
+// --- 00402596: MOV ECX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#4 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#2 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#2 [local_stack]
+ECX#3 = COPY(Unique_0x17200#2)
+// --- 00402599: PUSH ECX ---
+Unique_0x41500#3 = COPY(ECX#3)
+ESP#5 = INT_SUB(ESP#4, 0x4)
+STORE(0x1a1, ESP#5, Unique_0x41500#3)
+// --- 0040259a: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#3'])
+CALL_RESET(EAX#4, ECX#4, EDX#3, Memory_MEMORY_GLOBAL#2)
+// --- 0040259f: ADD ESP,0x4 ---
+CF#4 = INT_CARRY(ESP#5, 0x4)
+OF#4 = INT_SCARRY(ESP#5, 0x4)
+ESP#6 = INT_ADD(ESP#5, 0x4)
+SF#4 = INT_SLESS(ESP#6, 0x0)
+ZF#4 = INT_EQUAL(ESP#6, 0x0)
+Unique_0x49800#4 = INT_AND(ESP#6, 0xff)
+Unique_0x49900#4 = POPCOUNT(Unique_0x49800#4)
+Unique_0x49a00#4 = INT_AND(Unique_0x49900#4, 0x1)
+PF#4 = INT_EQUAL(Unique_0x49a00#4, 0x0)
+// --- 004025a2: JMP 0x0040263b ---
+BRANCH(Address_0x40263b#0)
+// --- 004025a7: MOV EDX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#5 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#3 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#1 [local_stack]
+EDX#4 = COPY(Unique_0x17200#3)
+// --- 004025aa: XOR EDX,0xa5 ---
+CF#5 = COPY(0x0)
+OF#5 = COPY(0x0)
+EDX#5 = INT_XOR(EDX#4, 0xa5)
+SF#5 = INT_SLESS(EDX#5, 0x0)
+ZF#5 = INT_EQUAL(EDX#5, 0x0)
+Unique_0x49800#5 = INT_AND(EDX#5, 0xff)
+Unique_0x49900#5 = POPCOUNT(Unique_0x49800#5)
+Unique_0x49a00#5 = INT_AND(Unique_0x49900#5, 0x1)
+PF#5 = INT_EQUAL(Unique_0x49a00#5, 0x0)
+// --- 004025b0: MOV dword ptr [EBP + -0x4],EDX ---
+Unique_0x6600#6 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#3 = COPY(EDX#5)
+Memory_EBP_0xfffffffc#3 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#3) [local_stack]
+// --- 004025b3: MOV EAX,[0x0040670c] ---
+EAX#5 = COPY(Address_0x40670c#0)
+// --- 004025b8: OR EAX,dword ptr [0x004065f4] ---
+CF#6 = COPY(0x0)
+OF#6 = COPY(0x0)
+EAX#6 = INT_OR(EAX#5, Address_0x4065f4#0)
+SF#6 = INT_SLESS(EAX#6, 0x0)
+ZF#6 = INT_EQUAL(EAX#6, 0x0)
+Unique_0x49800#6 = INT_AND(EAX#6, 0xff)
+Unique_0x49900#6 = POPCOUNT(Unique_0x49800#6)
+Unique_0x49a00#6 = INT_AND(Unique_0x49900#6, 0x1)
+PF#6 = INT_EQUAL(Unique_0x49a00#6, 0x0)
+// --- 004025be: JNZ 0x004025dd ---
+CBRANCH(IF NOT ZF#6 GOTO TARGET)
+// --- 004025c0: MOV ECX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#7 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#4 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#3 [local_stack]
+ECX#5 = COPY(Unique_0x17200#4)
+// --- 004025c3: PUSH ECX ---
+Unique_0x41500#4 = COPY(ECX#5)
+ESP#7 = INT_SUB(ESP#2, 0x4)
+STORE(0x1a1, ESP#7, Unique_0x41500#4)
+// --- 004025c4: CALL 0x00402550 ---
+EAX#7 = CALL_RET_SUMMARY_DB(FUN_00402550, Unique_0x41500#4)
+CALL_CLOBBER(ECX#6, EDX#6)
+// --- 004025c9: ADD ESP,0x4 ---
+CF#7 = INT_CARRY(ESP#7, 0x4)
+OF#7 = INT_SCARRY(ESP#7, 0x4)
+ESP#8 = INT_ADD(ESP#7, 0x4)
+SF#7 = INT_SLESS(ESP#8, 0x0)
+ZF#7 = INT_EQUAL(ESP#8, 0x0)
+Unique_0x49800#7 = INT_AND(ESP#8, 0xff)
+Unique_0x49900#7 = POPCOUNT(Unique_0x49800#7)
+Unique_0x49a00#7 = INT_AND(Unique_0x49900#7, 0x1)
+PF#7 = INT_EQUAL(Unique_0x49a00#7, 0x0)
+// --- 004025cc: MOV dword ptr [EBP + -0x8],EAX ---
+Unique_0x6600#8 = INT_ADD(EBP#1, 0xfffffff8)
+Unique_0xa300#4 = COPY(EAX#7)
+Memory_EBP_0xfffffff8#1 = STORE_STACK(EBP_0xfffffff8, Unique_0xa300#4) [local_stack]
+// --- 004025cf: MOV EDX,dword ptr [EBP + -0x8] ---
+Unique_0x6600#9 = INT_ADD(EBP#1, 0xfffffff8)
+Unique_0x17200#5 = LOAD_STACK(EBP_0xfffffff8) -> Linked to Memory_EBP_0xfffffff8#1 [local_stack]
+EDX#7 = COPY(Unique_0x17200#5)
+// --- 004025d2: PUSH EDX ---
+Unique_0x41500#5 = COPY(EDX#7)
+ESP#9 = INT_SUB(ESP#8, 0x4)
+STORE(0x1a1, ESP#9, Unique_0x41500#5)
+// --- 004025d3: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#5'])
+CALL_RESET(EAX#8, ECX#7, EDX#8, Memory_MEMORY_GLOBAL#3)
+// --- 004025d8: ADD ESP,0x4 ---
+CF#8 = INT_CARRY(ESP#9, 0x4)
+OF#8 = INT_SCARRY(ESP#9, 0x4)
+ESP#10 = INT_ADD(ESP#9, 0x4)
+SF#8 = INT_SLESS(ESP#10, 0x0)
+ZF#8 = INT_EQUAL(ESP#10, 0x0)
+Unique_0x49800#8 = INT_AND(ESP#10, 0xff)
+Unique_0x49900#8 = POPCOUNT(Unique_0x49800#8)
+Unique_0x49a00#8 = INT_AND(Unique_0x49900#8, 0x1)
+PF#8 = INT_EQUAL(Unique_0x49a00#8, 0x0)
+// --- 004025db: JMP 0x0040263b ---
+BRANCH(Address_0x40263b#0)
+// --- 004025dd: CALL 0x00401320 ---
+EAX#9 = SOURCE_RET(dfb_source_B)
+CALL_CLOBBER(ECX#8, EDX#9, Memory_MEMORY_GLOBAL#4)
+// --- 004025e2: ADD EAX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#10 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#6 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#3 [local_stack]
+CF#9 = INT_CARRY(EAX#9, Unique_0x17200#6)
+Unique_0x17200#7 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#3 [local_stack]
+OF#9 = INT_SCARRY(EAX#9, Unique_0x17200#7)
+Unique_0x17200#8 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#3 [local_stack]
+EAX#10 = INT_ADD(EAX#9, Unique_0x17200#8)
+SF#9 = INT_SLESS(EAX#10, 0x0)
+ZF#9 = INT_EQUAL(EAX#10, 0x0)
+Unique_0x49800#9 = INT_AND(EAX#10, 0xff)
+Unique_0x49900#9 = POPCOUNT(Unique_0x49800#9)
+Unique_0x49a00#9 = INT_AND(Unique_0x49900#9, 0x1)
+PF#9 = INT_EQUAL(Unique_0x49a00#9, 0x0)
+// --- 004025e5: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#11 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#5 = COPY(EAX#10)
+Memory_EBP_0xfffffffc#4 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#5) [local_stack]
+// --- 004025e8: MOV EAX,[0x0040670c] ---
+EAX#11 = COPY(Address_0x40670c#0)
+// --- 004025ed: IMUL EAX,dword ptr [0x0040670c] ---
+Unique_0x78f00#1 = INT_SEXT(EAX#11)
+Unique_0x79000#1 = INT_SEXT(Address_0x40670c#0)
+Unique_0x79200#1 = INT_MULT(Unique_0x78f00#1, Unique_0x79000#1)
+EAX#12 = SUBPIECE(Unique_0x79200#1, 0x0)
+Unique_0x79500#1 = SUBPIECE(Unique_0x79200#1, 0x4)
+Unique_0x4b700#1 = INT_SEXT(EAX#12)
+CF#10 = INT_NOTEQUAL(Unique_0x4b700#1, Unique_0x79200#1)
+OF#10 = COPY(CF#10)
+// --- 004025f4: CMP EAX,0x1 ---
+Unique_0x66100#2 = COPY(EAX#12)
+CF#11 = INT_LESS(Unique_0x66100#2, 0x1)
+OF#11 = INT_SBORROW(Unique_0x66100#2, 0x1)
+Unique_0x66300#2 = INT_SUB(Unique_0x66100#2, 0x1)
+SF#10 = INT_SLESS(Unique_0x66300#2, 0x0)
+ZF#10 = INT_EQUAL(Unique_0x66300#2, 0x0)
+Unique_0x49800#10 = INT_AND(Unique_0x66300#2, 0xff)
+Unique_0x49900#10 = POPCOUNT(Unique_0x49800#10)
+Unique_0x49a00#10 = INT_AND(Unique_0x49900#10, 0x1)
+PF#10 = INT_EQUAL(Unique_0x49a00#10, 0x0)
+// --- 004025f7: JNZ 0x0040261f ---
+CBRANCH(IF NOT ZF#10 GOTO TARGET)
+// --- 004025f9: MOV ECX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#12 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#9 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#4 [local_stack]
+ECX#9 = COPY(Unique_0x17200#9)
+// --- 004025fc: PUSH ECX ---
+Unique_0x41500#6 = COPY(ECX#9)
+ESP#11 = INT_SUB(ESP#2, 0x4)
+STORE(0x1a1, ESP#11, Unique_0x41500#6)
+// --- 004025fd: CALL 0x00402550 ---
+EAX#13 = CALL_RET_SUMMARY_DB(FUN_00402550, Unique_0x41500#6)
+CALL_CLOBBER(ECX#10, EDX#10)
+// --- 00402602: ADD ESP,0x4 ---
+CF#12 = INT_CARRY(ESP#11, 0x4)
+OF#12 = INT_SCARRY(ESP#11, 0x4)
+ESP#12 = INT_ADD(ESP#11, 0x4)
+SF#11 = INT_SLESS(ESP#12, 0x0)
+ZF#11 = INT_EQUAL(ESP#12, 0x0)
+Unique_0x49800#11 = INT_AND(ESP#12, 0xff)
+Unique_0x49900#11 = POPCOUNT(Unique_0x49800#11)
+Unique_0x49a00#11 = INT_AND(Unique_0x49900#11, 0x1)
+PF#11 = INT_EQUAL(Unique_0x49a00#11, 0x0)
+// --- 00402605: PUSH EAX ---
+Unique_0x41500#7 = COPY(EAX#13)
+ESP#13 = INT_SUB(ESP#12, 0x4)
+STORE(0x1a1, ESP#13, Unique_0x41500#7)
+// --- 00402606: CALL 0x00402540 ---
+EAX#14 = CALL_RET_SUMMARY_DB(FUN_00402540, Unique_0x41500#7)
+CALL_CLOBBER(ECX#11, EDX#11)
+// --- 0040260b: ADD ESP,0x4 ---
+CF#13 = INT_CARRY(ESP#13, 0x4)
+OF#13 = INT_SCARRY(ESP#13, 0x4)
+ESP#14 = INT_ADD(ESP#13, 0x4)
+SF#12 = INT_SLESS(ESP#14, 0x0)
+ZF#12 = INT_EQUAL(ESP#14, 0x0)
+Unique_0x49800#12 = INT_AND(ESP#14, 0xff)
+Unique_0x49900#12 = POPCOUNT(Unique_0x49800#12)
+Unique_0x49a00#12 = INT_AND(Unique_0x49900#12, 0x1)
+PF#12 = INT_EQUAL(Unique_0x49a00#12, 0x0)
+// --- 0040260e: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#13 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#6 = COPY(EAX#14)
+Memory_EBP_0xfffffffc#5 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#6) [local_stack]
+// --- 00402611: MOV EDX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#14 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#10 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#5 [local_stack]
+EDX#12 = COPY(Unique_0x17200#10)
+// --- 00402614: PUSH EDX ---
+Unique_0x41500#8 = COPY(EDX#12)
+ESP#15 = INT_SUB(ESP#14, 0x4)
+STORE(0x1a1, ESP#15, Unique_0x41500#8)
+// --- 00402615: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#8'])
+CALL_RESET(EAX#15, ECX#12, EDX#13, Memory_MEMORY_GLOBAL#5)
+// --- 0040261a: ADD ESP,0x4 ---
+CF#14 = INT_CARRY(ESP#15, 0x4)
+OF#14 = INT_SCARRY(ESP#15, 0x4)
+ESP#16 = INT_ADD(ESP#15, 0x4)
+SF#13 = INT_SLESS(ESP#16, 0x0)
+ZF#13 = INT_EQUAL(ESP#16, 0x0)
+Unique_0x49800#13 = INT_AND(ESP#16, 0xff)
+Unique_0x49900#13 = POPCOUNT(Unique_0x49800#13)
+Unique_0x49a00#13 = INT_AND(Unique_0x49900#13, 0x1)
+PF#13 = INT_EQUAL(Unique_0x49a00#13, 0x0)
+// --- 0040261d: JMP 0x0040263b ---
+BRANCH(Address_0x40263b#0)
+// --- 0040261f: MOV EAX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#15 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#11 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#4 [local_stack]
+EAX#16 = COPY(Unique_0x17200#11)
+// --- 00402622: SHR EAX,0x1 ---
+Unique_0xab100#1 = INT_AND(EAX#16, 0x1)
+CF#15 = INT_NOTEQUAL(Unique_0xab100#1, 0x0)
+OF#15 = COPY(0x0)
+EAX#17 = INT_RIGHT(EAX#16, 0x1)
+SF#14 = INT_SLESS(EAX#17, 0x0)
+ZF#14 = INT_EQUAL(EAX#17, 0x0)
+Unique_0x49800#14 = INT_AND(EAX#17, 0xff)
+Unique_0x49900#14 = POPCOUNT(Unique_0x49800#14)
+Unique_0x49a00#14 = INT_AND(Unique_0x49900#14, 0x1)
+PF#14 = INT_EQUAL(Unique_0x49a00#14, 0x0)
+// --- 00402624: MOV ECX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#16 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#12 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#4 [local_stack]
+ECX#13 = COPY(Unique_0x17200#12)
+// --- 00402627: SHL ECX,0x1f ---
+Unique_0xa6100#1 = INT_AND(0x1f, 0x1f)
+Unique_0xa6200#1 = COPY(ECX#13)
+ECX#14 = INT_LEFT(ECX#13, Unique_0xa6100#1)
+Unique_0x4e000#1 = INT_NOTEQUAL(Unique_0xa6100#1, 0x0)
+Unique_0x4e100#1 = INT_SUB(Unique_0xa6100#1, 0x1)
+Unique_0x4e200#1 = INT_LEFT(Unique_0xa6200#1, Unique_0x4e100#1)
+Unique_0x4e400#1 = INT_SLESS(Unique_0x4e200#1, 0x0)
+Unique_0x4e500#1 = BOOL_NEGATE(Unique_0x4e000#1)
+Unique_0x4e600#1 = INT_AND(Unique_0x4e500#1, CF#15)
+Unique_0x4e700#1 = INT_AND(Unique_0x4e000#1, Unique_0x4e400#1)
+CF#16 = INT_OR(Unique_0x4e600#1, Unique_0x4e700#1)
+Unique_0x4ea00#1 = INT_EQUAL(Unique_0xa6100#1, 0x1)
+Unique_0x4eb00#1 = INT_SLESS(ECX#14, 0x0)
+Unique_0x4ed00#1 = INT_XOR(CF#16, Unique_0x4eb00#1)
+Unique_0x4ee00#1 = BOOL_NEGATE(Unique_0x4ea00#1)
+Unique_0x4ef00#1 = INT_AND(Unique_0x4ee00#1, OF#15)
+Unique_0x4f000#1 = INT_AND(Unique_0x4ea00#1, Unique_0x4ed00#1)
+OF#16 = INT_OR(Unique_0x4ef00#1, Unique_0x4f000#1)
+Unique_0x49d00#1 = INT_NOTEQUAL(Unique_0xa6100#1, 0x0)
+Unique_0x49f00#1 = INT_SLESS(ECX#14, 0x0)
+Unique_0x4a000#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4a100#1 = INT_AND(Unique_0x4a000#1, SF#14)
+Unique_0x4a200#1 = INT_AND(Unique_0x49d00#1, Unique_0x49f00#1)
+SF#15 = INT_OR(Unique_0x4a100#1, Unique_0x4a200#1)
+Unique_0x4a500#1 = INT_EQUAL(ECX#14, 0x0)
+Unique_0x4a600#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4a700#1 = INT_AND(Unique_0x4a600#1, ZF#14)
+Unique_0x4a800#1 = INT_AND(Unique_0x49d00#1, Unique_0x4a500#1)
+ZF#15 = INT_OR(Unique_0x4a700#1, Unique_0x4a800#1)
+Unique_0x4aa00#1 = INT_AND(ECX#14, 0xff)
+Unique_0x4ab00#1 = POPCOUNT(Unique_0x4aa00#1)
+Unique_0x4ac00#1 = INT_AND(Unique_0x4ab00#1, 0x1)
+Unique_0x4ae00#1 = INT_EQUAL(Unique_0x4ac00#1, 0x0)
+Unique_0x4af00#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4b000#1 = INT_AND(Unique_0x4af00#1, PF#14)
+Unique_0x4b100#1 = INT_AND(Unique_0x49d00#1, Unique_0x4ae00#1)
+PF#15 = INT_OR(Unique_0x4b000#1, Unique_0x4b100#1)
+// --- 0040262a: OR EAX,ECX ---
+CF#17 = COPY(0x0)
+OF#17 = COPY(0x0)
+EAX#18 = INT_OR(EAX#17, ECX#14)
+SF#16 = INT_SLESS(EAX#18, 0x0)
+ZF#16 = INT_EQUAL(EAX#18, 0x0)
+Unique_0x49800#15 = INT_AND(EAX#18, 0xff)
+Unique_0x49900#15 = POPCOUNT(Unique_0x49800#15)
+Unique_0x49a00#15 = INT_AND(Unique_0x49900#15, 0x1)
+PF#16 = INT_EQUAL(Unique_0x49a00#15, 0x0)
+// --- 0040262c: MOV dword ptr [EBP + -0x4],EAX ---
+Unique_0x6600#17 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0xa300#7 = COPY(EAX#18)
+Memory_EBP_0xfffffffc#6 = STORE_STACK(EBP_0xfffffffc, Unique_0xa300#7) [local_stack]
+// --- 0040262f: MOV EDX,dword ptr [EBP + -0x4] ---
+Unique_0x6600#18 = INT_ADD(EBP#1, 0xfffffffc)
+Unique_0x17200#13 = LOAD_STACK(EBP_0xfffffffc) -> Linked to Memory_EBP_0xfffffffc#6 [local_stack]
+EDX#14 = COPY(Unique_0x17200#13)
+// --- 00402632: PUSH EDX ---
+Unique_0x41500#9 = COPY(EDX#14)
+ESP#17 = INT_SUB(ESP#2, 0x4)
+STORE(0x1a1, ESP#17, Unique_0x41500#9)
+// --- 00402633: CALL 0x00401380 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0x41500#9'])
+CALL_RESET(EAX#19, ECX#15, EDX#15, Memory_MEMORY_GLOBAL#6)
+// --- 00402638: ADD ESP,0x4 ---
+CF#18 = INT_CARRY(ESP#17, 0x4)
+OF#18 = INT_SCARRY(ESP#17, 0x4)
+ESP#18 = INT_ADD(ESP#17, 0x4)
+SF#17 = INT_SLESS(ESP#18, 0x0)
+ZF#17 = INT_EQUAL(ESP#18, 0x0)
+Unique_0x49800#16 = INT_AND(ESP#18, 0xff)
+Unique_0x49900#16 = POPCOUNT(Unique_0x49800#16)
+Unique_0x49a00#16 = INT_AND(Unique_0x49900#16, 0x1)
+PF#17 = INT_EQUAL(Unique_0x49a00#16, 0x0)
+
+[phi] Memory_EBP_0xfffffffc#7 = MLIL_VAR_PHI(Memory_EBP_0xfffffffc#2, Memory_EBP_0xfffffffc#3, Memory_EBP_0xfffffffc#5, Memory_EBP_0xfffffffc#6) [path condition: None]
+
+[phi] Memory_MEMORY_GLOBAL#7 = MLIL_VAR_PHI(Memory_MEMORY_GLOBAL#2, Memory_MEMORY_GLOBAL#3, Memory_MEMORY_GLOBAL#5, Memory_MEMORY_GLOBAL#6) [path condition: None]
+
+[phi] EAX#20 = MLIL_VAR_PHI(EAX#4, EAX#8, EAX#15, EAX#19) [path condition: None]
+
+[phi] ESP#19 = MLIL_VAR_PHI(ESP#6, ESP#10, ESP#16, ESP#18) [path condition: None]
+
+[phi] CF#19 = MLIL_VAR_PHI(CF#4, CF#8, CF#14, CF#18) [path condition: None]
+
+[phi] PF#18 = MLIL_VAR_PHI(PF#4, PF#8, PF#13, PF#17) [path condition: None]
+
+[phi] ZF#18 = MLIL_VAR_PHI(ZF#4, ZF#8, ZF#13, ZF#17) [path condition: None]
+
+[phi] SF#18 = MLIL_VAR_PHI(SF#4, SF#8, SF#13, SF#17) [path condition: None]
+
+[phi] OF#19 = MLIL_VAR_PHI(OF#4, OF#8, OF#14, OF#18) [path condition: None]
+
+[phi] ECX#16 = MLIL_VAR_PHI(ECX#4, ECX#7, ECX#12, ECX#15) [path condition: None]
+
+[phi] EDX#16 = MLIL_VAR_PHI(EDX#3, EDX#8, EDX#13, EDX#15) [path condition: None]
+// --- 0040263b: MOV ESP,EBP ---
+ESP#20 = COPY(EBP#1)
+// --- 0040263d: POP EBP ---
+Unique_0x87300#1 = COPY(0x0)
+Unique_0x87300#2 = LOAD(0x1a1, ESP#20)
+ESP#21 = INT_ADD(ESP#20, 0x4)
+EBP#2 = COPY(Unique_0x87300#2)
+// --- 0040263e: RET ---
+Register_0x284#1 = LOAD(0x1a1, ESP#21)
+ESP#22 = INT_ADD(ESP#21, 0x4)
+RETURN(Register_0x284#1)
+
+ Backward DATA slice tree (Target: Unique_0x41500#3)
+--------------------------------------------------
+├── Unique_0x41500#3                [addr: 00402599] [op: COPY]
+    ├── ECX#3                           [addr: 00402596] [op: COPY]
+        ├── Unique_0x17200#2                [addr: 00402596] [op: LOAD]
+            ├── Memory_EBP_0xfffffffc#2         [addr: 00402593] [op: STORE_VAL]
+                ├── Unique_0xa300#2                 [addr: 00402593] [op: COPY]
+                    ├── EAX#3                           [addr: 0040258b] [op: CALL_RET_SUMMARY]
+                        ├── Unique_0x41500#2                [addr: 0040258a] [op: COPY]
+                            ├── EAX#2                           [addr: 00402587] [op: COPY]
+                                ├── Unique_0x17200#1                [addr: 00402587] [op: LOAD]
+                                    ├── Memory_EBP_0xfffffffc#1         [addr: 0040257b] [op: STORE_VAL]
+                                        ├── Unique_0xa300#1                 [addr: 0040257b] [op: COPY]
+                                            ├── EAX#1                           [addr: 00402576] [op: SOURCE_RET]
+
+ Actual data sources
+--------------------------------------------------
+- dfb_source_A.ret
+
+ Expected validation
+--------------------------------------------------
+{
+  "actual_sources": [
+    "dfb_source_A.ret"
+  ],
+  "allowed_warnings": [],
+  "case_id": "DFB200",
+  "expected_features": [
+    "obfuscation",
+    "bogus_control_flow",
+    "opaque_predicate",
+    "dead_branch"
+  ],
+  "expected_file": "D:\\githubProject\\01_tdo_testbed\\tdo_testbed\\expected\\dfbench_win_core.expected.json",
+  "expected_sources": [
+    "dfb_source_A.ret",
+    "dfb_source_B.ret"
+  ],
+  "forbidden_sources": [],
+  "forbidden_sources_found": [],
+  "function": "case_DFB200_obf_bcf_multistep",
+  "missing_expected_sources": [
+    "dfb_source_B.ret"
+  ],
+  "program": "dfbench_win_core",
+  "verdict": "FAIL"
+}
+
+ Sink anchors
+--------------------------------------------------
+[
+  {
+    "addr": "0040259a",
+    "anchor_arg0": "Unique_0x41500#3",
+    "args": [
+      "Unique_0x41500#3"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "004025d3",
+    "anchor_arg0": "Unique_0x41500#5",
+    "args": [
+      "Unique_0x41500#5"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "00402615",
+    "anchor_arg0": "Unique_0x41500#8",
+    "args": [
+      "Unique_0x41500#8"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "00402633",
+    "anchor_arg0": "Unique_0x41500#9",
+    "args": [
+      "Unique_0x41500#9"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  }
+]
+
+ CallSite bindings
+--------------------------------------------------
+[
+  {
+    "addr": "00402576",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#1",
+    "target": "dfb_source_A"
+  },
+  {
+    "addr": "0040258b",
+    "args": [
+      "Unique_0x41500#2"
+    ],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "FUN_00402540"
+  },
+  {
+    "addr": "0040259a",
+    "args": [
+      "Unique_0x41500#3"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "004025c4",
+    "args": [
+      "Unique_0x41500#4"
+    ],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "FUN_00402550"
+  },
+  {
+    "addr": "004025d3",
+    "args": [
+      "Unique_0x41500#5"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "004025dd",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#9",
+    "target": "dfb_source_B"
+  },
+  {
+    "addr": "004025fd",
+    "args": [
+      "Unique_0x41500#6"
+    ],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "FUN_00402550"
+  },
+  {
+    "addr": "00402606",
+    "args": [
+      "Unique_0x41500#7"
+    ],
+    "confidence": "low_pcode_helper_summary_db",
+    "kind": "dynamic_function_summary",
+    "target": "FUN_00402540"
+  },
+  {
+    "addr": "00402615",
+    "args": [
+      "Unique_0x41500#8"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  },
+  {
+    "addr": "00402633",
+    "args": [
+      "Unique_0x41500#9"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  }
+]
+
+ Function Boundary Summary Skeleton
+--------------------------------------------------
+{
+  "callsites": [
+    {
+      "addr": "00402576",
+      "assembly": "CALL 0x00401310",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#1",
+      "target": "dfb_source_A"
+    },
+    {
+      "addr": "0040258b",
+      "args": [
+        "Unique_0x41500#2"
+      ],
+      "assembly": "CALL 0x00402540",
+      "model": "dynamic_summary_db_v6",
+      "target": "FUN_00402540"
+    },
+    {
+      "addr": "0040259a",
+      "args": [
+        "Unique_0x41500#3"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    },
+    {
+      "addr": "004025c4",
+      "args": [
+        "Unique_0x41500#4"
+      ],
+      "assembly": "CALL 0x00402550",
+      "model": "dynamic_summary_db_v6",
+      "target": "FUN_00402550"
+    },
+    {
+      "addr": "004025d3",
+      "args": [
+        "Unique_0x41500#5"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    },
+    {
+      "addr": "004025dd",
+      "assembly": "CALL 0x00401320",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#9",
+      "target": "dfb_source_B"
+    },
+    {
+      "addr": "004025fd",
+      "args": [
+        "Unique_0x41500#6"
+      ],
+      "assembly": "CALL 0x00402550",
+      "model": "dynamic_summary_db_v6",
+      "target": "FUN_00402550"
+    },
+    {
+      "addr": "00402606",
+      "args": [
+        "Unique_0x41500#7"
+      ],
+      "assembly": "CALL 0x00402540",
+      "model": "dynamic_summary_db_v6",
+      "target": "FUN_00402540"
+    },
+    {
+      "addr": "00402615",
+      "args": [
+        "Unique_0x41500#8"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    },
+    {
+      "addr": "00402633",
+      "args": [
+        "Unique_0x41500#9"
+      ],
+      "assembly": "CALL 0x00401380",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    }
+  ],
+  "function": "case_DFB200_obf_bcf_multistep",
+  "inputs": {
+    "Register_0x10L": [
+      {
+        "addr": "00402570",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x14L": [
+      {
+        "addr": "00402570",
+        "reason": "use_before_def"
+      }
+    ]
+  },
+  "memory_accesses": [
+    {
+      "addr": "0040257b",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#1",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040257e",
+      "confidence": "address_varnode",
+      "offset": "0x40670cL",
+      "opcode": "COPY",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "00402587",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#1",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "00402593",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#2",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "00402596",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#2",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025a2",
+      "confidence": "address_varnode",
+      "offset": "0x40263bL",
+      "opcode": "BRANCH",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025a7",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#3",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025b0",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#3",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025b3",
+      "confidence": "address_varnode",
+      "offset": "0x40670cL",
+      "opcode": "COPY",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025b8",
+      "confidence": "address_varnode",
+      "offset": "0x4065f4L",
+      "opcode": "INT_OR",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025c0",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#4",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025cc",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffff8#1",
+      "offset": -8,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff8"
+    },
+    {
+      "addr": "004025cf",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#5",
+      "offset": -8,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff8"
+    },
+    {
+      "addr": "004025db",
+      "confidence": "address_varnode",
+      "offset": "0x40263bL",
+      "opcode": "BRANCH",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025e2",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#6",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025e2",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#7",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025e2",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#8",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025e5",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#4",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "004025e8",
+      "confidence": "address_varnode",
+      "offset": "0x40670cL",
+      "opcode": "COPY",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025ed",
+      "confidence": "address_varnode",
+      "offset": "0x40670cL",
+      "opcode": "INT_SEXT",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "004025f9",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#9",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040260e",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#5",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "00402611",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#10",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040261d",
+      "confidence": "address_varnode",
+      "offset": "0x40263bL",
+      "opcode": "BRANCH",
+      "region": "global_or_code_address"
+    },
+    {
+      "addr": "0040261f",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#11",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "00402624",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#12",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040262c",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffffc#6",
+      "offset": -4,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    },
+    {
+      "addr": "0040262f",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#13",
+      "offset": -4,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffffc"
+    }
+  ],
+  "notes": [
+    "v5 summary is derived from Low P-Code use-before-def and writes.",
+    "Current JSON lacks stack-frame, symbol/import, xref, and memory-block metadata.",
+    "CALL effects are still opaque until CallSite Binder is implemented.",
+    "v6 adds source/sink-aware CallSite Binder v1.",
+    "v7 adds recursive stack-address recovery and narrow libc transfer summaries."
+  ],
+  "outputs": {}
+}

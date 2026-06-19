@@ -2,8 +2,8 @@
 
 ## Summary
 
-- FAIL: 13
-- PASS: 37
+- FAIL: 24
+- PASS: 51
 
 ## Cases
 
@@ -12,9 +12,16 @@
 | PASS | DFB001 | case_DFB001_direct_value | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB001_direct_value_v7_report.txt |
 | PASS | DFB002 | case_DFB002_arithmetic_value | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB002_arithmetic_value_v7_report.txt |
 | PASS | DFB003 | case_DFB003_cast_value | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB003_cast_value_v7_report.txt |
+| PASS | DFB004 | case_DFB004_no_source_constant | - | - | reports/case_DFB004_no_source_constant_v7_report.txt |
+| PASS | DFB005 | case_DFB005_overwrite_kill | - | - | reports/case_DFB005_overwrite_kill_v7_report.txt |
+| PASS | DFB006 | case_DFB006_multi_source_convergence | dfb_source_A.ret, dfb_source_B.ret | dfb_source_A.ret, dfb_source_B.ret | reports/case_DFB006_multi_source_convergence_v7_report.txt |
+| PASS | DFB007 | case_DFB007_subregister_alias | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB007_subregister_alias_v7_report.txt |
 | PASS | DFB010 | case_DFB010_branch_phi | dfb_source_A.ret, dfb_source_B.ret | dfb_source_A.ret, dfb_source_B.ret | reports/case_DFB010_branch_phi_v7_report.txt |
 | PASS | DFB011 | case_DFB011_loop_phi | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB011_loop_phi_v7_report.txt |
 | PASS | DFB012 | case_DFB012_switch_merge | dfb_source_A.ret, dfb_source_B.ret, dfb_source_C.ret | dfb_source_A.ret, dfb_source_B.ret, dfb_source_C.ret | reports/case_DFB012_switch_merge_v7_report.txt |
+| PASS | DFB013 | case_DFB013_unbounded_loop_widen | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB013_unbounded_loop_widen_v7_report.txt |
+| PASS | DFB014 | case_DFB014_control_only_dependency | - | - | reports/case_DFB014_control_only_dependency_v7_report.txt |
+| PASS | DFB016 | case_DFB016_memory_phi | dfb_source_A.ret, dfb_source_B.ret | dfb_source_A.ret, dfb_source_B.ret | reports/case_DFB016_memory_phi_v7_report.txt |
 | PASS | DFB020 | case_DFB020_stack_local | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB020_stack_local_v7_report.txt |
 | PASS | DFB021 | case_DFB021_stack_outparam | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB021_stack_outparam_v7_report.txt |
 | PASS | DFB022 | case_DFB022_arg_to_outparam | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB022_arg_to_outparam_v7_report.txt |
@@ -22,8 +29,13 @@
 | PASS | DFB024 | case_DFB024_global_value_flow | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB024_global_value_flow_v7_report.txt |
 | PASS | DFB025 | case_DFB025_global_field_precise | dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB025_global_field_precise_v7_report.txt |
 | PASS | DFB026 | case_DFB026_global_interproc_reader | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB026_global_interproc_reader_v7_report.txt |
+| PASS | DFB027 | case_DFB027_global_readonly_source | - | - | reports/case_DFB027_global_readonly_source_v7_report.txt |
 | FAIL | DFB030 | case_DFB030_heap_field | - | dfb_source_A.ret | reports/case_DFB030_heap_field_v7_report.txt |
 | FAIL | DFB031 | case_DFB031_heap_realloc_preserve | - | dfb_source_A.ret | reports/case_DFB031_heap_realloc_preserve_v7_report.txt |
+| FAIL | DFB032 | case_DFB032_heap_raw_offset | - | dfb_source_A.ret | reports/case_DFB032_heap_raw_offset_v7_report.txt |
+| FAIL | DFB033 | case_DFB033_heap_alias_two_pointers | - | dfb_source_A.ret | reports/case_DFB033_heap_alias_two_pointers_v7_report.txt |
+| FAIL | DFB034 | case_DFB034_bitfield_access | dfb_source_A.ret, dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB034_bitfield_access_v7_report.txt |
+| FAIL | DFB035 | case_DFB035_bitfield_access_zeroinit | dfb_source_A.ret, dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB035_bitfield_access_zeroinit_v7_report.txt |
 | PASS | DFB040 | case_DFB040_struct_field_precise | dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB040_struct_field_precise_v7_report.txt |
 | FAIL | DFB041 | case_DFB041_pointer_arithmetic_field | - | dfb_source_A.ret | reports/case_DFB041_pointer_arithmetic_field_v7_report.txt |
 | PASS | DFB042 | case_DFB042_union_alias | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB042_union_alias_v7_report.txt |
@@ -31,6 +43,9 @@
 | PASS | DFB044 | case_DFB044_array_variable_index | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB044_array_variable_index_v7_report.txt |
 | PASS | DFB045 | case_DFB045_nested_aggregate_field | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB045_nested_aggregate_field_v7_report.txt |
 | PASS | DFB046 | case_DFB046_partial_overwrite_subfield | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB046_partial_overwrite_subfield_v7_report.txt |
+| PASS | DFB047 | case_DFB047_struct_padding_offset | dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB047_struct_padding_offset_v7_report.txt |
+| FAIL | DFB048 | case_DFB048_cast_range_overlap | - | dfb_source_A.ret | reports/case_DFB048_cast_range_overlap_v7_report.txt |
+| FAIL | DFB049 | case_DFB049_negative_offset_arithmetic | - | dfb_source_A.ret | reports/case_DFB049_negative_offset_arithmetic_v7_report.txt |
 | PASS | DFB050 | case_DFB050_identity_call | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB050_identity_call_v7_report.txt |
 | PASS | DFB051 | case_DFB051_nested_call | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB051_nested_call_v7_report.txt |
 | PASS | DFB052 | case_DFB052_callsite_context | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB052_callsite_context_v7_report.txt |
@@ -42,10 +57,18 @@
 | PASS | DFB058 | case_DFB058_arg_to_outparam_summary | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB058_arg_to_outparam_summary_v7_report.txt |
 | PASS | DFB059 | case_DFB059_inout_field_update_summary | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB059_inout_field_update_summary_v7_report.txt |
 | PASS | DFB060 | case_DFB060_recursion | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB060_recursion_v7_report.txt |
+| FAIL | DFB061 | case_DFB061_non_tail_recursion | - | dfb_source_A.ret | reports/case_DFB061_non_tail_recursion_v7_report.txt |
+| PASS | DFB062 | case_DFB062_mutual_recursion | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB062_mutual_recursion_v7_report.txt |
+| FAIL | DFB063 | case_DFB063_recursion_global_effect | - | dfb_source_A.ret | reports/case_DFB063_recursion_global_effect_v7_report.txt |
+| FAIL | DFB064 | case_DFB064_indirect_recursion | - | dfb_source_A.ret | reports/case_DFB064_indirect_recursion_v7_report.txt |
+| FAIL | DFB065 | case_DFB065_tree_recursion | - | dfb_source_A.ret | reports/case_DFB065_tree_recursion_v7_report.txt |
+| PASS | DFB066 | case_DFB066_swap_target_independence | dfb_source_B.ret | dfb_source_B.ret | reports/case_DFB066_swap_target_independence_v7_report.txt |
 | PASS | DFB070 | case_DFB070_function_pointer | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB070_function_pointer_v7_report.txt |
 | FAIL | DFB071 | case_DFB071_callback_registration | - | dfb_source_A.ret | reports/case_DFB071_callback_registration_v7_report.txt |
 | FAIL | DFB072 | case_DFB072_function_pointer_table | - | dfb_source_A.ret | reports/case_DFB072_function_pointer_table_v7_report.txt |
-| FAIL | DFB073 | case_DFB073_indirect_sink_wrapper | - | dfb_source_A.ret | reports/case_DFB073_indirect_sink_wrapper_v7_report.txt |
+| PASS | DFB073 | case_DFB073_indirect_sink_wrapper | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB073_indirect_sink_wrapper_v7_report.txt |
+| FAIL | DFB074 | case_DFB074_unresolved_indirect | - | dfb_source_A.ret | reports/case_DFB074_unresolved_indirect_v7_report.txt |
+| FAIL | DFB075 | case_DFB075_unresolved_call_boundary | - | dfb_source_A.ret | reports/case_DFB075_unresolved_call_boundary_v7_report.txt |
 | FAIL | DFB091 | case_DFB091_tls_value | - | dfb_source_A.ret | reports/case_DFB091_tls_value_v7_report.txt |
 | FAIL | DFB100 | case_DFB100_varargs | - | dfb_source_A.ret | reports/case_DFB100_varargs_v7_report.txt |
 | PASS | DFB101 | case_DFB101_tail_call_candidate | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB101_tail_call_candidate_v7_report.txt |
@@ -57,5 +80,7 @@
 | PASS | DFB123 | case_DFB123_memset_partial_memcpy | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB123_memset_partial_memcpy_v7_report.txt |
 | PASS | DFB130 | case_DFB130_shared_import_arg_to_ret | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB130_shared_import_arg_to_ret_v7_report.txt |
 | PASS | DFB131 | case_DFB131_shared_import_outparam | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB131_shared_import_outparam_v7_report.txt |
+| PASS | DFB151 | case_DFB151_selective_arg_passthrough | dfb_source_C.ret | dfb_source_C.ret | reports/case_DFB151_selective_arg_passthrough_v7_report.txt |
+| PASS | DFB152 | case_DFB152_callee_use_before_def | dfb_source_A.ret | dfb_source_A.ret | reports/case_DFB152_callee_use_before_def_v7_report.txt |
 | FAIL | DFB200 | case_DFB200_obf_bcf_multistep | dfb_source_A.ret | dfb_source_A.ret, dfb_source_B.ret | reports/case_DFB200_obf_bcf_multistep_v7_report.txt |
 | FAIL | DFB201 | case_DFB201_obf_fla_statemachine | - | dfb_source_A.ret, dfb_source_C.ret | reports/case_DFB201_obf_fla_statemachine_v7_report.txt |

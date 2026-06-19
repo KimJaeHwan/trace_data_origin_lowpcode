@@ -1,100 +1,290 @@
 {
   "schema_version": 1,
   "summaries": {
-    "FUN_00401cc0": {
+    "FUN_00403f30": {
       "calls": [
         {
-          "addr": "00401cc9",
-          "target": "dfb_sink_int"
+          "addr": "00403f49",
+          "target": "malloc"
+        },
+        {
+          "addr": "00403f6d",
+          "target": "memcpy"
+        },
+        {
+          "addr": "00403f87",
+          "target": "malloc"
+        },
+        {
+          "addr": "00403fb5",
+          "target": "memset"
+        },
+        {
+          "addr": "00409e90",
+          "target": "abort"
         }
       ],
-      "function": "FUN_00401cc0",
+      "function": "FUN_00403f30",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/FUN_00401cc0_low_pcode.json",
+      "json": "samples/low_pcode/FUN_00403f30_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
         {
           "value": {
             "kind": "call_ret",
-            "target": "dfb_sink_int"
+            "target": "abort"
           }
         }
       ]
     },
-    "FUN_00401ce0": {
+    "FUN_00403fd0": {
       "calls": [
         {
-          "addr": "00401cfb",
-          "target": "FUN_00401cc0"
+          "addr": "00403ffc",
+          "target": "CreateSemaphoreW"
+        },
+        {
+          "addr": "0040400a",
+          "target": "TlsAlloc"
+        },
+        {
+          "addr": "00404025",
+          "target": "__mingwthr_key_dtor"
+        },
+        {
+          "addr": "00404040",
+          "target": "GetLastError"
+        },
+        {
+          "addr": "00409e95",
+          "target": "abort"
         }
       ],
-      "function": "FUN_00401ce0",
+      "function": "FUN_00403fd0",
       "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/FUN_00401ce0_low_pcode.json",
+      "global_writes": [
+        {
+          "address": "0x4101c8",
+          "value": {
+            "kind": "const",
+            "value": "0xffffffff"
+          }
+        },
+        {
+          "address": "0x4101cc",
+          "value": {
+            "kind": "call_ret",
+            "target": "CreateSemaphoreW"
+          }
+        },
+        {
+          "address": "0x4101c4",
+          "value": {
+            "kind": "call_ret",
+            "target": "TlsAlloc"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/FUN_00403fd0_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
         {
           "value": {
             "kind": "call_ret",
-            "target": "FUN_00401cc0"
+            "target": "abort"
           }
         }
       ]
     },
-    "FUN_00401d10": {
+    "___emutls_get_address": {
       "calls": [
         {
-          "addr": "00401d2b",
-          "target": "FUN_00401ce0"
+          "addr": "0040408b",
+          "target": "GetLastError"
+        },
+        {
+          "addr": "00404092",
+          "target": "TlsGetValue"
+        },
+        {
+          "addr": "004040a0",
+          "target": "SetLastError"
+        },
+        {
+          "addr": "004040ca",
+          "target": "FUN_00403f30"
+        },
+        {
+          "addr": "004040dc",
+          "target": "FUN_00403f30"
+        },
+        {
+          "addr": "0040415c",
+          "target": "ReleaseSemaphore"
+        },
+        {
+          "addr": "00404185",
+          "target": "calloc"
+        },
+        {
+          "addr": "004041a6",
+          "target": "TlsSetValue"
+        },
+        {
+          "addr": "004041b7",
+          "target": "GetLastError"
+        },
+        {
+          "addr": "004041e1",
+          "target": "realloc"
+        },
+        {
+          "addr": "00404212",
+          "target": "memset"
+        },
+        {
+          "addr": "00404219",
+          "target": "FUN_00403fd0"
+        },
+        {
+          "addr": "00404287",
+          "target": "Sleep"
+        },
+        {
+          "addr": "004042a8",
+          "target": "WaitForSingleObject"
+        },
+        {
+          "addr": "00409e9a",
+          "target": "abort"
         }
       ],
-      "function": "FUN_00401d10",
+      "function": "___emutls_get_address",
       "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/FUN_00401d10_low_pcode.json",
+      "global_writes": [
+        {
+          "address": "0x40a030",
+          "value": {
+            "kind": "const",
+            "value": "0x1"
+          }
+        },
+        {
+          "address": "0x4101c0",
+          "value": {
+            "base": {
+              "address": "0x4101c0",
+              "kind": "global"
+            },
+            "kind": "field",
+            "offset": 1
+          }
+        }
+      ],
+      "json": "samples/low_pcode/___emutls_get_address_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
         {
           "value": {
             "kind": "call_ret",
-            "target": "FUN_00401ce0"
+            "target": "abort"
           }
         }
       ]
     },
-    "FUN_00402080": {
+    "___w64_mingwthr_add_key_dtor": {
       "calls": [
         {
-          "addr": "00402087",
-          "target": "dfb_sink_int"
+          "addr": "004038e3",
+          "target": "calloc"
+        },
+        {
+          "addr": "00403902",
+          "target": "EnterCriticalSection"
+        },
+        {
+          "addr": "00403920",
+          "target": "LeaveCriticalSection"
         }
       ],
-      "function": "FUN_00402080",
+      "function": "___w64_mingwthr_add_key_dtor",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x41018c",
+          "value": {
+            "kind": "call_ret",
+            "target": "calloc"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/___w64_mingwthr_add_key_dtor_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "__mingwthr_key_dtor": {
+      "calls": [
+        {
+          "addr": "00409e80",
+          "target": "___w64_mingwthr_add_key_dtor"
+        }
+      ],
+      "function": "__mingwthr_key_dtor",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/FUN_00402080_low_pcode.json",
+      "json": "samples/low_pcode/__mingwthr_key_dtor_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
         {
           "value": {
             "kind": "call_ret",
-            "target": "dfb_sink_int"
+            "target": "___w64_mingwthr_add_key_dtor"
           }
         }
       ]
     },
-    "FUN_00402540": {
+    "__setjmp3": {
       "calls": [],
-      "function": "FUN_00402540",
+      "function": "__setjmp3",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/FUN_00402540_low_pcode.json",
+      "json": "samples/low_pcode/__setjmp3_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "abort": {
+      "calls": [],
+      "function": "abort",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/abort_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "calloc": {
+      "calls": [],
+      "function": "calloc",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/calloc_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "dfb_bcf_dead_A": {
+      "calls": [],
+      "function": "dfb_bcf_dead_A",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_bcf_dead_A_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
@@ -110,12 +300,12 @@
         }
       ]
     },
-    "FUN_00402550": {
+    "dfb_bcf_dead_B": {
       "calls": [],
-      "function": "FUN_00402550",
+      "function": "dfb_bcf_dead_B",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/FUN_00402550_low_pcode.json",
+      "json": "samples/low_pcode/dfb_bcf_dead_B_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": [
@@ -123,425 +313,6 @@
           "value": {
             "arg": 0,
             "kind": "arg"
-          }
-        }
-      ]
-    },
-    "FUN_00402712": {
-      "calls": [
-        {
-          "addr": "00402717",
-          "target": "SetUnhandledExceptionFilter"
-        },
-        {
-          "addr": "00402720",
-          "target": "UnhandledExceptionFilter"
-        },
-        {
-          "addr": "0040272b",
-          "target": "GetCurrentProcess"
-        },
-        {
-          "addr": "00402732",
-          "target": "TerminateProcess"
-        }
-      ],
-      "function": "FUN_00402712",
-      "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/FUN_00402712_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": [
-        {
-          "value": {
-            "kind": "call_ret",
-            "target": "TerminateProcess"
-          }
-        }
-      ]
-    },
-    "FUN_0040273a": {
-      "calls": [
-        {
-          "addr": "00402745",
-          "target": "IsProcessorFeaturePresent"
-        },
-        {
-          "addr": "0040282d",
-          "target": "FUN_00402712"
-        }
-      ],
-      "function": "FUN_0040273a",
-      "global_reads": [],
-      "global_writes": [
-        {
-          "address": "0x406810",
-          "value": {
-            "kind": "call_ret",
-            "target": "IsProcessorFeaturePresent"
-          }
-        },
-        {
-          "address": "0x40680c",
-          "value": {
-            "kind": "unknown",
-            "reason": "load_from_unknown"
-          }
-        },
-        {
-          "address": "0x406808",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x8L"
-          }
-        },
-        {
-          "address": "0x406804",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0xcL"
-          }
-        },
-        {
-          "address": "0x406800",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x18L"
-          }
-        },
-        {
-          "address": "0x4067fc",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x1cL"
-          }
-        },
-        {
-          "address": "0x406828",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x104L"
-          }
-        },
-        {
-          "address": "0x40681c",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x102L"
-          }
-        },
-        {
-          "address": "0x4067f8",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x106L"
-          }
-        },
-        {
-          "address": "0x4067f4",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x100L"
-          }
-        },
-        {
-          "address": "0x4067f0",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x108L"
-          }
-        },
-        {
-          "address": "0x4067ec",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x10aL"
-          }
-        },
-        {
-          "address": "0x406820",
-          "value": {
-            "kind": "unknown",
-            "reason": "load_from_unknown"
-          }
-        },
-        {
-          "address": "0x406814",
-          "value": {
-            "kind": "unknown",
-            "reason": "load_from_frame_base"
-          }
-        },
-        {
-          "address": "0x406818",
-          "value": {
-            "kind": "local_stack",
-            "offset": 4
-          }
-        },
-        {
-          "address": "0x406824",
-          "value": {
-            "kind": "stack_addr",
-            "offset": 8
-          }
-        },
-        {
-          "address": "0x406760",
-          "value": {
-            "kind": "const",
-            "value": "0x10001"
-          }
-        },
-        {
-          "address": "0x40671c",
-          "value": {
-            "address": "0x406818",
-            "kind": "global"
-          }
-        },
-        {
-          "address": "0x406710",
-          "value": {
-            "kind": "const",
-            "value": "0xc0000409"
-          }
-        },
-        {
-          "address": "0x406714",
-          "value": {
-            "kind": "const",
-            "value": "0x1"
-          }
-        },
-        {
-          "address": "0x406720",
-          "value": {
-            "kind": "const",
-            "value": "0x1"
-          }
-        }
-      ],
-      "json": "samples/low_pcode/FUN_0040273a_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": [
-        {
-          "value": {
-            "kind": "call_ret",
-            "target": "FUN_00402712"
-          }
-        }
-      ]
-    },
-    "FUN_00402835": {
-      "calls": [
-        {
-          "addr": "0040283a",
-          "target": "FUN_00402842"
-        }
-      ],
-      "function": "FUN_00402835",
-      "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/FUN_00402835_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": [
-        {
-          "value": {
-            "kind": "call_ret",
-            "target": "FUN_00402842"
-          }
-        }
-      ]
-    },
-    "FUN_00402842": {
-      "calls": [
-        {
-          "addr": "0040284d",
-          "target": "IsProcessorFeaturePresent"
-        },
-        {
-          "addr": "0040290a",
-          "target": "FUN_00402712"
-        }
-      ],
-      "function": "FUN_00402842",
-      "global_reads": [],
-      "global_writes": [
-        {
-          "address": "0x406810",
-          "value": {
-            "kind": "call_ret",
-            "target": "IsProcessorFeaturePresent"
-          }
-        },
-        {
-          "address": "0x40680c",
-          "value": {
-            "arg": 0,
-            "kind": "arg"
-          }
-        },
-        {
-          "address": "0x406808",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x8L"
-          }
-        },
-        {
-          "address": "0x406804",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0xcL"
-          }
-        },
-        {
-          "address": "0x406800",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x18L"
-          }
-        },
-        {
-          "address": "0x4067fc",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x1cL"
-          }
-        },
-        {
-          "address": "0x406828",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x104L"
-          }
-        },
-        {
-          "address": "0x40681c",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x102L"
-          }
-        },
-        {
-          "address": "0x4067f8",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x106L"
-          }
-        },
-        {
-          "address": "0x4067f4",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x100L"
-          }
-        },
-        {
-          "address": "0x4067f0",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x108L"
-          }
-        },
-        {
-          "address": "0x4067ec",
-          "value": {
-            "kind": "unknown",
-            "reason": "unbound_Register:0x10aL"
-          }
-        },
-        {
-          "address": "0x406820",
-          "value": {
-            "kind": "unknown",
-            "reason": "load_from_unknown"
-          }
-        },
-        {
-          "address": "0x406814",
-          "value": {
-            "kind": "unknown",
-            "reason": "load_from_frame_base"
-          }
-        },
-        {
-          "address": "0x406818",
-          "value": {
-            "kind": "local_stack",
-            "offset": 4
-          }
-        },
-        {
-          "address": "0x406824",
-          "value": {
-            "kind": "stack_addr",
-            "offset": 8
-          }
-        },
-        {
-          "address": "0x40671c",
-          "value": {
-            "address": "0x406818",
-            "kind": "global"
-          }
-        },
-        {
-          "address": "0x406710",
-          "value": {
-            "kind": "const",
-            "value": "0xc0000409"
-          }
-        },
-        {
-          "address": "0x406714",
-          "value": {
-            "kind": "const",
-            "value": "0x1"
-          }
-        },
-        {
-          "address": "0x406720",
-          "value": {
-            "kind": "const",
-            "value": "0x1"
-          }
-        }
-      ],
-      "json": "samples/low_pcode/FUN_00402842_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": [
-        {
-          "value": {
-            "kind": "call_ret",
-            "target": "FUN_00402712"
-          }
-        }
-      ]
-    },
-    "__security_check_cookie": {
-      "calls": [
-        {
-          "addr": "0040270d",
-          "target": "FUN_0040273a"
-        }
-      ],
-      "function": "__security_check_cookie",
-      "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/__security_check_cookie_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": [
-        {
-          "value": {
-            "kind": "call_ret",
-            "target": "FUN_0040273a"
           }
         }
       ]
@@ -568,6 +339,72 @@
           "value": {
             "arg": 1,
             "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_deep_func1": {
+      "calls": [
+        {
+          "addr": "00402253",
+          "target": "dfb_deep_func2"
+        }
+      ],
+      "function": "dfb_deep_func1",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_deep_func1_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_deep_func2"
+          }
+        }
+      ]
+    },
+    "dfb_deep_func2": {
+      "calls": [
+        {
+          "addr": "0040222b",
+          "target": "dfb_deep_func4"
+        }
+      ],
+      "function": "dfb_deep_func2",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_deep_func2_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_deep_func4"
+          }
+        }
+      ]
+    },
+    "dfb_deep_func4": {
+      "calls": [
+        {
+          "addr": "00402203",
+          "target": "dfb_sink_int"
+        }
+      ],
+      "function": "dfb_deep_func4",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_deep_func4_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_sink_int"
           }
         }
       ]
@@ -610,10 +447,49 @@
         }
       ]
     },
+    "dfb_ignores_input": {
+      "calls": [
+        {
+          "addr": "004028d8",
+          "target": "dfb_source_A"
+        }
+      ],
+      "function": "dfb_ignores_input",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_ignores_input_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "source_ret",
+            "source": "dfb_source_A"
+          }
+        }
+      ]
+    },
+    "dfb_indirect_rec": {
+      "calls": [],
+      "function": "dfb_indirect_rec",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_indirect_rec_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "local_stack",
+            "offset": -12
+          }
+        }
+      ]
+    },
     "dfb_longjmp_writer": {
       "calls": [
         {
-          "addr": "00402432",
+          "addr": "00402926",
           "target": "longjmp"
         }
       ],
@@ -621,7 +497,7 @@
       "global_reads": [],
       "global_writes": [
         {
-          "address": "0x406708",
+          "address": "0x410120",
           "value": {
             "arg": 0,
             "kind": "arg"
@@ -641,12 +517,7 @@
       ]
     },
     "dfb_make_big_struct": {
-      "calls": [
-        {
-          "addr": "00401bcd",
-          "target": "__security_check_cookie"
-        }
-      ],
+      "calls": [],
       "function": "dfb_make_big_struct",
       "global_reads": [],
       "global_writes": [],
@@ -658,15 +529,59 @@
           "out_arg": 0,
           "value": {
             "kind": "local_stack",
-            "offset": -20
+            "offset": -16
           }
         }
       ],
       "returns": [
         {
           "value": {
-            "kind": "call_ret",
-            "target": "__security_check_cookie"
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_mr_even": {
+      "calls": [
+        {
+          "addr": "00402d72",
+          "target": "dfb_mr_odd"
+        }
+      ],
+      "function": "dfb_mr_even",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_mr_even_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_mr_odd": {
+      "calls": [
+        {
+          "addr": "00402d9a",
+          "target": "dfb_mr_even"
+        }
+      ],
+      "function": "dfb_mr_odd",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_mr_odd_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 0,
+            "kind": "arg"
           }
         }
       ]
@@ -674,7 +589,7 @@
     "dfb_nested_1": {
       "calls": [
         {
-          "addr": "00401ac7",
+          "addr": "0040208b",
           "target": "dfb_nested_2"
         }
       ],
@@ -696,7 +611,7 @@
     "dfb_nested_2": {
       "calls": [
         {
-          "addr": "00401aa7",
+          "addr": "00402078",
           "target": "dfb_transform_int"
         }
       ],
@@ -727,7 +642,7 @@
         {
           "value": {
             "kind": "local_stack",
-            "offset": -8
+            "offset": -4
           }
         }
       ]
@@ -743,16 +658,61 @@
       "returns": [
         {
           "value": {
-            "address": "0x4066bc",
+            "address": "0x4100cc",
             "kind": "global"
           }
         }
       ]
     },
+    "dfb_rec_accumulate": {
+      "calls": [
+        {
+          "addr": "00402e0b",
+          "target": "dfb_rec_accumulate"
+        }
+      ],
+      "function": "dfb_rec_accumulate",
+      "global_reads": [],
+      "global_writes": [
+        {
+          "address": "0x410144",
+          "value": {
+            "kind": "unknown",
+            "reason": "INT_ADD"
+          }
+        }
+      ],
+      "json": "samples/low_pcode/dfb_rec_accumulate_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "kind": "call_ret",
+            "target": "dfb_rec_accumulate"
+          }
+        }
+      ]
+    },
+    "dfb_rec_combine": {
+      "calls": [
+        {
+          "addr": "00402d11",
+          "target": "dfb_rec_combine"
+        }
+      ],
+      "function": "dfb_rec_combine",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_rec_combine_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
     "dfb_recursive_transform": {
       "calls": [
         {
-          "addr": "00401efc",
+          "addr": "004023bf",
           "target": "dfb_recursive_transform"
         }
       ],
@@ -777,7 +737,7 @@
       "global_reads": [],
       "global_writes": [
         {
-          "address": "0x4066c4",
+          "address": "0x4100d4",
           "value": {
             "arg": 0,
             "kind": "arg"
@@ -791,6 +751,23 @@
         {
           "value": {
             "arg": 0,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
+    "dfb_returns_third": {
+      "calls": [],
+      "function": "dfb_returns_third",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_returns_third_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": [
+        {
+          "value": {
+            "arg": 2,
             "kind": "arg"
           }
         }
@@ -830,7 +807,14 @@
           }
         }
       ],
-      "returns": []
+      "returns": [
+        {
+          "value": {
+            "kind": "const",
+            "value": "0x0"
+          }
+        }
+      ]
     },
     "dfb_store_through_double_pointer": {
       "calls": [],
@@ -852,8 +836,11 @@
       "returns": [
         {
           "value": {
-            "arg": 0,
-            "kind": "arg"
+            "base": {
+              "arg": 0,
+              "kind": "arg"
+            },
+            "kind": "deref"
           }
         }
       ]
@@ -947,6 +934,43 @@
         }
       ]
     },
+    "dfb_swap": {
+      "calls": [],
+      "function": "dfb_swap",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_swap_low_pcode.json",
+      "notes": [],
+      "outparams": [
+        {
+          "indirect": 0,
+          "out_arg": 0,
+          "value": {
+            "base": {
+              "arg": 1,
+              "kind": "arg"
+            },
+            "kind": "deref"
+          }
+        },
+        {
+          "indirect": 0,
+          "out_arg": 1,
+          "value": {
+            "kind": "local_stack",
+            "offset": -4
+          }
+        }
+      ],
+      "returns": [
+        {
+          "value": {
+            "arg": 1,
+            "kind": "arg"
+          }
+        }
+      ]
+    },
     "dfb_tail_target": {
       "calls": [],
       "function": "dfb_tail_target",
@@ -967,7 +991,7 @@
     "dfb_tail_wrapper": {
       "calls": [
         {
-          "addr": "00402387",
+          "addr": "0040280d",
           "target": "dfb_tail_target"
         }
       ],
@@ -994,27 +1018,39 @@
       "json": "samples/low_pcode/dfb_transform_int_low_pcode.json",
       "notes": [],
       "outparams": [],
-      "returns": [
+      "returns": []
+    },
+    "dfb_tree_rec": {
+      "calls": [
         {
-          "value": {
-            "base": {
-              "arg": 0,
-              "kind": "arg"
-            },
-            "kind": "field",
-            "offset": 1
-          }
+          "addr": "00402ecd",
+          "target": "dfb_source_A"
+        },
+        {
+          "addr": "00402edd",
+          "target": "dfb_tree_rec"
+        },
+        {
+          "addr": "00402eed",
+          "target": "dfb_tree_rec"
         }
-      ]
+      ],
+      "function": "dfb_tree_rec",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/dfb_tree_rec_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
     },
     "dfb_write_global_values": {
       "calls": [
         {
-          "addr": "00401a03",
+          "addr": "00401fd6",
           "target": "dfb_source_A"
         },
         {
-          "addr": "00401a0d",
+          "addr": "00401fe0",
           "target": "dfb_source_B"
         }
       ],
@@ -1022,14 +1058,14 @@
       "global_reads": [],
       "global_writes": [
         {
-          "address": "0x4066bc",
+          "address": "0x4100cc",
           "value": {
             "kind": "source_ret",
             "source": "dfb_source_A"
           }
         },
         {
-          "address": "0x4066c0",
+          "address": "0x4100d0",
           "value": {
             "kind": "source_ret",
             "source": "dfb_source_B"
@@ -1051,7 +1087,7 @@
     "dfb_write_source_to_out": {
       "calls": [
         {
-          "addr": "004015c3",
+          "addr": "00401bf4",
           "target": "dfb_source_A"
         }
       ],
@@ -1079,12 +1115,22 @@
         }
       ]
     },
-    "longjmp": {
+    "free": {
       "calls": [],
-      "function": "longjmp",
+      "function": "free",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/longjmp_low_pcode.json",
+      "json": "samples/low_pcode/free_low_pcode.json",
+      "notes": [],
+      "outparams": [],
+      "returns": []
+    },
+    "malloc": {
+      "calls": [],
+      "function": "malloc",
+      "global_reads": [],
+      "global_writes": [],
+      "json": "samples/low_pcode/malloc_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": []
@@ -1099,16 +1145,6 @@
       "outparams": [],
       "returns": []
     },
-    "memmove": {
-      "calls": [],
-      "function": "memmove",
-      "global_reads": [],
-      "global_writes": [],
-      "json": "samples/low_pcode/memmove_low_pcode.json",
-      "notes": [],
-      "outparams": [],
-      "returns": []
-    },
     "memset": {
       "calls": [],
       "function": "memset",
@@ -1119,12 +1155,12 @@
       "outparams": [],
       "returns": []
     },
-    "setjmp3": {
+    "realloc": {
       "calls": [],
-      "function": "setjmp3",
+      "function": "realloc",
       "global_reads": [],
       "global_writes": [],
-      "json": "samples/low_pcode/setjmp3_low_pcode.json",
+      "json": "samples/low_pcode/realloc_low_pcode.json",
       "notes": [],
       "outparams": [],
       "returns": []

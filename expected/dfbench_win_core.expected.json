@@ -966,6 +966,513 @@
         "state_machine"
       ],
       "allowed_warnings": []
+    },
+    {
+      "id": "DFB032",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB032_heap_raw_offset",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "heap",
+        "raw_offset",
+        "pointer_arithmetic"
+      ],
+      "allowed_warnings": [
+        "unresolved_heap_offset"
+      ]
+    },
+    {
+      "id": "DFB034",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB034_bitfield_access",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_A.ret"
+      ],
+      "expected_features": [
+        "struct",
+        "bitfield",
+        "subpiece",
+        "bit_range"
+      ],
+      "allowed_warnings": [
+        "unresolved_bitfield"
+      ]
+    },
+    {
+      "id": "DFB035",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB035_bitfield_access_zeroinit",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_A.ret"
+      ],
+      "expected_features": [
+        "struct",
+        "bitfield",
+        "subpiece",
+        "bit_range",
+        "zeroinit"
+      ],
+      "allowed_warnings": [
+        "unresolved_bitfield"
+      ]
+    },
+    {
+      "id": "DFB047",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB047_struct_padding_offset",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_A.ret"
+      ],
+      "expected_features": [
+        "struct",
+        "padding",
+        "alignment",
+        "field_sensitivity"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB048",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB048_cast_range_overlap",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "cast",
+        "range_overlap",
+        "pointer_arithmetic",
+        "type_punning"
+      ],
+      "allowed_warnings": [
+        "unresolved_range_overlap"
+      ]
+    },
+    {
+      "id": "DFB049",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB049_negative_offset_arithmetic",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "pointer_arithmetic",
+        "negative_offset",
+        "int_sub"
+      ],
+      "allowed_warnings": [
+        "unresolved_negative_offset"
+      ]
+    },
+    {
+      "id": "DFB004",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB004_no_source_constant",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [],
+      "forbidden_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret",
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "true_negative",
+        "constant_sink"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB005",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB005_overwrite_kill",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [],
+      "forbidden_sources": [
+        "dfb_source_A.ret"
+      ],
+      "expected_features": [
+        "strong_update",
+        "kill"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB006",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB006_multi_source_convergence",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "multi_source"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB007",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB007_subregister_alias",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "subpiece",
+        "zext"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB013",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB013_unbounded_loop_widen",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "loop_widen"
+      ],
+      "allowed_warnings": [
+        "widened_unknown"
+      ]
+    },
+    {
+      "id": "DFB014",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB014_control_only_dependency",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [],
+      "forbidden_sources": [
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "control_dependency"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB016",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB016_memory_phi",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "memory_phi"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB027",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB027_global_readonly_source",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [],
+      "forbidden_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret",
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "global_readonly"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB033",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB033_heap_alias_two_pointers",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "heap_alias",
+        "must_alias"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB061",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB061_non_tail_recursion",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "non_tail_recursion",
+        "self_ref_summary"
+      ],
+      "allowed_warnings": [
+        "recursive_summary_unavailable"
+      ]
+    },
+    {
+      "id": "DFB062",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB062_mutual_recursion",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "mutual_recursion",
+        "scc"
+      ],
+      "allowed_warnings": [
+        "recursive_summary_unavailable"
+      ]
+    },
+    {
+      "id": "DFB063",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB063_recursion_global_effect",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "recursion_side_effect",
+        "global_write"
+      ],
+      "allowed_warnings": [
+        "recursive_summary_unavailable"
+      ]
+    },
+    {
+      "id": "DFB064",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB064_indirect_recursion",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "indirect_recursion",
+        "callind_scc"
+      ],
+      "allowed_warnings": [
+        "recursive_summary_unavailable",
+        "unresolved_indirect_call"
+      ]
+    },
+    {
+      "id": "DFB065",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB065_tree_recursion",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_C.ret"
+      ],
+      "expected_features": [
+        "tree_recursion",
+        "base_case_source"
+      ],
+      "allowed_warnings": [
+        "recursive_summary_unavailable"
+      ]
+    },
+    {
+      "id": "DFB066",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB066_swap_target_independence",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_A.ret"
+      ],
+      "expected_features": [
+        "swap",
+        "target_independence",
+        "multi_outparam"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB074",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB074_unresolved_indirect",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "callind",
+        "unresolved_indirect"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB075",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB075_unresolved_call_boundary",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [],
+      "expected_features": [
+        "external_call",
+        "no_summary"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB151",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB151_selective_arg_passthrough",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_C.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "expected_features": [
+        "selective_param",
+        "convention_free"
+      ],
+      "allowed_warnings": []
+    },
+    {
+      "id": "DFB152",
+      "binary": "dfbench_win_core",
+      "function": "case_DFB152_callee_use_before_def",
+      "anchor": {
+        "callee": "dfb_sink_int",
+        "arg_index": 0
+      },
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources": [
+        "dfb_source_B.ret"
+      ],
+      "expected_features": [
+        "use_before_def",
+        "callee_internal_source"
+      ],
+      "allowed_warnings": []
     }
   ]
 }

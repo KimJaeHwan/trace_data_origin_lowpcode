@@ -1,16 +1,16 @@
 {
   "instructions": [
     {
-      "address": "004034a9", 
+      "address": "00409d00", 
       "length": 6, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4034a9, 0, 0)", 
+          "seqnum": "(ram, 0x409d00, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
-              "address": "00404040", 
-              "offset": "0x404040L", 
+              "address": "0041324c", 
+              "offset": "0x41324cL", 
               "is_unique": false, 
               "type": "Address", 
               "space": "ram:", 
@@ -28,12 +28,12 @@
       "bytes": [
         "ff", 
         "25", 
-        "40", 
-        "40", 
-        "40", 
+        "4c", 
+        "32", 
+        "41", 
         "00"
       ], 
-      "assembly": "JMP dword ptr [0x00404040]", 
+      "assembly": "JMP dword ptr [0x0041324c]", 
       "mnemonic": "JMP", 
       "refs_from": [
         {
@@ -44,8 +44,8 @@
           "is_read": false, 
           "operand_index": 0, 
           "is_flow": true, 
-          "from": "004034a9", 
-          "to": "00404040", 
+          "from": "00409d00", 
+          "to": "0041324c", 
           "is_jump": false
         }, 
         {
@@ -56,14 +56,14 @@
           "is_read": false, 
           "operand_index": -1, 
           "is_flow": true, 
-          "from": "004034a9", 
-          "to": "EXTERNAL:00000006", 
+          "from": "00409d00", 
+          "to": "EXTERNAL:00000036", 
           "is_jump": true
         }
       ], 
       "flow_targets": [
-        "00404040", 
-        "EXTERNAL:00000006"
+        "0041324c", 
+        "EXTERNAL:00000036"
       ], 
       "fallthrough": null
     }
@@ -82,10 +82,10 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 1536, 
         "is_volatile": false, 
         "name": "Headers", 
-        "end": "004003ff"
+        "end": "004005ff"
       }, 
       {
         "is_execute": true, 
@@ -93,73 +93,205 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 9728, 
+        "size": 36864, 
         "is_volatile": false, 
         "name": ".text", 
-        "end": "004035ff"
+        "end": "00409fff"
       }, 
       {
         "is_execute": false, 
-        "start": "00404000", 
-        "is_external": false, 
-        "is_write": false, 
-        "is_read": true, 
-        "size": 7680, 
-        "is_volatile": false, 
-        "name": ".rdata", 
-        "end": "00405dff"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00406000", 
+        "start": "0040a000", 
         "is_external": false, 
         "is_write": true, 
-        "is_read": true, 
-        "size": 2696, 
-        "is_volatile": false, 
-        "name": ".data", 
-        "end": "00406a87"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00407000", 
-        "is_external": false, 
-        "is_write": false, 
         "is_read": true, 
         "size": 512, 
         "is_volatile": false, 
-        "name": ".rsrc", 
-        "end": "004071ff"
+        "name": ".data", 
+        "end": "0040a1ff"
       }, 
       {
         "is_execute": false, 
-        "start": "00408000", 
+        "start": "0040b000", 
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 6144, 
         "is_volatile": false, 
-        "name": ".reloc", 
-        "end": "004083ff"
+        "name": ".rdata", 
+        "end": "0040c7ff"
       }, 
       {
         "is_execute": false, 
-        "start": "ffdff000", 
+        "start": "0040d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 10752, 
+        "is_volatile": false, 
+        "name": ".eh_frame", 
+        "end": "0040f9ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00410000", 
         "is_external": false, 
         "is_write": true, 
         "is_read": true, 
-        "size": 4096, 
+        "size": 2964, 
         "is_volatile": false, 
-        "name": "tdb", 
-        "end": "ffdfffff"
+        "name": ".bss", 
+        "end": "00410b93"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00411000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 5120, 
+        "is_volatile": false, 
+        "name": ".edata", 
+        "end": "004123ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00413000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".idata", 
+        "end": "004137ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00414000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".CRT", 
+        "end": "004141ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00415000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".tls", 
+        "end": "004151ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00416000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004167ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00417000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".debug_aranges", 
+        "end": "004177ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00418000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 91648, 
+        "is_volatile": false, 
+        "name": ".debug_info", 
+        "end": "0042e5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0042f000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 18432, 
+        "is_volatile": false, 
+        "name": ".debug_abbrev", 
+        "end": "004337ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00434000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 32256, 
+        "is_volatile": false, 
+        "name": ".debug_line", 
+        "end": "0043bdff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043c000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_str", 
+        "end": "0043c5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".debug_line_str", 
+        "end": "0043f5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00440000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 27136, 
+        "is_volatile": false, 
+        "name": ".debug_loclists", 
+        "end": "004469ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00447000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_rnglists", 
+        "end": "004475ff"
       }
     ], 
     "name": "dfbench_win_core.exe", 
-    "executable_path": "/D:/githubProject/01_tdo_testbed/tdo_testbed/build/win-release/dfbench_win_core.exe"
+    "executable_path": "/Volumes/DO/00_ gitProject/01_tdo/tdo_testbed/dist/docker-windows-pe/windows_pe_x86/build/dfbench_win_core.exe"
   }, 
   "schema_version": 2, 
   "function_name": "memset", 
-  "start_address": "004034a9", 
+  "start_address": "00409d00", 
   "compatibility": {
     "new_fields_are_optional_hints": true, 
     "legacy_v1_fields_preserved": true, 
@@ -169,15 +301,15 @@
     "function": {
       "body_ranges": [
         {
-          "max": "004034ae", 
-          "min": "004034a9"
+          "max": "00409d05", 
+          "min": "00409d00"
         }
       ], 
       "calling_convention": "__cdecl", 
-      "signature": "void * __cdecl memset(void * _Dst, int _Val, size_t _Size)", 
+      "signature": "undefined __cdecl memset(void * param_1, int param_2, size_t param_3)", 
       "local_variables": [], 
-      "entry": "004034a9", 
-      "is_thunk": true, 
+      "entry": "00409d00", 
+      "is_thunk": false, 
       "name": "memset", 
       "stack_frame": {
         "grows_negative": true, 
@@ -192,7 +324,7 @@
           "storage": "Stack[0x4]:4", 
           "is_register": false, 
           "stack_offset": 4, 
-          "name": "_Dst", 
+          "name": "param_1", 
           "data_type": "void *", 
           "first_use_offset": 0, 
           "is_stack": true, 
@@ -204,7 +336,7 @@
           "storage": "Stack[0x8]:4", 
           "is_register": false, 
           "stack_offset": 8, 
-          "name": "_Val", 
+          "name": "param_2", 
           "data_type": "int", 
           "first_use_offset": 0, 
           "is_stack": true, 
@@ -216,7 +348,7 @@
           "storage": "Stack[0xc]:4", 
           "is_register": false, 
           "stack_offset": 12, 
-          "name": "_Size", 
+          "name": "param_3", 
           "data_type": "typedef size_t uint", 
           "first_use_offset": 0, 
           "is_stack": true, 
@@ -224,10 +356,7 @@
           "ordinal": 2
         }
       ], 
-      "thunked_function": {
-        "entry": "EXTERNAL:00000006", 
-        "name": "memset"
-      }
+      "thunked_function": null
     }
   }
 }

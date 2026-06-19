@@ -1,0 +1,350 @@
+{
+  "instructions": [
+    {
+      "address": "00409cb8", 
+      "length": 6, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x409cb8, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "00413228", 
+              "offset": "0x413228L", 
+              "is_unique": false, 
+              "type": "Address", 
+              "space": "ram:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": true
+            }
+          ], 
+          "opcode": "BRANCHIND", 
+          "output": null
+        }
+      ], 
+      "flow_type": "COMPUTED_JUMP", 
+      "call_targets": [], 
+      "bytes": [
+        "ff", 
+        "25", 
+        "28", 
+        "32", 
+        "41", 
+        "00"
+      ], 
+      "assembly": "JMP dword ptr [0x00413228]", 
+      "mnemonic": "JMP", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "INDIRECTION", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": true, 
+          "from": "00409cb8", 
+          "to": "00413228", 
+          "is_jump": false
+        }, 
+        {
+          "is_call": false, 
+          "is_data": false, 
+          "type": "COMPUTED_JUMP", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": -1, 
+          "is_flow": true, 
+          "from": "00409cb8", 
+          "to": "EXTERNAL:0000002d", 
+          "is_jump": true
+        }
+      ], 
+      "flow_targets": [
+        "00413228", 
+        "EXTERNAL:0000002d"
+      ], 
+      "fallthrough": null
+    }
+  ], 
+  "dumper": "lowpcode_json_dumper_v2_reachable_helpers", 
+  "program": {
+    "default_pointer_size": 4, 
+    "language_id": "x86:LE:32:default", 
+    "image_base": "00400000", 
+    "processor": "x86", 
+    "compiler_spec_id": "windows", 
+    "memory_blocks": [
+      {
+        "is_execute": false, 
+        "start": "00400000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": "Headers", 
+        "end": "004005ff"
+      }, 
+      {
+        "is_execute": true, 
+        "start": "00401000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 36864, 
+        "is_volatile": false, 
+        "name": ".text", 
+        "end": "00409fff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0040a000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".data", 
+        "end": "0040a1ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0040b000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 6144, 
+        "is_volatile": false, 
+        "name": ".rdata", 
+        "end": "0040c7ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0040d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 10752, 
+        "is_volatile": false, 
+        "name": ".eh_frame", 
+        "end": "0040f9ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00410000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2964, 
+        "is_volatile": false, 
+        "name": ".bss", 
+        "end": "00410b93"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00411000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 5120, 
+        "is_volatile": false, 
+        "name": ".edata", 
+        "end": "004123ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00413000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".idata", 
+        "end": "004137ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00414000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".CRT", 
+        "end": "004141ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00415000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".tls", 
+        "end": "004151ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00416000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004167ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00417000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".debug_aranges", 
+        "end": "004177ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00418000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 91648, 
+        "is_volatile": false, 
+        "name": ".debug_info", 
+        "end": "0042e5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0042f000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 18432, 
+        "is_volatile": false, 
+        "name": ".debug_abbrev", 
+        "end": "004337ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00434000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 32256, 
+        "is_volatile": false, 
+        "name": ".debug_line", 
+        "end": "0043bdff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043c000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_str", 
+        "end": "0043c5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".debug_line_str", 
+        "end": "0043f5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00440000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 27136, 
+        "is_volatile": false, 
+        "name": ".debug_loclists", 
+        "end": "004469ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00447000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_rnglists", 
+        "end": "004475ff"
+      }
+    ], 
+    "name": "dfbench_win_core.exe", 
+    "executable_path": "/Volumes/DO/00_ gitProject/01_tdo/tdo_testbed/dist/docker-windows-pe/windows_pe_x86/build/dfbench_win_core.exe"
+  }, 
+  "schema_version": 2, 
+  "function_name": "calloc", 
+  "start_address": "00409cb8", 
+  "compatibility": {
+    "new_fields_are_optional_hints": true, 
+    "legacy_v1_fields_preserved": true, 
+    "legacy_instruction_low_pcode_shape_preserved": true
+  }, 
+  "ghidra_hints": {
+    "function": {
+      "body_ranges": [
+        {
+          "max": "00409cbd", 
+          "min": "00409cb8"
+        }
+      ], 
+      "calling_convention": "__cdecl", 
+      "signature": "undefined __cdecl calloc(size_t param_1, size_t param_2)", 
+      "local_variables": [], 
+      "entry": "00409cb8", 
+      "is_thunk": false, 
+      "name": "calloc", 
+      "stack_frame": {
+        "grows_negative": true, 
+        "local_size": 4, 
+        "frame_size": 12, 
+        "parameter_size": 8, 
+        "return_address_offset": 0
+      }, 
+      "parameters": [
+        {
+          "is_unique": false, 
+          "storage": "Stack[0x4]:4", 
+          "is_register": false, 
+          "stack_offset": 4, 
+          "name": "param_1", 
+          "data_type": "typedef size_t uint", 
+          "first_use_offset": 0, 
+          "is_stack": true, 
+          "is_memory": false, 
+          "ordinal": 0
+        }, 
+        {
+          "is_unique": false, 
+          "storage": "Stack[0x8]:4", 
+          "is_register": false, 
+          "stack_offset": 8, 
+          "name": "param_2", 
+          "data_type": "typedef size_t uint", 
+          "first_use_offset": 0, 
+          "is_stack": true, 
+          "is_memory": false, 
+          "ordinal": 1
+        }
+      ], 
+      "thunked_function": null
+    }
+  }
+}

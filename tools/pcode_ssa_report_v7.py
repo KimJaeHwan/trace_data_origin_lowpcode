@@ -187,7 +187,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
             "args": args,
         })
         self._add_call_clobbers(addr, state, include_ret=False)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
         return True
 
     def _load_function_summaries(self, summary_path=None):
@@ -287,7 +287,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
             self.ssa_pcode_lines.append(f"{main_mem} = CALL_GLOBAL_STORE({target_name}, DFB_GLOBAL_MAIN, SOURCE_RET(dfb_source_A))")
             self.ssa_pcode_lines.append(f"{shadow_mem} = CALL_GLOBAL_STORE({target_name}, DFB_GLOBAL_SHADOW, SOURCE_RET(dfb_source_B))")
             self._add_call_clobbers(addr, state, include_ret=True)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return True
 
         if target_name == "dfb_read_global_main_value":
@@ -314,7 +314,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
             })
             self.ssa_pcode_lines.append(f"{ret_node} = CALL_GLOBAL_LOAD({target_name}, DFB_GLOBAL_MAIN)")
             self._add_call_clobbers(addr, state, include_ret=False)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return True
 
         return False
@@ -417,7 +417,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
                 "args": args,
             })
             self._add_call_clobbers(addr, state, include_ret=False)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
         return applied
 
     def _resolve_stack_key_from_node(self, node, visited=None):
@@ -494,7 +494,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
         })
         self.ssa_pcode_lines.append(f"{ret_node} = CALL_RET_SUMMARY({target_name}, {args[0]})")
         self._add_call_clobbers(addr, state, include_ret=False)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
         return True
 
     def _apply_outparam_summary(self, instr, state, target_name, summary):
@@ -554,7 +554,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
         })
         self.ssa_pcode_lines.append(f"{mem_node} = CALL_OUTPARAM_STORE({target_name}, {out_stack_key}, {value_label}) [{classification['region']}]")
         self._add_call_clobbers(addr, state, include_ret=True)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
         return True
 
     def _record_pending_push_arg(self, instr, state):
@@ -574,6 +574,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
         if node:
             # x86 pushes arguments right-to-left; the most recent push is arg0.
             self.pending_stack_args.insert(0, node)
+            self.pending_stack_arg_slots = {}
 
     def _is_stack_arg_boundary(self, instr):
         mnemonic = instr.get("mnemonic")
@@ -621,7 +622,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
                 clobbered.append(new_ver)
             if clobbered:
                 self.ssa_pcode_lines.append(f"CALL_CLOBBER({', '.join(clobbered)})")
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return
 
         if self._is_sink_function(target_name):
@@ -658,7 +659,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
                 self.G.add_node(new_ver, addr=addr, opcode=opcode)
                 clobbered.append(new_ver)
             self.ssa_pcode_lines.append(f"CALL_RESET({', '.join(clobbered)})")
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return
 
         if self._apply_libc_transfer_summary(instr, state, target_name):
@@ -679,7 +680,7 @@ class MemoryObjectTransferSSAEngineV7(SourceSinkCallSiteBinderV6):
             return
 
         super()._process_call(instr, state)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
 
     def _collect_data_sources(self, target_node):
         if not self.G.has_node(target_node):

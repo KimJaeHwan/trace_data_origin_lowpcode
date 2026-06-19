@@ -1,11 +1,11 @@
 {
   "instructions": [
     {
-      "address": "004017b0", 
+      "address": "00401e34", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017b0, 0, 0)", 
+          "seqnum": "(ram, 0x401e34, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -34,7 +34,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b0, 1, 0)", 
+          "seqnum": "(ram, 0x401e34, 1, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -75,7 +75,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b0, 2, 0)", 
+          "seqnum": "(ram, 0x401e34, 2, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -125,14 +125,14 @@
       "mnemonic": "PUSH", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "004017b1"
+      "fallthrough": "00401e35"
     }, 
     {
-      "address": "004017b1", 
+      "address": "00401e35", 
       "length": 2, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017b1, 0, 0)", 
+          "seqnum": "(ram, 0x401e35, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -165,62 +165,50 @@
       "flow_type": "FALL_THROUGH", 
       "call_targets": [], 
       "bytes": [
-        "8b", 
-        "ec"
+        "89", 
+        "e5"
       ], 
       "assembly": "MOV EBP,ESP", 
       "mnemonic": "MOV", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "004017b3"
+      "fallthrough": "00401e37"
     }, 
     {
-      "address": "004017b3", 
-      "length": 3, 
+      "address": "00401e37", 
+      "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017b3, 0, 0)", 
+          "seqnum": "(ram, 0x401e37, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
+              "address": "register:0000000c", 
+              "register_name": "EBX", 
+              "offset": "0xcL", 
               "is_unique": false, 
               "type": "Register", 
               "space": "register:", 
               "size": 4, 
               "is_register": true, 
               "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:0000000c", 
-              "offset": "0xcL", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
             }
           ], 
-          "opcode": "INT_LESS", 
+          "opcode": "COPY", 
           "output": {
             "is_constant": false, 
-            "address": "register:00000200", 
-            "register_name": "CF", 
-            "offset": "0x200L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
+            "address": "unique:00041500", 
+            "offset": "0x41500L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
             "is_address": false
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 1, 0)", 
+          "seqnum": "(ram, 0x401e37, 1, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -236,49 +224,8 @@
             }, 
             {
               "is_constant": true, 
-              "address": "const:0000000c", 
-              "offset": "0xcL", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_SBORROW", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:0000020b", 
-            "register_name": "OF", 
-            "offset": "0x20bL", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017b3, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:0000000c", 
-              "offset": "0xcL", 
+              "address": "const:00000004", 
+              "offset": "0x4L", 
               "is_unique": false, 
               "type": "Constant", 
               "space": "const:", 
@@ -302,7 +249,187 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 3, 0)", 
+          "seqnum": "(ram, 0x401e37, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 8, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:00041500", 
+              "offset": "0x41500L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "STORE", 
+          "output": null
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "53"
+      ], 
+      "assembly": "PUSH EBX", 
+      "mnemonic": "PUSH", 
+      "refs_from": [], 
+      "flow_targets": [], 
+      "fallthrough": "00401e38"
+    }, 
+    {
+      "address": "00401e38", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e38, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000024", 
+              "offset": "0x24L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_LESS", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000200", 
+            "register_name": "CF", 
+            "offset": "0x200L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 1, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e38, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000024", 
+              "offset": "0x24L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_SBORROW", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:0000020b", 
+            "register_name": "OF", 
+            "offset": "0x20bL", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 1, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e38, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000024", 
+              "offset": "0x24L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_SUB", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000010", 
+            "register_name": "ESP", 
+            "offset": "0x10L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e38, 3, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -343,7 +470,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 4, 0)", 
+          "seqnum": "(ram, 0x401e38, 4, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -384,7 +511,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 5, 0)", 
+          "seqnum": "(ram, 0x401e38, 5, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -424,7 +551,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 6, 0)", 
+          "seqnum": "(ram, 0x401e38, 6, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -452,7 +579,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 7, 0)", 
+          "seqnum": "(ram, 0x401e38, 7, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -491,7 +618,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b3, 8, 0)", 
+          "seqnum": "(ram, 0x401e38, 8, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -536,20 +663,120 @@
       "bytes": [
         "83", 
         "ec", 
-        "0c"
+        "24"
       ], 
-      "assembly": "SUB ESP,0xc", 
+      "assembly": "SUB ESP,0x24", 
       "mnemonic": "SUB", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "004017b6"
+      "fallthrough": "00401e3b"
     }, 
     {
-      "address": "004017b6", 
+      "address": "00401e3b", 
       "length": 3, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017b6, 0, 0)", 
+          "seqnum": "(ram, 0x401e3b, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000014", 
+              "register_name": "EBP", 
+              "offset": "0x14L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:ffffffec", 
+              "offset": "0xffffffecL", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_ADD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00006600", 
+            "offset": "0x6600L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e3b, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "unique:00006600", 
+              "offset": "0x6600L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000000", 
+            "register_name": "EAX", 
+            "offset": "0x0L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "8d", 
+        "45", 
+        "ec"
+      ], 
+      "assembly": "LEA EAX,[EBP + -0x14]", 
+      "mnemonic": "LEA", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "DATA", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": false, 
+          "from": "00401e3b", 
+          "to": "Stack[-0x18]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e3e"
+    }, 
+    {
+      "address": "00401e3e", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e3e, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -589,12 +816,191 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017b6, 1, 0)", 
+          "seqnum": "(ram, 0x401e3e, 1, 0)", 
           "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000000", 
+              "register_name": "EAX", 
+              "offset": "0x0L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:0000a300", 
+            "offset": "0xa300L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e3e, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
             {
               "is_constant": false, 
               "address": "unique:00006600", 
               "offset": "0x6600L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:0000a300", 
+              "offset": "0xa300L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "STORE", 
+          "output": null
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "89", 
+        "45", 
+        "f4"
+      ], 
+      "assembly": "MOV dword ptr [EBP + -0xc],EAX", 
+      "mnemonic": "MOV", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "WRITE", 
+          "is_write": true, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": false, 
+          "from": "00401e3e", 
+          "to": "Stack[-0x10]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e41"
+    }, 
+    {
+      "address": "00401e41", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e41, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000014", 
+              "register_name": "EBP", 
+              "offset": "0x14L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:fffffff4", 
+              "offset": "0xfffffff4L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_ADD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00006600", 
+            "offset": "0x6600L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e41, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:00006600", 
+              "offset": "0x6600L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "LOAD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00017200", 
+            "offset": "0x17200L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e41, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "unique:00017200", 
+              "offset": "0x17200L", 
               "is_unique": true, 
               "type": "Unique", 
               "space": "unique:", 
@@ -621,11 +1027,111 @@
       "flow_type": "FALL_THROUGH", 
       "call_targets": [], 
       "bytes": [
-        "8d", 
+        "8b", 
         "45", 
         "f4"
       ], 
-      "assembly": "LEA EAX,[EBP + -0xc]", 
+      "assembly": "MOV EAX,dword ptr [EBP + -0xc]", 
+      "mnemonic": "MOV", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "READ", 
+          "is_write": false, 
+          "is_read": true, 
+          "operand_index": 1, 
+          "is_flow": false, 
+          "from": "00401e41", 
+          "to": "Stack[-0x10]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e44"
+    }, 
+    {
+      "address": "00401e44", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e44, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000000", 
+              "register_name": "EAX", 
+              "offset": "0x0L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000004", 
+              "offset": "0x4L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_ADD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00006600", 
+            "offset": "0x6600L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e44, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "unique:00006600", 
+              "offset": "0x6600L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:0000000c", 
+            "register_name": "EBX", 
+            "offset": "0xcL", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "8d", 
+        "58", 
+        "04"
+      ], 
+      "assembly": "LEA EBX,[EAX + 0x4]", 
       "mnemonic": "LEA", 
       "refs_from": [
         {
@@ -636,160 +1142,20 @@
           "is_read": false, 
           "operand_index": 0, 
           "is_flow": false, 
-          "from": "004017b6", 
-          "to": "Stack[-0x10]", 
+          "from": "00401e44", 
+          "to": "Stack[-0x14]", 
           "is_jump": false
         }
       ], 
       "flow_targets": [], 
-      "fallthrough": "004017b9"
+      "fallthrough": "00401e47"
     }, 
     {
-      "address": "004017b9", 
-      "length": 3, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017b9, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000014", 
-              "register_name": "EBP", 
-              "offset": "0x14L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:fffffffc", 
-              "offset": "0xfffffffcL", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_ADD", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00006600", 
-            "offset": "0x6600L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017b9, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000000", 
-              "register_name": "EAX", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:0000a300", 
-            "offset": "0xa300L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017b9, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:000001a1", 
-              "offset": "0x1a1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:00006600", 
-              "offset": "0x6600L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:0000a300", 
-              "offset": "0xa300L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "STORE", 
-          "output": null
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "89", 
-        "45", 
-        "fc"
-      ], 
-      "assembly": "MOV dword ptr [EBP + -0x4],EAX", 
-      "mnemonic": "MOV", 
-      "refs_from": [
-        {
-          "is_call": false, 
-          "is_data": true, 
-          "type": "WRITE", 
-          "is_write": true, 
-          "is_read": false, 
-          "operand_index": 0, 
-          "is_flow": false, 
-          "from": "004017b9", 
-          "to": "Stack[-0x8]", 
-          "is_jump": false
-        }
-      ], 
-      "flow_targets": [], 
-      "fallthrough": "004017bc"
-    }, 
-    {
-      "address": "004017bc", 
+      "address": "00401e47", 
       "length": 5, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017bc, 0, 0)", 
+          "seqnum": "(ram, 0x401e47, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -830,7 +1196,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017bc, 1, 0)", 
+          "seqnum": "(ram, 0x401e47, 1, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -857,8 +1223,8 @@
             }, 
             {
               "is_constant": true, 
-              "address": "const:004017c1", 
-              "offset": "0x4017c1L", 
+              "address": "const:00401e4c", 
+              "offset": "0x401e4cL", 
               "is_unique": false, 
               "type": "Constant", 
               "space": "const:", 
@@ -871,12 +1237,12 @@
           "output": null
         }, 
         {
-          "seqnum": "(ram, 0x4017bc, 2, 0)", 
+          "seqnum": "(ram, 0x401e47, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
-              "address": "00401310", 
-              "offset": "0x401310L", 
+              "address": "004018a8", 
+              "offset": "0x4018a8L", 
               "is_unique": false, 
               "type": "Address", 
               "space": "ram:", 
@@ -892,9 +1258,9 @@
       "flow_type": "UNCONDITIONAL_CALL", 
       "call_targets": [
         {
-          "address": "00401310", 
-          "calling_convention": "__stdcall", 
-          "entry": "00401310", 
+          "address": "004018a8", 
+          "calling_convention": "unknown", 
+          "entry": "004018a8", 
           "is_thunk": false, 
           "function_name": "dfb_source_A", 
           "resolved": true
@@ -902,12 +1268,12 @@
       ], 
       "bytes": [
         "e8", 
-        "4f", 
-        "fb", 
+        "5c", 
+        "fa", 
         "ff", 
         "ff"
       ], 
-      "assembly": "CALL 0x00401310", 
+      "assembly": "CALL 0x004018a8", 
       "mnemonic": "CALL", 
       "refs_from": [
         {
@@ -918,22 +1284,521 @@
           "is_read": false, 
           "operand_index": 0, 
           "is_flow": true, 
-          "from": "004017bc", 
-          "to": "00401310", 
+          "from": "00401e47", 
+          "to": "004018a8", 
           "is_jump": false
         }
       ], 
       "flow_targets": [
-        "00401310"
+        "004018a8"
       ], 
-      "fallthrough": "004017c1"
+      "fallthrough": "00401e4c"
     }, 
     {
-      "address": "004017c1", 
+      "address": "00401e4c", 
+      "length": 2, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e4c, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000000", 
+              "register_name": "EAX", 
+              "offset": "0x0L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:0000a300", 
+            "offset": "0xa300L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e4c, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "register:0000000c", 
+              "register_name": "EBX", 
+              "offset": "0xcL", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:0000a300", 
+              "offset": "0xa300L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "STORE", 
+          "output": null
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "89", 
+        "03"
+      ], 
+      "assembly": "MOV dword ptr [EBX],EAX", 
+      "mnemonic": "MOV", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "DATA", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": false, 
+          "from": "00401e4c", 
+          "to": "Stack[-0x14]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e4e"
+    }, 
+    {
+      "address": "00401e4e", 
       "length": 3, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017c1, 0, 0)", 
+          "seqnum": "(ram, 0x401e4e, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000014", 
+              "register_name": "EBP", 
+              "offset": "0x14L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:fffffff0", 
+              "offset": "0xfffffff0L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_ADD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00006600", 
+            "offset": "0x6600L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e4e, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:00006600", 
+              "offset": "0x6600L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "LOAD", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:00017200", 
+            "offset": "0x17200L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e4e, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "unique:00017200", 
+              "offset": "0x17200L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000000", 
+            "register_name": "EAX", 
+            "offset": "0x0L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "8b", 
+        "45", 
+        "f0"
+      ], 
+      "assembly": "MOV EAX,dword ptr [EBP + -0x10]", 
+      "mnemonic": "MOV", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "READ", 
+          "is_write": false, 
+          "is_read": true, 
+          "operand_index": 1, 
+          "is_flow": false, 
+          "from": "00401e4e", 
+          "to": "Stack[-0x14]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e51"
+    }, 
+    {
+      "address": "00401e51", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e51, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000000", 
+              "register_name": "EAX", 
+              "offset": "0x0L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "COPY", 
+          "output": {
+            "is_constant": false, 
+            "address": "unique:0000a300", 
+            "offset": "0xa300L", 
+            "is_unique": true, 
+            "type": "Unique", 
+            "space": "unique:", 
+            "size": 4, 
+            "is_register": false, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e51, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "unique:0000a300", 
+              "offset": "0xa300L", 
+              "is_unique": true, 
+              "type": "Unique", 
+              "space": "unique:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "STORE", 
+          "output": null
+        }
+      ], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "89", 
+        "04", 
+        "24"
+      ], 
+      "assembly": "MOV dword ptr [ESP],EAX", 
+      "mnemonic": "MOV", 
+      "refs_from": [
+        {
+          "is_call": false, 
+          "is_data": true, 
+          "type": "DATA", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": false, 
+          "from": "00401e51", 
+          "to": "Stack[-0x2c]", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [], 
+      "fallthrough": "00401e54"
+    }, 
+    {
+      "address": "00401e54", 
+      "length": 5, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e54, 0, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000004", 
+              "offset": "0x4L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_SUB", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000010", 
+            "register_name": "ESP", 
+            "offset": "0x10L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e54, 1, 0)", 
+          "inputs": [
+            {
+              "is_constant": true, 
+              "address": "const:000001a1", 
+              "offset": "0x1a1L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 8, 
+              "is_register": false, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00401e59", 
+              "offset": "0x401e59L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "STORE", 
+          "output": null
+        }, 
+        {
+          "seqnum": "(ram, 0x401e54, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "004018f2", 
+              "offset": "0x4018f2L", 
+              "is_unique": false, 
+              "type": "Address", 
+              "space": "ram:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": true
+            }
+          ], 
+          "opcode": "CALL", 
+          "output": null
+        }
+      ], 
+      "flow_type": "UNCONDITIONAL_CALL", 
+      "call_targets": [
+        {
+          "address": "004018f2", 
+          "calling_convention": "unknown", 
+          "entry": "004018f2", 
+          "is_thunk": false, 
+          "function_name": "dfb_sink_int", 
+          "resolved": true
+        }
+      ], 
+      "bytes": [
+        "e8", 
+        "99", 
+        "fa", 
+        "ff", 
+        "ff"
+      ], 
+      "assembly": "CALL 0x004018f2", 
+      "mnemonic": "CALL", 
+      "refs_from": [
+        {
+          "is_call": true, 
+          "is_data": false, 
+          "type": "UNCONDITIONAL_CALL", 
+          "is_write": false, 
+          "is_read": false, 
+          "operand_index": 0, 
+          "is_flow": true, 
+          "from": "00401e54", 
+          "to": "004018f2", 
+          "is_jump": false
+        }
+      ], 
+      "flow_targets": [
+        "004018f2"
+      ], 
+      "fallthrough": "00401e59"
+    }, 
+    {
+      "address": "00401e59", 
+      "length": 1, 
+      "low_pcode": [], 
+      "flow_type": "FALL_THROUGH", 
+      "call_targets": [], 
+      "bytes": [
+        "90"
+      ], 
+      "assembly": "NOP", 
+      "mnemonic": "NOP", 
+      "refs_from": [], 
+      "flow_targets": [], 
+      "fallthrough": "00401e5a"
+    }, 
+    {
+      "address": "00401e5a", 
+      "length": 3, 
+      "low_pcode": [
+        {
+          "seqnum": "(ram, 0x401e5a, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -973,7 +1838,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017c1, 1, 0)", 
+          "seqnum": "(ram, 0x401e5a, 1, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -1012,7 +1877,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017c1, 2, 0)", 
+          "seqnum": "(ram, 0x401e5a, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -1029,9 +1894,9 @@
           "opcode": "COPY", 
           "output": {
             "is_constant": false, 
-            "address": "register:00000004", 
-            "register_name": "ECX", 
-            "offset": "0x4L", 
+            "address": "register:0000000c", 
+            "register_name": "EBX", 
+            "offset": "0xcL", 
             "is_unique": false, 
             "type": "Register", 
             "space": "register:", 
@@ -1045,10 +1910,10 @@
       "call_targets": [], 
       "bytes": [
         "8b", 
-        "4d", 
+        "5d", 
         "fc"
       ], 
-      "assembly": "MOV ECX,dword ptr [EBP + -0x4]", 
+      "assembly": "MOV EBX,dword ptr [EBP + -0x4]", 
       "mnemonic": "MOV", 
       "refs_from": [
         {
@@ -1059,940 +1924,20 @@
           "is_read": true, 
           "operand_index": 1, 
           "is_flow": false, 
-          "from": "004017c1", 
+          "from": "00401e5a", 
           "to": "Stack[-0x8]", 
           "is_jump": false
         }
       ], 
       "flow_targets": [], 
-      "fallthrough": "004017c4"
+      "fallthrough": "00401e5d"
     }, 
     {
-      "address": "004017c4", 
-      "length": 3, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017c4, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000004", 
-              "register_name": "ECX", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_ADD", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00006600", 
-            "offset": "0x6600L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017c4, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000000", 
-              "register_name": "EAX", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:0000a300", 
-            "offset": "0xa300L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017c4, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:000001a1", 
-              "offset": "0x1a1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:00006600", 
-              "offset": "0x6600L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:0000a300", 
-              "offset": "0xa300L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "STORE", 
-          "output": null
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "89", 
-        "41", 
-        "04"
-      ], 
-      "assembly": "MOV dword ptr [ECX + 0x4],EAX", 
-      "mnemonic": "MOV", 
-      "refs_from": [
-        {
-          "is_call": false, 
-          "is_data": true, 
-          "type": "WRITE", 
-          "is_write": true, 
-          "is_read": false, 
-          "operand_index": 0, 
-          "is_flow": false, 
-          "from": "004017c4", 
-          "to": "Stack[-0xc]", 
-          "is_jump": false
-        }
-      ], 
-      "flow_targets": [], 
-      "fallthrough": "004017c7"
-    }, 
-    {
-      "address": "004017c7", 
-      "length": 3, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017c7, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000014", 
-              "register_name": "EBP", 
-              "offset": "0x14L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:fffffff8", 
-              "offset": "0xfffffff8L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_ADD", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00006600", 
-            "offset": "0x6600L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017c7, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:000001a1", 
-              "offset": "0x1a1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:00006600", 
-              "offset": "0x6600L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "LOAD", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00017200", 
-            "offset": "0x17200L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017c7, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "unique:00017200", 
-              "offset": "0x17200L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000008", 
-            "register_name": "EDX", 
-            "offset": "0x8L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 4, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "8b", 
-        "55", 
-        "f8"
-      ], 
-      "assembly": "MOV EDX,dword ptr [EBP + -0x8]", 
-      "mnemonic": "MOV", 
-      "refs_from": [
-        {
-          "is_call": false, 
-          "is_data": true, 
-          "type": "READ", 
-          "is_write": false, 
-          "is_read": true, 
-          "operand_index": 1, 
-          "is_flow": false, 
-          "from": "004017c7", 
-          "to": "Stack[-0xc]", 
-          "is_jump": false
-        }
-      ], 
-      "flow_targets": [], 
-      "fallthrough": "004017ca"
-    }, 
-    {
-      "address": "004017ca", 
+      "address": "00401e5d", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017ca, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000008", 
-              "register_name": "EDX", 
-              "offset": "0x8L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00041500", 
-            "offset": "0x41500L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017ca, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_SUB", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000010", 
-            "register_name": "ESP", 
-            "offset": "0x10L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 4, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017ca, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:000001a1", 
-              "offset": "0x1a1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 8, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "unique:00041500", 
-              "offset": "0x41500L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "STORE", 
-          "output": null
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "52"
-      ], 
-      "assembly": "PUSH EDX", 
-      "mnemonic": "PUSH", 
-      "refs_from": [], 
-      "flow_targets": [], 
-      "fallthrough": "004017cb"
-    }, 
-    {
-      "address": "004017cb", 
-      "length": 5, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017cb, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_SUB", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000010", 
-            "register_name": "ESP", 
-            "offset": "0x10L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 4, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017cb, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:000001a1", 
-              "offset": "0x1a1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 8, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:004017d0", 
-              "offset": "0x4017d0L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "STORE", 
-          "output": null
-        }, 
-        {
-          "seqnum": "(ram, 0x4017cb, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "00401380", 
-              "offset": "0x401380L", 
-              "is_unique": false, 
-              "type": "Address", 
-              "space": "ram:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": true
-            }
-          ], 
-          "opcode": "CALL", 
-          "output": null
-        }
-      ], 
-      "flow_type": "UNCONDITIONAL_CALL", 
-      "call_targets": [
-        {
-          "address": "00401380", 
-          "calling_convention": "__cdecl", 
-          "entry": "00401380", 
-          "is_thunk": false, 
-          "function_name": "dfb_sink_int", 
-          "resolved": true
-        }
-      ], 
-      "bytes": [
-        "e8", 
-        "b0", 
-        "fb", 
-        "ff", 
-        "ff"
-      ], 
-      "assembly": "CALL 0x00401380", 
-      "mnemonic": "CALL", 
-      "refs_from": [
-        {
-          "is_call": true, 
-          "is_data": false, 
-          "type": "UNCONDITIONAL_CALL", 
-          "is_write": false, 
-          "is_read": false, 
-          "operand_index": 0, 
-          "is_flow": true, 
-          "from": "004017cb", 
-          "to": "00401380", 
-          "is_jump": false
-        }
-      ], 
-      "flow_targets": [
-        "00401380"
-      ], 
-      "fallthrough": "004017d0"
-    }, 
-    {
-      "address": "004017d0", 
-      "length": 3, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017d0, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_CARRY", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000200", 
-            "register_name": "CF", 
-            "offset": "0x200L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 1, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_SCARRY", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:0000020b", 
-            "register_name": "OF", 
-            "offset": "0x20bL", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_ADD", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000010", 
-            "register_name": "ESP", 
-            "offset": "0x10L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 4, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 3, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000000", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_SLESS", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000207", 
-            "register_name": "SF", 
-            "offset": "0x207L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 4, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000000", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_EQUAL", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000206", 
-            "register_name": "ZF", 
-            "offset": "0x206L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 5, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:000000ff", 
-              "offset": "0xffL", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_AND", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00049800", 
-            "offset": "0x49800L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 6, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "unique:00049800", 
-              "offset": "0x49800L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "POPCOUNT", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00049900", 
-            "offset": "0x49900L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 1, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 7, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "unique:00049900", 
-              "offset": "0x49900L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 1, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000001", 
-              "offset": "0x1L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 1, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_AND", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00049a00", 
-            "offset": "0x49a00L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 1, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d0, 8, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "unique:00049a00", 
-              "offset": "0x49a00L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 1, 
-              "is_register": false, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000000", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 1, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_EQUAL", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000202", 
-            "register_name": "PF", 
-            "offset": "0x202L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 1, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "83", 
-        "c4", 
-        "04"
-      ], 
-      "assembly": "ADD ESP,0x4", 
-      "mnemonic": "ADD", 
-      "refs_from": [], 
-      "flow_targets": [], 
-      "fallthrough": "004017d3"
-    }, 
-    {
-      "address": "004017d3", 
-      "length": 2, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017d3, 0, 0)", 
+          "seqnum": "(ram, 0x401e5d, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -2020,54 +1965,9 @@
             "is_register": true, 
             "is_address": false
           }
-        }
-      ], 
-      "flow_type": "FALL_THROUGH", 
-      "call_targets": [], 
-      "bytes": [
-        "8b", 
-        "e5"
-      ], 
-      "assembly": "MOV ESP,EBP", 
-      "mnemonic": "MOV", 
-      "refs_from": [], 
-      "flow_targets": [], 
-      "fallthrough": "004017d5"
-    }, 
-    {
-      "address": "004017d5", 
-      "length": 1, 
-      "low_pcode": [
-        {
-          "seqnum": "(ram, 0x4017d5, 0, 0)", 
-          "inputs": [
-            {
-              "is_constant": true, 
-              "address": "const:00000000", 
-              "offset": "0x0L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00087300", 
-            "offset": "0x87300L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
         }, 
         {
-          "seqnum": "(ram, 0x4017d5, 1, 0)", 
+          "seqnum": "(ram, 0x401e5d, 1, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -2094,75 +1994,6 @@
             }
           ], 
           "opcode": "LOAD", 
-          "output": {
-            "is_constant": false, 
-            "address": "unique:00087300", 
-            "offset": "0x87300L", 
-            "is_unique": true, 
-            "type": "Unique", 
-            "space": "unique:", 
-            "size": 4, 
-            "is_register": false, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d5, 2, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "register:00000010", 
-              "register_name": "ESP", 
-              "offset": "0x10L", 
-              "is_unique": false, 
-              "type": "Register", 
-              "space": "register:", 
-              "size": 4, 
-              "is_register": true, 
-              "is_address": false
-            }, 
-            {
-              "is_constant": true, 
-              "address": "const:00000004", 
-              "offset": "0x4L", 
-              "is_unique": false, 
-              "type": "Constant", 
-              "space": "const:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "INT_ADD", 
-          "output": {
-            "is_constant": false, 
-            "address": "register:00000010", 
-            "register_name": "ESP", 
-            "offset": "0x10L", 
-            "is_unique": false, 
-            "type": "Register", 
-            "space": "register:", 
-            "size": 4, 
-            "is_register": true, 
-            "is_address": false
-          }
-        }, 
-        {
-          "seqnum": "(ram, 0x4017d5, 3, 0)", 
-          "inputs": [
-            {
-              "is_constant": false, 
-              "address": "unique:00087300", 
-              "offset": "0x87300L", 
-              "is_unique": true, 
-              "type": "Unique", 
-              "space": "unique:", 
-              "size": 4, 
-              "is_register": false, 
-              "is_address": false
-            }
-          ], 
-          "opcode": "COPY", 
           "output": {
             "is_constant": false, 
             "address": "register:00000014", 
@@ -2175,25 +2006,66 @@
             "is_register": true, 
             "is_address": false
           }
+        }, 
+        {
+          "seqnum": "(ram, 0x401e5d, 2, 0)", 
+          "inputs": [
+            {
+              "is_constant": false, 
+              "address": "register:00000010", 
+              "register_name": "ESP", 
+              "offset": "0x10L", 
+              "is_unique": false, 
+              "type": "Register", 
+              "space": "register:", 
+              "size": 4, 
+              "is_register": true, 
+              "is_address": false
+            }, 
+            {
+              "is_constant": true, 
+              "address": "const:00000004", 
+              "offset": "0x4L", 
+              "is_unique": false, 
+              "type": "Constant", 
+              "space": "const:", 
+              "size": 4, 
+              "is_register": false, 
+              "is_address": false
+            }
+          ], 
+          "opcode": "INT_ADD", 
+          "output": {
+            "is_constant": false, 
+            "address": "register:00000010", 
+            "register_name": "ESP", 
+            "offset": "0x10L", 
+            "is_unique": false, 
+            "type": "Register", 
+            "space": "register:", 
+            "size": 4, 
+            "is_register": true, 
+            "is_address": false
+          }
         }
       ], 
       "flow_type": "FALL_THROUGH", 
       "call_targets": [], 
       "bytes": [
-        "5d"
+        "c9"
       ], 
-      "assembly": "POP EBP", 
-      "mnemonic": "POP", 
+      "assembly": "LEAVE", 
+      "mnemonic": "LEAVE", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "004017d6"
+      "fallthrough": "00401e5e"
     }, 
     {
-      "address": "004017d6", 
+      "address": "00401e5e", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x4017d6, 0, 0)", 
+          "seqnum": "(ram, 0x401e5e, 0, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -2234,7 +2106,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017d6, 1, 0)", 
+          "seqnum": "(ram, 0x401e5e, 1, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -2275,7 +2147,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x4017d6, 2, 0)", 
+          "seqnum": "(ram, 0x401e5e, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -2320,10 +2192,10 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 1536, 
         "is_volatile": false, 
         "name": "Headers", 
-        "end": "004003ff"
+        "end": "004005ff"
       }, 
       {
         "is_execute": true, 
@@ -2331,73 +2203,205 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 9728, 
+        "size": 36864, 
         "is_volatile": false, 
         "name": ".text", 
-        "end": "004035ff"
+        "end": "00409fff"
       }, 
       {
         "is_execute": false, 
-        "start": "00404000", 
-        "is_external": false, 
-        "is_write": false, 
-        "is_read": true, 
-        "size": 7680, 
-        "is_volatile": false, 
-        "name": ".rdata", 
-        "end": "00405dff"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00406000", 
+        "start": "0040a000", 
         "is_external": false, 
         "is_write": true, 
-        "is_read": true, 
-        "size": 2696, 
-        "is_volatile": false, 
-        "name": ".data", 
-        "end": "00406a87"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00407000", 
-        "is_external": false, 
-        "is_write": false, 
         "is_read": true, 
         "size": 512, 
         "is_volatile": false, 
-        "name": ".rsrc", 
-        "end": "004071ff"
+        "name": ".data", 
+        "end": "0040a1ff"
       }, 
       {
         "is_execute": false, 
-        "start": "00408000", 
+        "start": "0040b000", 
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 6144, 
         "is_volatile": false, 
-        "name": ".reloc", 
-        "end": "004083ff"
+        "name": ".rdata", 
+        "end": "0040c7ff"
       }, 
       {
         "is_execute": false, 
-        "start": "ffdff000", 
+        "start": "0040d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 10752, 
+        "is_volatile": false, 
+        "name": ".eh_frame", 
+        "end": "0040f9ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00410000", 
         "is_external": false, 
         "is_write": true, 
         "is_read": true, 
-        "size": 4096, 
+        "size": 2964, 
         "is_volatile": false, 
-        "name": "tdb", 
-        "end": "ffdfffff"
+        "name": ".bss", 
+        "end": "00410b93"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00411000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 5120, 
+        "is_volatile": false, 
+        "name": ".edata", 
+        "end": "004123ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00413000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".idata", 
+        "end": "004137ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00414000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".CRT", 
+        "end": "004141ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00415000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".tls", 
+        "end": "004151ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00416000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004167ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00417000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".debug_aranges", 
+        "end": "004177ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00418000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 91648, 
+        "is_volatile": false, 
+        "name": ".debug_info", 
+        "end": "0042e5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0042f000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 18432, 
+        "is_volatile": false, 
+        "name": ".debug_abbrev", 
+        "end": "004337ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00434000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 32256, 
+        "is_volatile": false, 
+        "name": ".debug_line", 
+        "end": "0043bdff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043c000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_str", 
+        "end": "0043c5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".debug_line_str", 
+        "end": "0043f5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00440000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 27136, 
+        "is_volatile": false, 
+        "name": ".debug_loclists", 
+        "end": "004469ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00447000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_rnglists", 
+        "end": "004475ff"
       }
     ], 
     "name": "dfbench_win_core.exe", 
-    "executable_path": "/D:/githubProject/01_tdo_testbed/tdo_testbed/build/win-release/dfbench_win_core.exe"
+    "executable_path": "/Volumes/DO/00_ gitProject/01_tdo/tdo_testbed/dist/docker-windows-pe/windows_pe_x86/build/dfbench_win_core.exe"
   }, 
   "schema_version": 2, 
   "function_name": "case_DFB041_pointer_arithmetic_field", 
-  "start_address": "004017b0", 
+  "start_address": "00401e34", 
   "compatibility": {
     "new_fields_are_optional_hints": true, 
     "legacy_v1_fields_preserved": true, 
@@ -2407,12 +2411,12 @@
     "function": {
       "body_ranges": [
         {
-          "max": "004017d6", 
-          "min": "004017b0"
+          "max": "00401e5e", 
+          "min": "00401e34"
         }
       ], 
-      "calling_convention": "__stdcall", 
-      "signature": "undefined __stdcall case_DFB041_pointer_arithmetic_field(void)", 
+      "calling_convention": "unknown", 
+      "signature": "void case_DFB041_pointer_arithmetic_field(void)", 
       "local_variables": [
         {
           "is_unique": false, 
@@ -2427,34 +2431,45 @@
         }, 
         {
           "is_unique": false, 
-          "storage": "Stack[-0xc]:4", 
+          "storage": "Stack[-0x10]:4", 
           "is_register": false, 
-          "stack_offset": -12, 
-          "name": "local_c", 
-          "data_type": "undefined4", 
+          "stack_offset": -16, 
+          "name": "base", 
+          "data_type": "char *", 
           "first_use_offset": 0, 
           "is_stack": true, 
           "is_memory": false
         }, 
         {
           "is_unique": false, 
-          "storage": "Stack[-0x10]:1", 
+          "storage": "Stack[-0x18]:8", 
           "is_register": false, 
-          "stack_offset": -16, 
-          "name": "local_10", 
-          "data_type": "undefined", 
+          "stack_offset": -24, 
+          "name": "obj", 
+          "data_type": "/DWARF/cases_struct.c/DFBOffsetObj\npack()\nStructure DFBOffsetObj {\n   0   int   4   pad   \"\"\n   4   int   4   value   \"\"\n}\nLength: 8 Alignment: 4\n", 
+          "first_use_offset": 0, 
+          "is_stack": true, 
+          "is_memory": false
+        }, 
+        {
+          "is_unique": false, 
+          "storage": "Stack[-0x2c]:4", 
+          "is_register": false, 
+          "stack_offset": -44, 
+          "name": "local_2c", 
+          "data_type": "undefined4", 
           "first_use_offset": 0, 
           "is_stack": true, 
           "is_memory": false
         }
       ], 
-      "entry": "004017b0", 
+      "entry": "00401e34", 
       "is_thunk": false, 
       "name": "case_DFB041_pointer_arithmetic_field", 
       "stack_frame": {
         "grows_negative": true, 
-        "local_size": 20, 
-        "frame_size": 20, 
+        "local_size": 48, 
+        "frame_size": 48, 
         "parameter_size": 0, 
         "return_address_offset": 0
       }, 

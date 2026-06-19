@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 
 from pcode_ssa_report_v5 import BoundaryAwareSSAEngineV5
@@ -28,6 +29,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
         self.json_path = json_path
         self.function_summaries = self._load_function_summaries(summary_path)
         self.pending_stack_args = []
+        self.pending_stack_arg_slots = {}
         self.callsite_bindings = []
         self.source_return_nodes = {}
         self.sink_anchors = []
@@ -130,7 +132,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
             self.ssa_pcode_lines.append(f"{main_mem} = CALL_GLOBAL_STORE({target_name}, DFB_GLOBAL_MAIN, SOURCE_RET(dfb_source_A))")
             self.ssa_pcode_lines.append(f"{shadow_mem} = CALL_GLOBAL_STORE({target_name}, DFB_GLOBAL_SHADOW, SOURCE_RET(dfb_source_B))")
             self._add_call_clobbers(addr, state, include_ret=True)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return True
 
         if target_name == "dfb_read_global_main_value":
@@ -157,7 +159,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
             })
             self.ssa_pcode_lines.append(f"{ret_node} = CALL_GLOBAL_LOAD({target_name}, DFB_GLOBAL_MAIN)")
             self._add_call_clobbers(addr, state, include_ret=False)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return True
 
         return False
@@ -260,7 +262,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
                 "args": args,
             })
             self._add_call_clobbers(addr, state, include_ret=False)
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
         return applied
 
     def _resolve_stack_key_from_node(self, node, visited=None):
@@ -337,7 +339,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
         })
         self.ssa_pcode_lines.append(f"{ret_node} = CALL_RET_SUMMARY({target_name}, {args[0]})")
         self._add_call_clobbers(addr, state, include_ret=False)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
         return True
 
     def _apply_outparam_summary(self, instr, state, target_name, summary):
@@ -397,7 +399,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
         })
         self.ssa_pcode_lines.append(f"{mem_node} = CALL_OUTPARAM_STORE({target_name}, {out_stack_key}, {value_label}) [{classification['region']}]")
         self._add_call_clobbers(addr, state, include_ret=True)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
         return True
 
     def _record_pending_push_arg(self, instr, state):
@@ -417,6 +419,55 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
         if node:
             # x86 pushes arguments right-to-left; the most recent push is arg0.
             self.pending_stack_args.insert(0, node)
+            self.pending_stack_arg_slots = {}
+
+    def _clear_pending_stack_args(self):
+        self.pending_stack_args = []
+        self.pending_stack_arg_slots = {}
+
+    def _stack_arg_slot_from_assembly(self, assembly):
+        compact = (assembly or "").replace(" ", "")
+        match = re.search(r"\[ESP(?:\+(0x[0-9a-fA-F]+|\d+))?\]", compact)
+        if not match:
+            return None
+        raw_offset = match.group(1) or "0"
+        try:
+            offset = int(raw_offset, 0)
+        except ValueError:
+            return None
+        if offset < 0 or offset % 4:
+            return None
+        return offset // 4
+
+    def _node_from_pcode_value(self, value, state):
+        if not value:
+            return None
+        if value.get("type") == "Constant":
+            return f"Const_{value['offset'].replace('L', '')}"
+        return state["vars"].get(self._var_key(value["type"], value["offset"]))
+
+    def _record_pending_stack_store_arg(self, instr, state):
+        slot = self._stack_arg_slot_from_assembly(instr.get("assembly"))
+        if slot is None:
+            return
+
+        store_pcode = None
+        for pcode in instr.get("low_pcode", []):
+            if pcode.get("opcode") == "STORE" and len(pcode.get("inputs", [])) >= 3:
+                store_pcode = pcode
+                break
+        if not store_pcode:
+            return
+
+        node = self._node_from_pcode_value(store_pcode["inputs"][2], state)
+        if not node:
+            return
+
+        self.pending_stack_arg_slots[slot] = node
+        self.pending_stack_args = [
+            self.pending_stack_arg_slots[index]
+            for index in sorted(self.pending_stack_arg_slots)
+        ]
 
     def _is_stack_arg_boundary(self, instr):
         mnemonic = instr.get("mnemonic")
@@ -432,12 +483,14 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
     def _process_instruction(self, instr, state):
         mnemonic = instr.get("mnemonic")
         if mnemonic not in {"PUSH", "CALL"} and self.pending_stack_args and self._is_stack_arg_boundary(instr):
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
 
         super()._process_instruction(instr, state)
 
         if mnemonic == "PUSH":
             self._record_pending_push_arg(instr, state)
+        elif mnemonic == "MOV":
+            self._record_pending_stack_store_arg(instr, state)
 
     def _process_call(self, instr, state):
         target_name = self._primary_target_name(instr)
@@ -471,7 +524,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
                 clobbered.append(new_ver)
             if clobbered:
                 self.ssa_pcode_lines.append(f"CALL_CLOBBER({', '.join(clobbered)})")
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return
 
         if self._is_sink_function(target_name):
@@ -508,7 +561,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
                 self.G.add_node(new_ver, addr=addr, opcode=opcode)
                 clobbered.append(new_ver)
             self.ssa_pcode_lines.append(f"CALL_RESET({', '.join(clobbered)})")
-            self.pending_stack_args = []
+            self._clear_pending_stack_args()
             return
 
         dynamic_summary = self._dynamic_summary_for(target_name)
@@ -526,7 +579,7 @@ class SourceSinkCallSiteBinderV6(BoundaryAwareSSAEngineV5):
             return
 
         super()._process_call(instr, state)
-        self.pending_stack_args = []
+        self._clear_pending_stack_args()
 
     def _collect_data_sources(self, target_node):
         if not self.G.has_node(target_node):

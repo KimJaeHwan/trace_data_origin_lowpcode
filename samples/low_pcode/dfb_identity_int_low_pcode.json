@@ -1,11 +1,11 @@
 {
   "instructions": [
     {
-      "address": "00401a50", 
+      "address": "00402028", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x401a50, 0, 0)", 
+          "seqnum": "(ram, 0x402028, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -34,7 +34,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a50, 1, 0)", 
+          "seqnum": "(ram, 0x402028, 1, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -75,7 +75,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a50, 2, 0)", 
+          "seqnum": "(ram, 0x402028, 2, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -125,14 +125,14 @@
       "mnemonic": "PUSH", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "00401a51"
+      "fallthrough": "00402029"
     }, 
     {
-      "address": "00401a51", 
+      "address": "00402029", 
       "length": 2, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x401a51, 0, 0)", 
+          "seqnum": "(ram, 0x402029, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -165,21 +165,21 @@
       "flow_type": "FALL_THROUGH", 
       "call_targets": [], 
       "bytes": [
-        "8b", 
-        "ec"
+        "89", 
+        "e5"
       ], 
       "assembly": "MOV EBP,ESP", 
       "mnemonic": "MOV", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "00401a53"
+      "fallthrough": "0040202b"
     }, 
     {
-      "address": "00401a53", 
+      "address": "0040202b", 
       "length": 3, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x401a53, 0, 0)", 
+          "seqnum": "(ram, 0x40202b, 0, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -219,7 +219,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a53, 1, 0)", 
+          "seqnum": "(ram, 0x40202b, 1, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -258,7 +258,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a53, 2, 0)", 
+          "seqnum": "(ram, 0x40202b, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -305,20 +305,20 @@
           "is_read": true, 
           "operand_index": 1, 
           "is_flow": false, 
-          "from": "00401a53", 
+          "from": "0040202b", 
           "to": "Stack[0x4]", 
           "is_jump": false
         }
       ], 
       "flow_targets": [], 
-      "fallthrough": "00401a56"
+      "fallthrough": "0040202e"
     }, 
     {
-      "address": "00401a56", 
+      "address": "0040202e", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x401a56, 0, 0)", 
+          "seqnum": "(ram, 0x40202e, 0, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -346,7 +346,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a56, 1, 0)", 
+          "seqnum": "(ram, 0x40202e, 1, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -386,7 +386,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a56, 2, 0)", 
+          "seqnum": "(ram, 0x40202e, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -427,7 +427,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a56, 3, 0)", 
+          "seqnum": "(ram, 0x40202e, 3, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -465,14 +465,14 @@
       "mnemonic": "POP", 
       "refs_from": [], 
       "flow_targets": [], 
-      "fallthrough": "00401a57"
+      "fallthrough": "0040202f"
     }, 
     {
-      "address": "00401a57", 
+      "address": "0040202f", 
       "length": 1, 
       "low_pcode": [
         {
-          "seqnum": "(ram, 0x401a57, 0, 0)", 
+          "seqnum": "(ram, 0x40202f, 0, 0)", 
           "inputs": [
             {
               "is_constant": true, 
@@ -513,7 +513,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a57, 1, 0)", 
+          "seqnum": "(ram, 0x40202f, 1, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -554,7 +554,7 @@
           }
         }, 
         {
-          "seqnum": "(ram, 0x401a57, 2, 0)", 
+          "seqnum": "(ram, 0x40202f, 2, 0)", 
           "inputs": [
             {
               "is_constant": false, 
@@ -599,10 +599,10 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 1536, 
         "is_volatile": false, 
         "name": "Headers", 
-        "end": "004003ff"
+        "end": "004005ff"
       }, 
       {
         "is_execute": true, 
@@ -610,73 +610,205 @@
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 9728, 
+        "size": 36864, 
         "is_volatile": false, 
         "name": ".text", 
-        "end": "004035ff"
+        "end": "00409fff"
       }, 
       {
         "is_execute": false, 
-        "start": "00404000", 
-        "is_external": false, 
-        "is_write": false, 
-        "is_read": true, 
-        "size": 7680, 
-        "is_volatile": false, 
-        "name": ".rdata", 
-        "end": "00405dff"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00406000", 
+        "start": "0040a000", 
         "is_external": false, 
         "is_write": true, 
-        "is_read": true, 
-        "size": 2696, 
-        "is_volatile": false, 
-        "name": ".data", 
-        "end": "00406a87"
-      }, 
-      {
-        "is_execute": false, 
-        "start": "00407000", 
-        "is_external": false, 
-        "is_write": false, 
         "is_read": true, 
         "size": 512, 
         "is_volatile": false, 
-        "name": ".rsrc", 
-        "end": "004071ff"
+        "name": ".data", 
+        "end": "0040a1ff"
       }, 
       {
         "is_execute": false, 
-        "start": "00408000", 
+        "start": "0040b000", 
         "is_external": false, 
         "is_write": false, 
         "is_read": true, 
-        "size": 1024, 
+        "size": 6144, 
         "is_volatile": false, 
-        "name": ".reloc", 
-        "end": "004083ff"
+        "name": ".rdata", 
+        "end": "0040c7ff"
       }, 
       {
         "is_execute": false, 
-        "start": "ffdff000", 
+        "start": "0040d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 10752, 
+        "is_volatile": false, 
+        "name": ".eh_frame", 
+        "end": "0040f9ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00410000", 
         "is_external": false, 
         "is_write": true, 
         "is_read": true, 
-        "size": 4096, 
+        "size": 2964, 
         "is_volatile": false, 
-        "name": "tdb", 
-        "end": "ffdfffff"
+        "name": ".bss", 
+        "end": "00410b93"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00411000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 5120, 
+        "is_volatile": false, 
+        "name": ".edata", 
+        "end": "004123ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00413000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".idata", 
+        "end": "004137ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00414000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".CRT", 
+        "end": "004141ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00415000", 
+        "is_external": false, 
+        "is_write": true, 
+        "is_read": true, 
+        "size": 512, 
+        "is_volatile": false, 
+        "name": ".tls", 
+        "end": "004151ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00416000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".reloc", 
+        "end": "004167ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00417000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 2048, 
+        "is_volatile": false, 
+        "name": ".debug_aranges", 
+        "end": "004177ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00418000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 91648, 
+        "is_volatile": false, 
+        "name": ".debug_info", 
+        "end": "0042e5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0042f000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 18432, 
+        "is_volatile": false, 
+        "name": ".debug_abbrev", 
+        "end": "004337ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00434000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 32256, 
+        "is_volatile": false, 
+        "name": ".debug_line", 
+        "end": "0043bdff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043c000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_str", 
+        "end": "0043c5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "0043d000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 9728, 
+        "is_volatile": false, 
+        "name": ".debug_line_str", 
+        "end": "0043f5ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00440000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 27136, 
+        "is_volatile": false, 
+        "name": ".debug_loclists", 
+        "end": "004469ff"
+      }, 
+      {
+        "is_execute": false, 
+        "start": "00447000", 
+        "is_external": false, 
+        "is_write": false, 
+        "is_read": true, 
+        "size": 1536, 
+        "is_volatile": false, 
+        "name": ".debug_rnglists", 
+        "end": "004475ff"
       }
     ], 
     "name": "dfbench_win_core.exe", 
-    "executable_path": "/D:/githubProject/01_tdo_testbed/tdo_testbed/build/win-release/dfbench_win_core.exe"
+    "executable_path": "/Volumes/DO/00_ gitProject/01_tdo/tdo_testbed/dist/docker-windows-pe/windows_pe_x86/build/dfbench_win_core.exe"
   }, 
   "schema_version": 2, 
   "function_name": "dfb_identity_int", 
-  "start_address": "00401a50", 
+  "start_address": "00402028", 
   "compatibility": {
     "new_fields_are_optional_hints": true, 
     "legacy_v1_fields_preserved": true, 
@@ -686,14 +818,14 @@
     "function": {
       "body_ranges": [
         {
-          "max": "00401a57", 
-          "min": "00401a50"
+          "max": "0040202f", 
+          "min": "00402028"
         }
       ], 
-      "calling_convention": "__cdecl", 
-      "signature": "undefined4 __cdecl dfb_identity_int(undefined4 param_1)", 
+      "calling_convention": "unknown", 
+      "signature": "int dfb_identity_int(int x)", 
       "local_variables": [], 
-      "entry": "00401a50", 
+      "entry": "00402028", 
       "is_thunk": false, 
       "name": "dfb_identity_int", 
       "stack_frame": {
@@ -709,8 +841,8 @@
           "storage": "Stack[0x4]:4", 
           "is_register": false, 
           "stack_offset": 4, 
-          "name": "param_1", 
-          "data_type": "undefined4", 
+          "name": "x", 
+          "data_type": "int", 
           "first_use_offset": 0, 
           "is_stack": true, 
           "is_memory": false, 

@@ -1,7 +1,7 @@
 {
   "counts": {
-    "FAIL": 13,
-    "PASS": 37
+    "FAIL": 24,
+    "PASS": 51
   },
   "results": [
     {
@@ -14,9 +14,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB001_direct_value",
-      "json": "output\\low_pcode\\case_DFB001_direct_value_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB001_direct_value_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB001_direct_value_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB001_direct_value_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -31,9 +31,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB002_arithmetic_value",
-      "json": "output\\low_pcode\\case_DFB002_arithmetic_value_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB002_arithmetic_value_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB002_arithmetic_value_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB002_arithmetic_value_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -48,9 +48,71 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB003_cast_value",
-      "json": "output\\low_pcode\\case_DFB003_cast_value_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB003_cast_value_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB003_cast_value_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB003_cast_value_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB004",
+      "expected_sources": [],
+      "forbidden_sources_found": [],
+      "function": "case_DFB004_no_source_constant",
+      "json": "samples/low_pcode/case_DFB004_no_source_constant_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB004_no_source_constant_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 0,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB005",
+      "expected_sources": [],
+      "forbidden_sources_found": [],
+      "function": "case_DFB005_overwrite_kill",
+      "json": "samples/low_pcode/case_DFB005_overwrite_kill_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB005_overwrite_kill_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB006",
+      "expected_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB006_multi_source_convergence",
+      "json": "samples/low_pcode/case_DFB006_multi_source_convergence_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB006_multi_source_convergence_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret"
+      ],
+      "case_id": "DFB007",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB007_subregister_alias",
+      "json": "samples/low_pcode/case_DFB007_subregister_alias_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB007_subregister_alias_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -67,9 +129,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB010_branch_phi",
-      "json": "output\\low_pcode\\case_DFB010_branch_phi_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB010_branch_phi_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB010_branch_phi_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB010_branch_phi_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 3,
       "verdict": "PASS"
@@ -84,9 +146,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB011_loop_phi",
-      "json": "output\\low_pcode\\case_DFB011_loop_phi_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB011_loop_phi_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB011_loop_phi_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB011_loop_phi_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -105,11 +167,60 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB012_switch_merge",
-      "json": "output\\low_pcode\\case_DFB012_switch_merge_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB012_switch_merge_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB012_switch_merge_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB012_switch_merge_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 4,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret"
+      ],
+      "case_id": "DFB013",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB013_unbounded_loop_widen",
+      "json": "samples/low_pcode/case_DFB013_unbounded_loop_widen_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB013_unbounded_loop_widen_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB014",
+      "expected_sources": [],
+      "forbidden_sources_found": [],
+      "function": "case_DFB014_control_only_dependency",
+      "json": "samples/low_pcode/case_DFB014_control_only_dependency_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB014_control_only_dependency_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB016",
+      "expected_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB016_memory_phi",
+      "json": "samples/low_pcode/case_DFB016_memory_phi_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB016_memory_phi_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 3,
       "verdict": "PASS"
     },
     {
@@ -122,9 +233,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB020_stack_local",
-      "json": "output\\low_pcode\\case_DFB020_stack_local_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB020_stack_local_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB020_stack_local_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB020_stack_local_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -139,9 +250,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB021_stack_outparam",
-      "json": "output\\low_pcode\\case_DFB021_stack_outparam_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB021_stack_outparam_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB021_stack_outparam_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB021_stack_outparam_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -156,9 +267,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB022_arg_to_outparam",
-      "json": "output\\low_pcode\\case_DFB022_arg_to_outparam_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB022_arg_to_outparam_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB022_arg_to_outparam_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB022_arg_to_outparam_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -173,9 +284,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB023_double_pointer_outparam",
-      "json": "output\\low_pcode\\case_DFB023_double_pointer_outparam_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB023_double_pointer_outparam_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB023_double_pointer_outparam_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB023_double_pointer_outparam_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -190,9 +301,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB024_global_value_flow",
-      "json": "output\\low_pcode\\case_DFB024_global_value_flow_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB024_global_value_flow_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB024_global_value_flow_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB024_global_value_flow_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -207,9 +318,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB025_global_field_precise",
-      "json": "output\\low_pcode\\case_DFB025_global_field_precise_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB025_global_field_precise_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB025_global_field_precise_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB025_global_field_precise_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -224,11 +335,24 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB026_global_interproc_reader",
-      "json": "output\\low_pcode\\case_DFB026_global_interproc_reader_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB026_global_interproc_reader_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB026_global_interproc_reader_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB026_global_interproc_reader_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 3,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB027",
+      "expected_sources": [],
+      "forbidden_sources_found": [],
+      "function": "case_DFB027_global_readonly_source",
+      "json": "samples/low_pcode/case_DFB027_global_readonly_source_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB027_global_readonly_source_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 0,
       "verdict": "PASS"
     },
     {
@@ -239,11 +363,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB030_heap_field",
-      "json": "output\\low_pcode\\case_DFB030_heap_field_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB030_heap_field_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB030_heap_field_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB030_heap_field_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "FAIL"
@@ -256,11 +380,85 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB031_heap_realloc_preserve",
-      "json": "output\\low_pcode\\case_DFB031_heap_realloc_preserve_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB031_heap_realloc_preserve_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB031_heap_realloc_preserve_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB031_heap_realloc_preserve_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB032",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB032_heap_raw_offset",
+      "json": "samples/low_pcode/case_DFB032_heap_raw_offset_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB032_heap_raw_offset_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB033",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB033_heap_alias_two_pointers",
+      "json": "samples/low_pcode/case_DFB033_heap_alias_two_pointers_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB033_heap_alias_two_pointers_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB034",
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [
+        "dfb_source_A.ret"
+      ],
+      "function": "case_DFB034_bitfield_access",
+      "json": "samples/low_pcode/case_DFB034_bitfield_access_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB034_bitfield_access_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret",
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB035",
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [
+        "dfb_source_A.ret"
+      ],
+      "function": "case_DFB035_bitfield_access_zeroinit",
+      "json": "samples/low_pcode/case_DFB035_bitfield_access_zeroinit_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB035_bitfield_access_zeroinit_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "FAIL"
@@ -275,9 +473,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB040_struct_field_precise",
-      "json": "output\\low_pcode\\case_DFB040_struct_field_precise_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB040_struct_field_precise_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB040_struct_field_precise_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB040_struct_field_precise_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -290,11 +488,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB041_pointer_arithmetic_field",
-      "json": "output\\low_pcode\\case_DFB041_pointer_arithmetic_field_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB041_pointer_arithmetic_field_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB041_pointer_arithmetic_field_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB041_pointer_arithmetic_field_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -309,9 +507,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB042_union_alias",
-      "json": "output\\low_pcode\\case_DFB042_union_alias_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB042_union_alias_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB042_union_alias_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB042_union_alias_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -326,9 +524,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB043_array_constant_index",
-      "json": "output\\low_pcode\\case_DFB043_array_constant_index_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB043_array_constant_index_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB043_array_constant_index_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB043_array_constant_index_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -343,9 +541,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB044_array_variable_index",
-      "json": "output\\low_pcode\\case_DFB044_array_variable_index_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB044_array_variable_index_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB044_array_variable_index_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB044_array_variable_index_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -360,9 +558,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB045_nested_aggregate_field",
-      "json": "output\\low_pcode\\case_DFB045_nested_aggregate_field_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB045_nested_aggregate_field_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB045_nested_aggregate_field_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB045_nested_aggregate_field_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -377,12 +575,63 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB046_partial_overwrite_subfield",
-      "json": "output\\low_pcode\\case_DFB046_partial_overwrite_subfield_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB046_partial_overwrite_subfield_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB046_partial_overwrite_subfield_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB046_partial_overwrite_subfield_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB047",
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB047_struct_padding_offset",
+      "json": "samples/low_pcode/case_DFB047_struct_padding_offset_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB047_struct_padding_offset_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB048",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB048_cast_range_overlap",
+      "json": "samples/low_pcode/case_DFB048_cast_range_overlap_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB048_cast_range_overlap_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB049",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB049_negative_offset_arithmetic",
+      "json": "samples/low_pcode/case_DFB049_negative_offset_arithmetic_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB049_negative_offset_arithmetic_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
     },
     {
       "actual_sources": [
@@ -394,9 +643,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB050_identity_call",
-      "json": "output\\low_pcode\\case_DFB050_identity_call_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB050_identity_call_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB050_identity_call_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB050_identity_call_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -411,9 +660,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB051_nested_call",
-      "json": "output\\low_pcode\\case_DFB051_nested_call_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB051_nested_call_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB051_nested_call_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB051_nested_call_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -428,9 +677,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB052_callsite_context",
-      "json": "output\\low_pcode\\case_DFB052_callsite_context_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB052_callsite_context_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB052_callsite_context_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB052_callsite_context_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -443,11 +692,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB053_large_struct_return",
-      "json": "output\\low_pcode\\case_DFB053_large_struct_return_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB053_large_struct_return_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_long_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB053_large_struct_return_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB053_large_struct_return_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -462,9 +711,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB054_status_outparam",
-      "json": "output\\low_pcode\\case_DFB054_status_outparam_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB054_status_outparam_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB054_status_outparam_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB054_status_outparam_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -477,11 +726,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB055_deep_field_passthrough",
-      "json": "output\\low_pcode\\case_DFB055_deep_field_passthrough_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB055_deep_field_passthrough_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB055_deep_field_passthrough_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB055_deep_field_passthrough_v7_report.txt",
       "sink_count": 0,
       "source_call_count": 3,
       "verdict": "FAIL"
@@ -496,9 +745,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB056_arg_to_ret_summary",
-      "json": "output\\low_pcode\\case_DFB056_arg_to_ret_summary_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB056_arg_to_ret_summary_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB056_arg_to_ret_summary_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB056_arg_to_ret_summary_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -513,9 +762,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB057_struct_field_to_ret_summary",
-      "json": "output\\low_pcode\\case_DFB057_struct_field_to_ret_summary_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB057_struct_field_to_ret_summary_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB057_struct_field_to_ret_summary_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB057_struct_field_to_ret_summary_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -530,9 +779,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB058_arg_to_outparam_summary",
-      "json": "output\\low_pcode\\case_DFB058_arg_to_outparam_summary_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB058_arg_to_outparam_summary_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB058_arg_to_outparam_summary_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB058_arg_to_outparam_summary_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -547,9 +796,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB059_inout_field_update_summary",
-      "json": "output\\low_pcode\\case_DFB059_inout_field_update_summary_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB059_inout_field_update_summary_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB059_inout_field_update_summary_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB059_inout_field_update_summary_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -564,11 +813,113 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB060_recursion",
-      "json": "output\\low_pcode\\case_DFB060_recursion_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB060_recursion_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB060_recursion_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB060_recursion_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB061",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB061_non_tail_recursion",
+      "json": "samples/low_pcode/case_DFB061_non_tail_recursion_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB061_non_tail_recursion_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret"
+      ],
+      "case_id": "DFB062",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB062_mutual_recursion",
+      "json": "samples/low_pcode/case_DFB062_mutual_recursion_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB062_mutual_recursion_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB063",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB063_recursion_global_effect",
+      "json": "samples/low_pcode/case_DFB063_recursion_global_effect_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB063_recursion_global_effect_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB064",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB064_indirect_recursion",
+      "json": "samples/low_pcode/case_DFB064_indirect_recursion_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB064_indirect_recursion_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB065",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB065_tree_recursion",
+      "json": "samples/low_pcode/case_DFB065_tree_recursion_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB065_tree_recursion_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_B.ret"
+      ],
+      "case_id": "DFB066",
+      "expected_sources": [
+        "dfb_source_B.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB066_swap_target_independence",
+      "json": "samples/low_pcode/case_DFB066_swap_target_independence_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB066_swap_target_independence_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
       "verdict": "PASS"
     },
     {
@@ -581,9 +932,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB070_function_pointer",
-      "json": "output\\low_pcode\\case_DFB070_function_pointer_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB070_function_pointer_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB070_function_pointer_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB070_function_pointer_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -596,11 +947,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB071_callback_registration",
-      "json": "output\\low_pcode\\case_DFB071_callback_registration_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB071_callback_registration_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB071_callback_registration_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB071_callback_registration_v7_report.txt",
       "sink_count": 0,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -613,30 +964,64 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB072_function_pointer_table",
-      "json": "output\\low_pcode\\case_DFB072_function_pointer_table_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB072_function_pointer_table_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB072_function_pointer_table_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB072_function_pointer_table_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "FAIL"
     },
     {
-      "actual_sources": [],
+      "actual_sources": [
+        "dfb_source_A.ret"
+      ],
       "case_id": "DFB073",
       "expected_sources": [
         "dfb_source_A.ret"
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB073_indirect_sink_wrapper",
-      "json": "output\\low_pcode\\case_DFB073_indirect_sink_wrapper_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB073_indirect_sink_wrapper_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB073_indirect_sink_wrapper_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB074",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB074_unresolved_indirect",
+      "json": "samples/low_pcode/case_DFB074_unresolved_indirect_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB073_indirect_sink_wrapper_v7_report.txt",
-      "sink_count": 0,
-      "source_call_count": 2,
+      "report": "output/v7_batch/reports/case_DFB074_unresolved_indirect_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "actual_sources": [],
+      "case_id": "DFB075",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB075_unresolved_call_boundary",
+      "json": "samples/low_pcode/case_DFB075_unresolved_call_boundary_low_pcode.json",
+      "missing_expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "report": "output/v7_batch/reports/case_DFB075_unresolved_call_boundary_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 1,
       "verdict": "FAIL"
     },
     {
@@ -647,11 +1032,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB091_tls_value",
-      "json": "output\\low_pcode\\case_DFB091_tls_value_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB091_tls_value_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB091_tls_value_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB091_tls_value_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -664,11 +1049,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB100_varargs",
-      "json": "output\\low_pcode\\case_DFB100_varargs_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB100_varargs_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB100_varargs_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB100_varargs_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -683,9 +1068,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB101_tail_call_candidate",
-      "json": "output\\low_pcode\\case_DFB101_tail_call_candidate_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB101_tail_call_candidate_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB101_tail_call_candidate_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB101_tail_call_candidate_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -700,9 +1085,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB102_signed_unsigned_boundary",
-      "json": "output\\low_pcode\\case_DFB102_signed_unsigned_boundary_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB102_signed_unsigned_boundary_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB102_signed_unsigned_boundary_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB102_signed_unsigned_boundary_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -715,11 +1100,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB110_setjmp_longjmp",
-      "json": "output\\low_pcode\\case_DFB110_setjmp_longjmp_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB110_setjmp_longjmp_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB110_setjmp_longjmp_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB110_setjmp_longjmp_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "FAIL"
@@ -734,9 +1119,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB120_memcpy_buffer",
-      "json": "output\\low_pcode\\case_DFB120_memcpy_buffer_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB120_memcpy_buffer_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB120_memcpy_buffer_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB120_memcpy_buffer_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -751,9 +1136,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB121_memmove_buffer",
-      "json": "output\\low_pcode\\case_DFB121_memmove_buffer_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB121_memmove_buffer_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB121_memmove_buffer_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB121_memmove_buffer_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -768,9 +1153,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB122_strcpy_buffer",
-      "json": "output\\low_pcode\\case_DFB122_strcpy_buffer_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB122_strcpy_buffer_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB122_strcpy_buffer_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB122_strcpy_buffer_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -785,9 +1170,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB123_memset_partial_memcpy",
-      "json": "output\\low_pcode\\case_DFB123_memset_partial_memcpy_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB123_memset_partial_memcpy_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB123_memset_partial_memcpy_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB123_memset_partial_memcpy_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "PASS"
@@ -802,9 +1187,9 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB130_shared_import_arg_to_ret",
-      "json": "output\\low_pcode\\case_DFB130_shared_import_arg_to_ret_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB130_shared_import_arg_to_ret_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB130_shared_import_arg_to_ret_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB130_shared_import_arg_to_ret_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
       "verdict": "PASS"
@@ -819,11 +1204,45 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB131_shared_import_outparam",
-      "json": "output\\low_pcode\\case_DFB131_shared_import_outparam_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB131_shared_import_outparam_low_pcode.json",
       "missing_expected_sources": [],
-      "report": "output\\v7_batch\\reports\\case_DFB131_shared_import_outparam_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB131_shared_import_outparam_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 1,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_C.ret"
+      ],
+      "case_id": "DFB151",
+      "expected_sources": [
+        "dfb_source_C.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB151_selective_arg_passthrough",
+      "json": "samples/low_pcode/case_DFB151_selective_arg_passthrough_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB151_selective_arg_passthrough_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 3,
+      "verdict": "PASS"
+    },
+    {
+      "actual_sources": [
+        "dfb_source_A.ret"
+      ],
+      "case_id": "DFB152",
+      "expected_sources": [
+        "dfb_source_A.ret"
+      ],
+      "forbidden_sources_found": [],
+      "function": "case_DFB152_callee_use_before_def",
+      "json": "samples/low_pcode/case_DFB152_callee_use_before_def_low_pcode.json",
+      "missing_expected_sources": [],
+      "report": "output/v7_batch/reports/case_DFB152_callee_use_before_def_v7_report.txt",
+      "sink_count": 1,
+      "source_call_count": 2,
       "verdict": "PASS"
     },
     {
@@ -837,11 +1256,11 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB200_obf_bcf_multistep",
-      "json": "output\\low_pcode\\case_DFB200_obf_bcf_multistep_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB200_obf_bcf_multistep_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_B.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB200_obf_bcf_multistep_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB200_obf_bcf_multistep_v7_report.txt",
       "sink_count": 4,
       "source_call_count": 2,
       "verdict": "FAIL"
@@ -855,12 +1274,12 @@
       ],
       "forbidden_sources_found": [],
       "function": "case_DFB201_obf_fla_statemachine",
-      "json": "output\\low_pcode\\case_DFB201_obf_fla_statemachine_low_pcode.json",
+      "json": "samples/low_pcode/case_DFB201_obf_fla_statemachine_low_pcode.json",
       "missing_expected_sources": [
         "dfb_source_A.ret",
         "dfb_source_C.ret"
       ],
-      "report": "output\\v7_batch\\reports\\case_DFB201_obf_fla_statemachine_v7_report.txt",
+      "report": "output/v7_batch/reports/case_DFB201_obf_fla_statemachine_v7_report.txt",
       "sink_count": 1,
       "source_call_count": 2,
       "verdict": "FAIL"

@@ -7,6 +7,7 @@
 # @runtime Jython
 
 import json
+import os
 from ghidra.util.task import TaskMonitor
 
 
@@ -381,7 +382,7 @@ def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
         "call_edges": edges,
         "skipped_targets": skipped,
     }
-    output_path = base_path + "low_pcode_extraction_manifest.json"
+    output_path = make_output_path(base_path, "low_pcode_extraction_manifest.json")
     with open(output_path, "w") as manifest_file:
         manifest_file.write(json.dumps(manifest, indent=2, ensure_ascii=False))
     return output_path
@@ -389,16 +390,18 @@ def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
 
 def write_json_file(base_path, func):
     result_json = dump_low_pcode_and_flow(func)
-    output_path = base_path + func.getName() + "_low_pcode.json"
+    output_path = make_output_path(base_path, func.getName() + "_low_pcode.json")
     with open(output_path, "w") as json_file:
         json_file.write(json.dumps(result_json, indent=2, ensure_ascii=False))
     return output_path
 
 
-def ensure_dir_suffix(path):
-    if not (path.endswith("\\") or path.endswith("/")):
-        path += "\\"
-    return path
+def normalize_output_dir(path):
+    return os.path.abspath(str(path))
+
+
+def make_output_path(base_path, filename):
+    return os.path.join(base_path, filename)
 
 def dump_low_pcode_and_flow(func):
     """
@@ -503,7 +506,7 @@ import json
 
 try:
     selected_dir = askDirectory("case_DFB* 및 reachable helper Low P-Code JSON 저장 폴더를 선택하세요", "저장")
-    base_path = ensure_dir_suffix(selected_dir.getAbsolutePath())
+    base_path = normalize_output_dir(selected_dir.getAbsolutePath())
 except Exception as e:
     print("[-] 경로 선택이 취소되었습니다.")
     base_path = None

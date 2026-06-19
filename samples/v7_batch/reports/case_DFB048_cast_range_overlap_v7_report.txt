@@ -1,0 +1,269 @@
+==================================================
+V7 MEMORY OBJECT TRANSFER REPORT: case_DFB048_cast_range_overlap
+==================================================
+
+ V7 notes
+--------------------------------------------------
+- v6 source/sink binding and generated helper summary DB behavior is preserved.
+- v7 recovers nested EBP-relative stack addresses before memory linking.
+- v7 models memcpy, memmove, strcpy, and memset as narrow stack transfer summaries.
+- Full heap objects, byte ranges, and indirect-call resolution remain future work.
+
+ SSA Low P-Code with CallSite Bindings
+--------------------------------------------------
+// --- 00402c41: PUSH EBP ---
+Unique_0x41500#1 = COPY(EBP#0)
+ESP#1 = INT_SUB(ESP#0, 0x4)
+STORE(0x1a1, ESP#1, Unique_0x41500#1)
+// --- 00402c42: MOV EBP,ESP ---
+EBP#1 = COPY(ESP#1)
+// --- 00402c44: SUB ESP,0x38 ---
+CF#1 = INT_LESS(ESP#1, 0x38)
+OF#1 = INT_SBORROW(ESP#1, 0x38)
+ESP#2 = INT_SUB(ESP#1, 0x38)
+SF#1 = INT_SLESS(ESP#2, 0x0)
+ZF#1 = INT_EQUAL(ESP#2, 0x0)
+Unique_0x49800#1 = INT_AND(ESP#2, 0xff)
+Unique_0x49900#1 = POPCOUNT(Unique_0x49800#1)
+Unique_0x49a00#1 = INT_AND(Unique_0x49900#1, 0x1)
+PF#1 = INT_EQUAL(Unique_0x49a00#1, 0x0)
+// --- 00402c47: MOV dword ptr [EBP + -0x1c],0x0 ---
+Unique_0x6600#1 = INT_ADD(EBP#1, 0xffffffe4)
+Unique_0xa300#1 = COPY(0x0)
+Memory_EBP_0xffffffe4#1 = STORE_STACK(EBP_0xffffffe4, Unique_0xa300#1) [local_stack]
+// --- 00402c4e: MOV dword ptr [EBP + -0x18],0x0 ---
+Unique_0x6600#2 = INT_ADD(EBP#1, 0xffffffe8)
+Unique_0xa300#2 = COPY(0x0)
+Memory_EBP_0xffffffe8#1 = STORE_STACK(EBP_0xffffffe8, Unique_0xa300#2) [local_stack]
+// --- 00402c55: MOV dword ptr [EBP + -0x14],0x0 ---
+Unique_0x6600#3 = INT_ADD(EBP#1, 0xffffffec)
+Unique_0xa300#3 = COPY(0x0)
+Memory_EBP_0xffffffec#1 = STORE_STACK(EBP_0xffffffec, Unique_0xa300#3) [local_stack]
+// --- 00402c5c: MOV dword ptr [EBP + -0x10],0x0 ---
+Unique_0x6600#4 = INT_ADD(EBP#1, 0xfffffff0)
+Unique_0xa300#4 = COPY(0x0)
+Memory_EBP_0xfffffff0#1 = STORE_STACK(EBP_0xfffffff0, Unique_0xa300#4) [local_stack]
+// --- 00402c63: LEA EAX,[EBP + -0x1c] ---
+Unique_0x6600#5 = INT_ADD(EBP#1, 0xffffffe4)
+EAX#1 = COPY(Unique_0x6600#5)
+// --- 00402c66: ADD EAX,0x4 ---
+CF#2 = INT_CARRY(EAX#1, 0x4)
+OF#2 = INT_SCARRY(EAX#1, 0x4)
+EAX#2 = INT_ADD(EAX#1, 0x4)
+SF#2 = INT_SLESS(EAX#2, 0x0)
+ZF#2 = INT_EQUAL(EAX#2, 0x0)
+Unique_0x49800#2 = INT_AND(EAX#2, 0xff)
+Unique_0x49900#2 = POPCOUNT(Unique_0x49800#2)
+Unique_0x49a00#2 = INT_AND(Unique_0x49900#2, 0x1)
+PF#2 = INT_EQUAL(Unique_0x49a00#2, 0x0)
+// --- 00402c69: MOV dword ptr [EBP + -0xc],EAX ---
+Unique_0x6600#6 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0xa300#5 = COPY(EAX#2)
+Memory_EBP_0xfffffff4#1 = STORE_STACK(EBP_0xfffffff4, Unique_0xa300#5) [local_stack]
+// --- 00402c6c: CALL 0x004018a8 ---
+EAX#3 = SOURCE_RET(dfb_source_A)
+CALL_CLOBBER(ECX#1, EDX#1, Memory_MEMORY_GLOBAL#1)
+// --- 00402c71: MOV EDX,dword ptr [EBP + -0xc] ---
+Unique_0x6600#7 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0x17200#1 = LOAD_STACK(EBP_0xfffffff4) -> Linked to Memory_EBP_0xfffffff4#1 [local_stack]
+EDX#2 = COPY(Unique_0x17200#1)
+// --- 00402c74: MOV dword ptr [EDX],EAX ---
+Unique_0xa300#6 = COPY(EAX#3)
+STORE(0x1a1, EDX#2, Unique_0xa300#6)
+// --- 00402c76: MOVZX EAX,byte ptr [EBP + -0x16] ---
+Unique_0x6600#8 = INT_ADD(EBP#1, 0xffffffea)
+Unique_0x17000#1 = LOAD(0x1a1, Unique_0x6600#8)
+EAX#4 = INT_ZEXT(Unique_0x17000#1)
+// --- 00402c7a: MOVZX EAX,AL ---
+EAX#5 = INT_ZEXT(EAX#4)
+// --- 00402c7d: MOV dword ptr [ESP],EAX ---
+Unique_0xa300#7 = COPY(EAX#5)
+STORE(0x1a1, ESP#2, Unique_0xa300#7)
+// --- 00402c80: CALL 0x004018f2 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0xa300#7'])
+CALL_RESET(EAX#6, ECX#2, EDX#3, Memory_MEMORY_GLOBAL#2)
+// --- 00402c85: NOP ---
+// --- 00402c86: LEAVE ---
+ESP#3 = COPY(EBP#1)
+EBP#2 = LOAD(0x1a1, ESP#3)
+ESP#4 = INT_ADD(ESP#3, 0x4)
+// --- 00402c87: RET ---
+Register_0x284#1 = LOAD(0x1a1, ESP#4)
+ESP#5 = INT_ADD(ESP#4, 0x4)
+RETURN(Register_0x284#1)
+
+ Backward DATA slice tree (Target: Unique_0xa300#7)
+--------------------------------------------------
+├── Unique_0xa300#7                 [addr: 00402c7d] [op: COPY]
+    ├── EAX#5                           [addr: 00402c7a] [op: INT_ZEXT]
+        ├── EAX#4                           [addr: 00402c76] [op: INT_ZEXT]
+            ├── Unique_0x17000#1                [addr: 00402c76] [op: LOAD]
+
+ Actual data sources
+--------------------------------------------------
+- (none)
+
+ Expected validation
+--------------------------------------------------
+{
+  "actual_sources": [],
+  "allowed_warnings": [
+    "unresolved_range_overlap"
+  ],
+  "case_id": "DFB048",
+  "expected_features": [
+    "cast",
+    "range_overlap",
+    "pointer_arithmetic",
+    "type_punning"
+  ],
+  "expected_file": "/Volumes/DO/00_gitProject/01_tdo/lowpcode_data_origin/expected/dfbench_win_core.expected.json",
+  "expected_sources": [
+    "dfb_source_A.ret"
+  ],
+  "forbidden_sources": [],
+  "forbidden_sources_found": [],
+  "function": "case_DFB048_cast_range_overlap",
+  "missing_expected_sources": [
+    "dfb_source_A.ret"
+  ],
+  "program": "dfbench_win_core",
+  "verdict": "FAIL"
+}
+
+ Sink anchors
+--------------------------------------------------
+[
+  {
+    "addr": "00402c80",
+    "anchor_arg0": "Unique_0xa300#7",
+    "args": [
+      "Unique_0xa300#7"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  }
+]
+
+ CallSite bindings
+--------------------------------------------------
+[
+  {
+    "addr": "00402c6c",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#3",
+    "target": "dfb_source_A"
+  },
+  {
+    "addr": "00402c80",
+    "args": [
+      "Unique_0xa300#7"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  }
+]
+
+ Function Boundary Summary Skeleton
+--------------------------------------------------
+{
+  "callsites": [
+    {
+      "addr": "00402c6c",
+      "assembly": "CALL 0x004018a8",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#3",
+      "target": "dfb_source_A"
+    },
+    {
+      "addr": "00402c80",
+      "args": [
+        "Unique_0xa300#7"
+      ],
+      "assembly": "CALL 0x004018f2",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    }
+  ],
+  "function": "case_DFB048_cast_range_overlap",
+  "inputs": {
+    "Register_0x10L": [
+      {
+        "addr": "00402c41",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x14L": [
+      {
+        "addr": "00402c41",
+        "reason": "use_before_def"
+      }
+    ]
+  },
+  "memory_accesses": [
+    {
+      "addr": "00402c47",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xffffffe4#1",
+      "offset": -28,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xffffffe4"
+    },
+    {
+      "addr": "00402c4e",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xffffffe8#1",
+      "offset": -24,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xffffffe8"
+    },
+    {
+      "addr": "00402c55",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xffffffec#1",
+      "offset": -20,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xffffffec"
+    },
+    {
+      "addr": "00402c5c",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffff0#1",
+      "offset": -16,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff0"
+    },
+    {
+      "addr": "00402c69",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffff4#1",
+      "offset": -12,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    },
+    {
+      "addr": "00402c71",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17200#1",
+      "offset": -12,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    }
+  ],
+  "notes": [
+    "v5 summary is derived from Low P-Code use-before-def and writes.",
+    "Current JSON lacks stack-frame, symbol/import, xref, and memory-block metadata.",
+    "CALL effects are still opaque until CallSite Binder is implemented.",
+    "v6 adds source/sink-aware CallSite Binder v1.",
+    "v7 adds recursive stack-address recovery and narrow libc transfer summaries."
+  ],
+  "outputs": {}
+}

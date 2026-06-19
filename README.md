@@ -63,8 +63,8 @@ The default batch input is `samples/low_pcode`, default output is `output/v7_bat
 The current reference sample result is:
 
 ```text
-PASS: 37
-FAIL: 13
+PASS: 51
+FAIL: 24
 ```
 
 The command exits with status `1` while FAIL cases remain. That is intentional so it can be used as a regression gate.
@@ -78,6 +78,20 @@ scripts/lowpcode_json_dumper.py
 ```
 
 The dumper exports `case_DFB*` roots and reachable internal helper functions. It skips `dfb_source_*`, `dfb_sink_*`, external functions, and empty-body terminal targets because those are boundaries for the current source/sink analyzer.
+
+The output path is built with `os.path.join`, so the same script works on Windows and macOS/Linux without producing backslash-literal filenames.
+
+## Current Binder Notes
+
+The v6/v7 call-site binder handles both common x86 argument preparation forms:
+
+```text
+PUSH arg
+CALL target
+
+MOV dword ptr [ESP + n], arg
+CALL target
+```
 
 ## Relationship To DataFlowBench
 

@@ -1,0 +1,432 @@
+==================================================
+V7 MEMORY OBJECT TRANSFER REPORT: case_DFB034_bitfield_access
+==================================================
+
+ V7 notes
+--------------------------------------------------
+- v6 source/sink binding and generated helper summary DB behavior is preserved.
+- v7 recovers nested EBP-relative stack addresses before memory linking.
+- v7 models memcpy, memmove, strcpy, and memset as narrow stack transfer summaries.
+- Full heap objects, byte ranges, and indirect-call resolution remain future work.
+
+ SSA Low P-Code with CallSite Bindings
+--------------------------------------------------
+// --- 00402b7c: PUSH EBP ---
+Unique_0x41500#1 = COPY(EBP#0)
+ESP#1 = INT_SUB(ESP#0, 0x4)
+STORE(0x1a1, ESP#1, Unique_0x41500#1)
+// --- 00402b7d: MOV EBP,ESP ---
+EBP#1 = COPY(ESP#1)
+// --- 00402b7f: SUB ESP,0x28 ---
+CF#1 = INT_LESS(ESP#1, 0x28)
+OF#1 = INT_SBORROW(ESP#1, 0x28)
+ESP#2 = INT_SUB(ESP#1, 0x28)
+SF#1 = INT_SLESS(ESP#2, 0x0)
+ZF#1 = INT_EQUAL(ESP#2, 0x0)
+Unique_0x49800#1 = INT_AND(ESP#2, 0xff)
+Unique_0x49900#1 = POPCOUNT(Unique_0x49800#1)
+Unique_0x49a00#1 = INT_AND(Unique_0x49900#1, 0x1)
+PF#1 = INT_EQUAL(Unique_0x49a00#1, 0x0)
+// --- 00402b82: CALL 0x004018a8 ---
+EAX#1 = SOURCE_RET(dfb_source_A)
+CALL_CLOBBER(ECX#1, EDX#1, Memory_MEMORY_GLOBAL#1)
+// --- 00402b87: AND EAX,0xf ---
+CF#2 = COPY(0x0)
+OF#2 = COPY(0x0)
+EAX#2 = INT_AND(EAX#1, 0xf)
+SF#2 = INT_SLESS(EAX#2, 0x0)
+ZF#2 = INT_EQUAL(EAX#2, 0x0)
+Unique_0x49800#2 = INT_AND(EAX#2, 0xff)
+Unique_0x49900#2 = POPCOUNT(Unique_0x49800#2)
+Unique_0x49a00#2 = INT_AND(Unique_0x49900#2, 0x1)
+PF#2 = INT_EQUAL(Unique_0x49a00#2, 0x0)
+// --- 00402b8a: AND EAX,0xf ---
+CF#3 = COPY(0x0)
+OF#3 = COPY(0x0)
+EAX#3 = INT_AND(EAX#2, 0xf)
+SF#3 = INT_SLESS(EAX#3, 0x0)
+ZF#3 = INT_EQUAL(EAX#3, 0x0)
+Unique_0x49800#3 = INT_AND(EAX#3, 0xff)
+Unique_0x49900#3 = POPCOUNT(Unique_0x49800#3)
+Unique_0x49a00#3 = INT_AND(Unique_0x49900#3, 0x1)
+PF#3 = INT_EQUAL(Unique_0x49a00#3, 0x0)
+// --- 00402b8d: MOV EDX,EAX ---
+EDX#2 = COPY(EAX#3)
+// --- 00402b8f: MOVZX EAX,byte ptr [EBP + -0xc] ---
+Unique_0x6600#1 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0x17000#1 = LOAD(0x1a1, Unique_0x6600#1)
+EAX#4 = INT_ZEXT(Unique_0x17000#1)
+// --- 00402b93: AND EAX,0xfffffff0 ---
+CF#4 = COPY(0x0)
+OF#4 = COPY(0x0)
+EAX#5 = INT_AND(EAX#4, 0xfffffff0)
+SF#4 = INT_SLESS(EAX#5, 0x0)
+ZF#4 = INT_EQUAL(EAX#5, 0x0)
+Unique_0x49800#4 = INT_AND(EAX#5, 0xff)
+Unique_0x49900#4 = POPCOUNT(Unique_0x49800#4)
+Unique_0x49a00#4 = INT_AND(Unique_0x49900#4, 0x1)
+PF#4 = INT_EQUAL(Unique_0x49a00#4, 0x0)
+// --- 00402b96: OR EAX,EDX ---
+CF#5 = COPY(0x0)
+OF#5 = COPY(0x0)
+EAX#6 = INT_OR(EAX#5, EDX#2)
+SF#5 = INT_SLESS(EAX#6, 0x0)
+ZF#5 = INT_EQUAL(EAX#6, 0x0)
+Unique_0x49800#5 = INT_AND(EAX#6, 0xff)
+Unique_0x49900#5 = POPCOUNT(Unique_0x49800#5)
+Unique_0x49a00#5 = INT_AND(Unique_0x49900#5, 0x1)
+PF#5 = INT_EQUAL(Unique_0x49a00#5, 0x0)
+// --- 00402b98: MOV byte ptr [EBP + -0xc],AL ---
+Unique_0x6600#2 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0xa100#1 = COPY(EAX#6)
+Memory_EBP_0xfffffff4#1 = STORE_STACK(EBP_0xfffffff4, Unique_0xa100#1) [local_stack]
+// --- 00402b9b: CALL 0x004018b5 ---
+EAX#7 = SOURCE_RET(dfb_source_B)
+CALL_CLOBBER(ECX#2, EDX#3, Memory_MEMORY_GLOBAL#2)
+// --- 00402ba0: AND EAX,0xf ---
+CF#6 = COPY(0x0)
+OF#6 = COPY(0x0)
+EAX#8 = INT_AND(EAX#7, 0xf)
+SF#6 = INT_SLESS(EAX#8, 0x0)
+ZF#6 = INT_EQUAL(EAX#8, 0x0)
+Unique_0x49800#6 = INT_AND(EAX#8, 0xff)
+Unique_0x49900#6 = POPCOUNT(Unique_0x49800#6)
+Unique_0x49a00#6 = INT_AND(Unique_0x49900#6, 0x1)
+PF#6 = INT_EQUAL(Unique_0x49a00#6, 0x0)
+// --- 00402ba3: SHL EAX,0x4 ---
+Unique_0xa6100#1 = INT_AND(0x4, 0x1f)
+Unique_0xa6200#1 = COPY(EAX#8)
+EAX#9 = INT_LEFT(EAX#8, Unique_0xa6100#1)
+Unique_0x4e000#1 = INT_NOTEQUAL(Unique_0xa6100#1, 0x0)
+Unique_0x4e100#1 = INT_SUB(Unique_0xa6100#1, 0x1)
+Unique_0x4e200#1 = INT_LEFT(Unique_0xa6200#1, Unique_0x4e100#1)
+Unique_0x4e400#1 = INT_SLESS(Unique_0x4e200#1, 0x0)
+Unique_0x4e500#1 = BOOL_NEGATE(Unique_0x4e000#1)
+Unique_0x4e600#1 = INT_AND(Unique_0x4e500#1, CF#6)
+Unique_0x4e700#1 = INT_AND(Unique_0x4e000#1, Unique_0x4e400#1)
+CF#7 = INT_OR(Unique_0x4e600#1, Unique_0x4e700#1)
+Unique_0x4ea00#1 = INT_EQUAL(Unique_0xa6100#1, 0x1)
+Unique_0x4eb00#1 = INT_SLESS(EAX#9, 0x0)
+Unique_0x4ed00#1 = INT_XOR(CF#7, Unique_0x4eb00#1)
+Unique_0x4ee00#1 = BOOL_NEGATE(Unique_0x4ea00#1)
+Unique_0x4ef00#1 = INT_AND(Unique_0x4ee00#1, OF#6)
+Unique_0x4f000#1 = INT_AND(Unique_0x4ea00#1, Unique_0x4ed00#1)
+OF#7 = INT_OR(Unique_0x4ef00#1, Unique_0x4f000#1)
+Unique_0x49d00#1 = INT_NOTEQUAL(Unique_0xa6100#1, 0x0)
+Unique_0x49f00#1 = INT_SLESS(EAX#9, 0x0)
+Unique_0x4a000#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4a100#1 = INT_AND(Unique_0x4a000#1, SF#6)
+Unique_0x4a200#1 = INT_AND(Unique_0x49d00#1, Unique_0x49f00#1)
+SF#7 = INT_OR(Unique_0x4a100#1, Unique_0x4a200#1)
+Unique_0x4a500#1 = INT_EQUAL(EAX#9, 0x0)
+Unique_0x4a600#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4a700#1 = INT_AND(Unique_0x4a600#1, ZF#6)
+Unique_0x4a800#1 = INT_AND(Unique_0x49d00#1, Unique_0x4a500#1)
+ZF#7 = INT_OR(Unique_0x4a700#1, Unique_0x4a800#1)
+Unique_0x4aa00#1 = INT_AND(EAX#9, 0xff)
+Unique_0x4ab00#1 = POPCOUNT(Unique_0x4aa00#1)
+Unique_0x4ac00#1 = INT_AND(Unique_0x4ab00#1, 0x1)
+Unique_0x4ae00#1 = INT_EQUAL(Unique_0x4ac00#1, 0x0)
+Unique_0x4af00#1 = BOOL_NEGATE(Unique_0x49d00#1)
+Unique_0x4b000#1 = INT_AND(Unique_0x4af00#1, PF#6)
+Unique_0x4b100#1 = INT_AND(Unique_0x49d00#1, Unique_0x4ae00#1)
+PF#7 = INT_OR(Unique_0x4b000#1, Unique_0x4b100#1)
+// --- 00402ba6: MOV EDX,EAX ---
+EDX#4 = COPY(EAX#9)
+// --- 00402ba8: MOVZX EAX,byte ptr [EBP + -0xc] ---
+Unique_0x6600#3 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0x17000#2 = LOAD_STACK(EBP_0xfffffff4) -> Linked to Memory_EBP_0xfffffff4#1 [local_stack]
+EAX#10 = INT_ZEXT(Unique_0x17000#2)
+// --- 00402bac: AND EAX,0xf ---
+CF#8 = COPY(0x0)
+OF#8 = COPY(0x0)
+EAX#11 = INT_AND(EAX#10, 0xf)
+SF#8 = INT_SLESS(EAX#11, 0x0)
+ZF#8 = INT_EQUAL(EAX#11, 0x0)
+Unique_0x49800#7 = INT_AND(EAX#11, 0xff)
+Unique_0x49900#7 = POPCOUNT(Unique_0x49800#7)
+Unique_0x49a00#7 = INT_AND(Unique_0x49900#7, 0x1)
+PF#8 = INT_EQUAL(Unique_0x49a00#7, 0x0)
+// --- 00402baf: OR EAX,EDX ---
+CF#9 = COPY(0x0)
+OF#9 = COPY(0x0)
+EAX#12 = INT_OR(EAX#11, EDX#4)
+SF#9 = INT_SLESS(EAX#12, 0x0)
+ZF#9 = INT_EQUAL(EAX#12, 0x0)
+Unique_0x49800#8 = INT_AND(EAX#12, 0xff)
+Unique_0x49900#8 = POPCOUNT(Unique_0x49800#8)
+Unique_0x49a00#8 = INT_AND(Unique_0x49900#8, 0x1)
+PF#9 = INT_EQUAL(Unique_0x49a00#8, 0x0)
+// --- 00402bb1: MOV byte ptr [EBP + -0xc],AL ---
+Unique_0x6600#4 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0xa100#2 = COPY(EAX#12)
+Memory_EBP_0xfffffff4#2 = STORE_STACK(EBP_0xfffffff4, Unique_0xa100#2) [local_stack]
+// --- 00402bb4: MOVZX EAX,byte ptr [EBP + -0xc] ---
+Unique_0x6600#5 = INT_ADD(EBP#1, 0xfffffff4)
+Unique_0x17000#3 = LOAD_STACK(EBP_0xfffffff4) -> Linked to Memory_EBP_0xfffffff4#2 [local_stack]
+EAX#13 = INT_ZEXT(Unique_0x17000#3)
+// --- 00402bb8: SHR AL,0x4 ---
+Unique_0xaa300#1 = INT_AND(0x4, 0x1f)
+Unique_0xaa400#1 = COPY(EAX#13)
+EAX#14 = INT_RIGHT(EAX#13, Unique_0xaa300#1)
+Unique_0x50200#1 = INT_NOTEQUAL(Unique_0xaa300#1, 0x0)
+Unique_0x50300#1 = INT_SUB(Unique_0xaa300#1, 0x1)
+Unique_0x50400#1 = INT_RIGHT(Unique_0xaa400#1, Unique_0x50300#1)
+Unique_0x50500#1 = INT_AND(Unique_0x50400#1, 0x1)
+Unique_0x50700#1 = INT_NOTEQUAL(Unique_0x50500#1, 0x0)
+Unique_0x50800#1 = BOOL_NEGATE(Unique_0x50200#1)
+Unique_0x50900#1 = INT_AND(Unique_0x50800#1, CF#9)
+Unique_0x50a00#1 = INT_AND(Unique_0x50200#1, Unique_0x50700#1)
+CF#10 = INT_OR(Unique_0x50900#1, Unique_0x50a00#1)
+Unique_0x50d00#1 = INT_EQUAL(Unique_0xaa300#1, 0x1)
+Unique_0x50f00#1 = INT_SLESS(Unique_0xaa400#1, 0x0)
+Unique_0x51000#1 = BOOL_NEGATE(Unique_0x50d00#1)
+Unique_0x51100#1 = INT_AND(Unique_0x51000#1, OF#9)
+Unique_0x51200#1 = INT_AND(Unique_0x50d00#1, Unique_0x50f00#1)
+OF#10 = INT_OR(Unique_0x51100#1, Unique_0x51200#1)
+Unique_0x49d00#2 = INT_NOTEQUAL(Unique_0xaa300#1, 0x0)
+Unique_0x49f00#2 = INT_SLESS(EAX#14, 0x0)
+Unique_0x4a000#2 = BOOL_NEGATE(Unique_0x49d00#2)
+Unique_0x4a100#2 = INT_AND(Unique_0x4a000#2, SF#9)
+Unique_0x4a200#2 = INT_AND(Unique_0x49d00#2, Unique_0x49f00#2)
+SF#10 = INT_OR(Unique_0x4a100#2, Unique_0x4a200#2)
+Unique_0x4a500#2 = INT_EQUAL(EAX#14, 0x0)
+Unique_0x4a600#2 = BOOL_NEGATE(Unique_0x49d00#2)
+Unique_0x4a700#2 = INT_AND(Unique_0x4a600#2, ZF#9)
+Unique_0x4a800#2 = INT_AND(Unique_0x49d00#2, Unique_0x4a500#2)
+ZF#10 = INT_OR(Unique_0x4a700#2, Unique_0x4a800#2)
+Unique_0x4aa00#2 = INT_AND(EAX#14, 0xff)
+Unique_0x4ab00#2 = POPCOUNT(Unique_0x4aa00#2)
+Unique_0x4ac00#2 = INT_AND(Unique_0x4ab00#2, 0x1)
+Unique_0x4ae00#2 = INT_EQUAL(Unique_0x4ac00#2, 0x0)
+Unique_0x4af00#2 = BOOL_NEGATE(Unique_0x49d00#2)
+Unique_0x4b000#2 = INT_AND(Unique_0x4af00#2, PF#9)
+Unique_0x4b100#2 = INT_AND(Unique_0x49d00#2, Unique_0x4ae00#2)
+PF#10 = INT_OR(Unique_0x4b000#2, Unique_0x4b100#2)
+// --- 00402bbb: MOVZX EAX,AL ---
+EAX#15 = INT_ZEXT(EAX#14)
+// --- 00402bbe: MOV dword ptr [ESP],EAX ---
+Unique_0xa300#1 = COPY(EAX#15)
+STORE(0x1a1, ESP#2, Unique_0xa300#1)
+// --- 00402bc1: CALL 0x004018f2 ---
+SINK_ANCHOR(dfb_sink_int, args=['Unique_0xa300#1'])
+CALL_RESET(EAX#16, ECX#3, EDX#5, Memory_MEMORY_GLOBAL#3)
+// --- 00402bc6: NOP ---
+// --- 00402bc7: LEAVE ---
+ESP#3 = COPY(EBP#1)
+EBP#2 = LOAD(0x1a1, ESP#3)
+ESP#4 = INT_ADD(ESP#3, 0x4)
+// --- 00402bc8: RET ---
+Register_0x284#1 = LOAD(0x1a1, ESP#4)
+ESP#5 = INT_ADD(ESP#4, 0x4)
+RETURN(Register_0x284#1)
+
+ Backward DATA slice tree (Target: Unique_0xa300#1)
+--------------------------------------------------
+├── Unique_0xa300#1                 [addr: 00402bbe] [op: COPY]
+    ├── EAX#15                          [addr: 00402bbb] [op: INT_ZEXT]
+        ├── EAX#14                          [addr: 00402bb8] [op: INT_RIGHT]
+            ├── EAX#13                          [addr: 00402bb4] [op: INT_ZEXT]
+                ├── Unique_0x17000#3                [addr: 00402bb4] [op: LOAD]
+                    ├── Memory_EBP_0xfffffff4#2         [addr: 00402bb1] [op: STORE_VAL]
+                        ├── Unique_0xa100#2                 [addr: 00402bb1] [op: COPY]
+                            ├── EAX#12                          [addr: 00402baf] [op: INT_OR]
+                                ├── EAX#11                          [addr: 00402bac] [op: INT_AND]
+                                    ├── EAX#10                          [addr: 00402ba8] [op: INT_ZEXT]
+                                        ├── Unique_0x17000#2                [addr: 00402ba8] [op: LOAD]
+                                            ├── Memory_EBP_0xfffffff4#1         [addr: 00402b98] [op: STORE_VAL]
+                                                ├── Unique_0xa100#1                 [addr: 00402b98] [op: COPY]
+                                                    ├── EAX#6                           [addr: 00402b96] [op: INT_OR]
+                                                        ├── EAX#5                           [addr: 00402b93] [op: INT_AND]
+                                                            ├── EAX#4                           [addr: 00402b8f] [op: INT_ZEXT]
+                                                                ├── Unique_0x17000#1                [addr: 00402b8f] [op: LOAD]
+                                                            ├── Const_0xfffffff0                [addr: 00402b93] [op: Constant]
+                                                        ├── EDX#2                           [addr: 00402b8d] [op: COPY]
+                                                            ├── EAX#3                           [addr: 00402b8a] [op: INT_AND]
+                                                                ├── EAX#2                           [addr: 00402b87] [op: INT_AND]
+                                                                    ├── EAX#1                           [addr: 00402b82] [op: SOURCE_RET]
+                                                                    ├── Const_0xf                       [addr: 00402b87] [op: Constant]
+                                                                ├── Const_0xf                       [addr: 00402b87] [op: Constant]
+                                    ├── Const_0xf                       [addr: 00402b87] [op: Constant]
+                                ├── EDX#4                           [addr: 00402ba6] [op: COPY]
+                                    ├── EAX#9                           [addr: 00402ba3] [op: INT_LEFT]
+                                        ├── EAX#8                           [addr: 00402ba0] [op: INT_AND]
+                                            ├── EAX#7                           [addr: 00402b9b] [op: SOURCE_RET]
+                                            ├── Const_0xf                       [addr: 00402b87] [op: Constant]
+                                        ├── Unique_0xa6100#1                [addr: 00402ba3] [op: INT_AND]
+                                            ├── Const_0x4                       [addr: 00402b7c] [op: Constant]
+                                            ├── Const_0x1f                      [addr: 00402ba3] [op: Constant]
+            ├── Unique_0xaa300#1                [addr: 00402bb8] [op: INT_AND]
+                ├── Const_0x4                       [addr: 00402b7c] [op: Constant]
+                ├── Const_0x1f                      [addr: 00402ba3] [op: Constant]
+
+ Actual data sources
+--------------------------------------------------
+- dfb_source_A.ret
+- dfb_source_B.ret
+
+ Expected validation
+--------------------------------------------------
+{
+  "actual_sources": [
+    "dfb_source_A.ret",
+    "dfb_source_B.ret"
+  ],
+  "allowed_warnings": [
+    "unresolved_bitfield"
+  ],
+  "case_id": "DFB034",
+  "expected_features": [
+    "struct",
+    "bitfield",
+    "subpiece",
+    "bit_range"
+  ],
+  "expected_file": "/Volumes/DO/00_gitProject/01_tdo/lowpcode_data_origin/expected/dfbench_win_core.expected.json",
+  "expected_sources": [
+    "dfb_source_B.ret"
+  ],
+  "forbidden_sources": [
+    "dfb_source_A.ret"
+  ],
+  "forbidden_sources_found": [
+    "dfb_source_A.ret"
+  ],
+  "function": "case_DFB034_bitfield_access",
+  "missing_expected_sources": [],
+  "program": "dfbench_win_core",
+  "verdict": "FAIL"
+}
+
+ Sink anchors
+--------------------------------------------------
+[
+  {
+    "addr": "00402bc1",
+    "anchor_arg0": "Unique_0xa300#1",
+    "args": [
+      "Unique_0xa300#1"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "target": "dfb_sink_int"
+  }
+]
+
+ CallSite bindings
+--------------------------------------------------
+[
+  {
+    "addr": "00402b82",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#1",
+    "target": "dfb_source_A"
+  },
+  {
+    "addr": "00402b9b",
+    "confidence": "resolved_direct_call",
+    "kind": "source_call",
+    "return_node": "EAX#7",
+    "target": "dfb_source_B"
+  },
+  {
+    "addr": "00402bc1",
+    "args": [
+      "Unique_0xa300#1"
+    ],
+    "confidence": "resolved_direct_call_with_recent_push_args",
+    "kind": "sink_call",
+    "target": "dfb_sink_int"
+  }
+]
+
+ Function Boundary Summary Skeleton
+--------------------------------------------------
+{
+  "callsites": [
+    {
+      "addr": "00402b82",
+      "assembly": "CALL 0x004018a8",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#1",
+      "target": "dfb_source_A"
+    },
+    {
+      "addr": "00402b9b",
+      "assembly": "CALL 0x004018b5",
+      "model": "source_ret_binding_v6",
+      "return_node": "EAX#7",
+      "target": "dfb_source_B"
+    },
+    {
+      "addr": "00402bc1",
+      "args": [
+        "Unique_0xa300#1"
+      ],
+      "assembly": "CALL 0x004018f2",
+      "model": "sink_anchor_binding_v6",
+      "target": "dfb_sink_int"
+    }
+  ],
+  "function": "case_DFB034_bitfield_access",
+  "inputs": {
+    "Register_0x10L": [
+      {
+        "addr": "00402b7c",
+        "reason": "use_before_def"
+      }
+    ],
+    "Register_0x14L": [
+      {
+        "addr": "00402b7c",
+        "reason": "use_before_def"
+      }
+    ]
+  },
+  "memory_accesses": [
+    {
+      "addr": "00402b98",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffff4#1",
+      "offset": -12,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    },
+    {
+      "addr": "00402ba8",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17000#2",
+      "offset": -12,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    },
+    {
+      "addr": "00402bb1",
+      "confidence": "frame_pointer_offset",
+      "node": "Memory_EBP_0xfffffff4#2",
+      "offset": -12,
+      "opcode": "STORE",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    },
+    {
+      "addr": "00402bb4",
+      "confidence": "frame_pointer_offset",
+      "node": "Unique_0x17000#3",
+      "offset": -12,
+      "opcode": "LOAD",
+      "region": "local_stack",
+      "stack_key": "EBP_0xfffffff4"
+    }
+  ],
+  "notes": [
+    "v5 summary is derived from Low P-Code use-before-def and writes.",
+    "Current JSON lacks stack-frame, symbol/import, xref, and memory-block metadata.",
+    "CALL effects are still opaque until CallSite Binder is implemented.",
+    "v6 adds source/sink-aware CallSite Binder v1.",
+    "v7 adds recursive stack-address recovery and narrow libc transfer summaries."
+  ],
+  "outputs": {}
+}

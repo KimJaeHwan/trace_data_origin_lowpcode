@@ -4,3 +4,4 @@ __pycache__/
 output/
 .venv/
 venv/
+samples/v7_batch/reports/

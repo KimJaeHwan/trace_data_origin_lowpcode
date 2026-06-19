@@ -37,10 +37,7 @@ expected/
 
 samples/
   low_pcode/                  checked-in sample Low-PCode dumps
-  v7_batch/                   reference v7 batch result
-
-docs/, dev_docs/
-  design notes and progress logs from the extraction source
+  v7_batch/                   reference v7 batch summary
 ```
 
 ## Quick Start
@@ -59,6 +56,7 @@ python3 tools/pcode_ssa_batch_v7.py
 ```
 
 The default batch input is `samples/low_pcode`, default output is `output/v7_batch`, and default oracle path is `expected`.
+Per-case report files are generated under `output/v7_batch/reports` and are intentionally not checked in; `samples/v7_batch` keeps only the compact reference summaries.
 
 The current reference sample result is:
 

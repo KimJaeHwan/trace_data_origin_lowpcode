@@ -17,6 +17,9 @@ class FunctionGraph:
     slice_graph: nx.DiGraph = field(default_factory=nx.DiGraph)
     sink_index: dict[str, ValueId] = field(default_factory=dict)
     source_index: dict[str, ValueId] = field(default_factory=dict)
+    call_pre_storage_index: dict[str, ValueId] = field(default_factory=dict)
+    call_post_storage_index: dict[str, ValueId] = field(default_factory=dict)
+    callsite_index: dict[str, ValueId] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 

@@ -92,7 +92,7 @@ def write_summary(output_dir: Path, results: list[dict], counts: dict[str, int])
         json.dumps({"counts": counts, "results": results}, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    lines = ["# V8 Phase 1 Batch", "", "## Summary", ""]
+    lines = ["# V8 Low-PCode Batch", "", "## Summary", ""]
     for verdict, count in sorted(counts.items()):
         lines.append(f"- {verdict}: {count}")
     lines.extend(["", "## Cases", "", "| verdict | arch | case | function | actual | expected | report |", "|---|---|---|---|---|---|---|"])

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from analysis.call_boundary_mapper import CallBoundaryMapper, CallContext
+from analysis.call_resolver import CallResolver
 from analysis.cfg_builder import CFGBuilder
 from core.graph import FunctionGraph
 from core.value_id import ValueId
@@ -82,6 +84,8 @@ class DataFlowBenchBoundaryBinder:
 class SliceGraphBuilder:
     def __init__(self, boundary_binder: DataFlowBenchBoundaryBinder | None = None):
         self.boundary_binder = boundary_binder or DataFlowBenchBoundaryBinder()
+        self.call_resolver = CallResolver()
+        self.call_boundary_mapper = CallBoundaryMapper()
 
     def build(self, program: LowPcodeProgram) -> FunctionGraph:
         function_graph = FunctionGraph(
@@ -99,6 +103,9 @@ class SliceGraphBuilder:
 
             for pcode in instr.get("low_pcode", []):
                 self._process_pcode(function_graph, state, instr, pcode)
+
+            if self._is_call_instruction(instr):
+                self._materialize_call_boundary(function_graph, state, instr)
 
             source_name = self.boundary_binder.is_source_call(instr)
             if source_name:
@@ -224,12 +231,12 @@ class SliceGraphBuilder:
 
     def _bind_source(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
         label = self.boundary_binder.source_label(name)
-        source_node = self._new_synthetic_value(fg, state, "boundary", label, instr, "SOURCE_RET")
+        source_node = self._new_synthetic_value(fg, state, "boundary", label, instr, "SOURCE_BOUNDARY_VALUE")
         fg.slice_graph.nodes[source_node]["kind"] = "source_boundary"
         fg.slice_graph.nodes[source_node]["source_label"] = label
         fg.source_index[label] = source_node
 
-        for key in self._source_output_storage_keys(fg):
+        for key in self._source_observed_storage_keys(fg):
             state.current[key] = source_node
 
     def _bind_sink(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
@@ -244,7 +251,7 @@ class SliceGraphBuilder:
         else:
             fg.warnings.append(f"sink_without_observed_storage:{instr.get('address')}:{name}")
 
-    def _source_output_storage_keys(self, fg: FunctionGraph) -> list[str]:
+    def _source_observed_storage_keys(self, fg: FunctionGraph) -> list[str]:
         if fg.architecture.name == "x86":
             return ["reg:EAX:0:32"]
         if fg.architecture.name == "x86_64":
@@ -254,6 +261,60 @@ class SliceGraphBuilder:
         if fg.architecture.name == "armv7":
             return ["reg:r0:0:32"]
         return []
+
+    def _materialize_call_boundary(self, fg: FunctionGraph, state: BuildState, instr: dict) -> None:
+        resolved = self.call_resolver.resolve(instr)
+        callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+        callsite_node = self._new_synthetic_value(fg, state, "callsite", callsite_key, instr, "CALLSITE")
+        fg.slice_graph.nodes[callsite_node]["kind"] = "callsite"
+        fg.slice_graph.nodes[callsite_node]["target_name"] = resolved.name or ""
+        fg.slice_graph.nodes[callsite_node]["target_confidence"] = resolved.confidence
+        fg.callsite_index[callsite_key] = callsite_node
+
+        context = CallContext(
+            callsite_id=callsite_key,
+            caller_function=fg.function_name,
+            callee_function=resolved.name,
+            caller_context=fg.context_id,
+            callee_context=None,
+            continuation_storage=None,
+            target_confidence=resolved.confidence,
+            pre_call_observed_storages=self.call_boundary_mapper.collect_pre_call_observed_storages(state.current),
+            post_call_observed_storages=self.call_boundary_mapper.collect_post_call_observed_storages(fg.architecture),
+        )
+
+        for observed in context.pre_call_observed_storages:
+            pre_key = f"{callsite_key}:pre:{observed.storage_key}"
+            pre_node = self._new_synthetic_value(fg, state, "call_pre_reg", pre_key, instr, "CALL_PRE_REG")
+            fg.slice_graph.nodes[pre_node]["kind"] = "call_pre_storage"
+            fg.slice_graph.nodes[pre_node]["observed_storage"] = observed.storage_key
+            fg.slice_graph.nodes[pre_node]["confidence"] = observed.confidence
+            fg.call_pre_storage_index[pre_key] = pre_node
+            if observed.value is not None:
+                fg.slice_graph.add_edge(observed.value, pre_node, kind="data", opcode="CALL_PRE_REG")
+
+        if state.recent_store is not None and state.recent_store_text is not None:
+            pre_kind = "CALL_PRE_STACK" if ":stack:" in state.recent_store_text else "CALL_PRE_MEM"
+            pre_space = "call_pre_stack" if pre_kind == "CALL_PRE_STACK" else "call_pre_mem"
+            pre_key = f"{callsite_key}:pre:mem:{state.recent_store_text}"
+            pre_node = self._new_synthetic_value(fg, state, pre_space, pre_key, instr, pre_kind)
+            fg.slice_graph.nodes[pre_node]["kind"] = "call_pre_storage"
+            fg.slice_graph.nodes[pre_node]["observed_storage"] = state.recent_store_text
+            fg.slice_graph.nodes[pre_node]["confidence"] = "candidate"
+            fg.call_pre_storage_index[pre_key] = pre_node
+            fg.slice_graph.add_edge(state.recent_store, pre_node, kind="data", opcode=pre_kind)
+
+        for observed in context.post_call_observed_storages:
+            post_key = f"{callsite_key}:post:{observed.storage_key}"
+            post_node = self._new_synthetic_value(fg, state, "call_post_reg", post_key, instr, "CALL_POST_REG")
+            fg.slice_graph.nodes[post_node]["kind"] = "call_post_storage"
+            fg.slice_graph.nodes[post_node]["observed_storage"] = observed.storage_key
+            fg.slice_graph.nodes[post_node]["confidence"] = observed.confidence
+            fg.call_post_storage_index[post_key] = post_node
+            state.current[observed.storage_key] = post_node
+
+        state.recent_store = None
+        state.recent_store_text = None
 
     def _storage_key(self, fg: FunctionGraph, varnode: dict) -> str | None:
         if varnode.get("is_register"):

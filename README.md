@@ -38,7 +38,17 @@ expected/
 samples/
   low_pcode/                  checked-in sample Low-PCode dumps
   v7_batch/                   reference v7 batch summary
+
+dev_docs/
+  V8 / New V1 phase plan and development progress
 ```
+
+## V8 / New V1 Development
+
+V8 / New V1 is the independent redesign line for a convention-free,
+architecture-aware Low P-Code SliceGraph engine. Development is tracked by
+phase under `dev_docs/`; Phase 1 starts with a walking skeleton targeting
+DFB001 and DFB002.
 
 ## Quick Start
 

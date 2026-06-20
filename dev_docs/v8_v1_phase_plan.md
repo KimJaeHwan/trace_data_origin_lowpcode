@@ -54,8 +54,8 @@ test oracle.
 
 | Phase | Name | Gate | Status |
 | --- | --- | --- | --- |
-| 1 | Walking Skeleton | DFB001 / DFB002 PASS | Not started |
-| 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | Not started |
+| 1 | Walking Skeleton | DFB001 / DFB002 PASS | Complete |
+| 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | Next |
 | 3 | Control Dependency | DFB010 PASS with data/control split | Not started |
 | 4 | Memory + Architecture Expansion | global/heap skeleton and architecture storage expansion | Not started |
 | 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | Not started |

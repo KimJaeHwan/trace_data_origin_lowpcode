@@ -50,6 +50,17 @@ architecture-aware Low P-Code SliceGraph engine. Development is tracked by
 phase under `dev_docs/`; Phase 1 starts with a walking skeleton targeting
 DFB001 and DFB002.
 
+Run the Phase 1 V8 gate:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase1 expected --cases case_DFB001 case_DFB002
+```
+
+The runner scans architecture-specific sample directories under
+`samples/low_pcode` and writes reports plus graph exports under
+`output/v8_phase1`.
+
 ## Quick Start
 
 Python side dependencies:

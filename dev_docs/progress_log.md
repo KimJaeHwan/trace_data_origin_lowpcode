@@ -9,14 +9,17 @@ in the phase-specific files.
 - Reintroduced `dev_docs/` for the new V8 development line.
 - Imported the design snapshot as `dev_docs/v8_v1_design.md`.
 - Created the phase plan and Phase 1 walking-skeleton tracker.
+- Implemented the Phase 1 independent package skeleton.
+- Added `tools/pcode_slicegraph_v8_phase1.py`.
+- Verified DFB001 and DFB002 across six architecture/platform sample roots.
 
 ## Current Focus
 
-Phase 1: Walking Skeleton.
+Phase 2: Convention-free Call Boundary Skeleton.
 
 Next engineering step:
 
 ```text
-Scaffold the independent package directories and implement the minimal DFB001 /
-DFB002 path.
+Introduce CALLSITE / CALL_PRE_* / CALL_POST_* synthetic storage without stale
+post-call dependencies.
 ```

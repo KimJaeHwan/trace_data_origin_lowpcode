@@ -26,6 +26,12 @@ in the phase-specific files.
 - Verified DFB026 across all six architecture/platform sample roots.
 - Backfilled Phase 4 global/heap validation across all six roots: DFB024/025/026/027/030/031 PASS 36.
 - Recorded residual non-gate control precision work for x64/aarch64 DFB010/014 variants.
+- Expanded Phase 5 observed-storage summaries without adding argument/return semantics to the core model.
+- Added x86_64 RDX/RSI register alias coverage for observed storage tracking.
+- Added address-provenance edges for STORE nodes so pointer-expression summaries can target observed memory cells.
+- Verified DFB050/DFB056 across all six roots: PASS 12.
+- Verified x86_64 DFB058/DFB059 for PE_x64 and linux_amd64.
+- Ran the full testbed at `output/v8_full_after_summary_refine2`: PASS 273 / FAIL 215, with 13 improvements and 0 regressions against `output/v8_full_after_observed_summary`.
 
 ## Current Focus
 
@@ -34,6 +40,6 @@ Phase 5: Interprocedural Skeleton + Bottom-up Auto Summary.
 Next engineering step:
 
 ```text
-Expand observed-storage summaries beyond global read/write while preserving
-the convention-free core model.
+Generalize callee-entry observed storage and field-sensitive memory summaries
+while preserving the convention-free core model.
 ```

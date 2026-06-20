@@ -55,7 +55,10 @@ class CallBoundaryMapper:
 
     def general_register_storage_keys(self, architecture: ArchitectureSpec) -> list[str]:
         keys = set()
+        preserved = architecture.stack_pointer_regs | architecture.frame_pointer_regs | architecture.link_registers
         for alias in architecture.register_aliases.values():
             if alias.canonical in architecture.general_registers:
+                if alias.canonical in preserved:
+                    continue
                 keys.add(f"reg:{alias.canonical}:{alias.offset_bits}:{alias.size_bits}")
         return sorted(keys)

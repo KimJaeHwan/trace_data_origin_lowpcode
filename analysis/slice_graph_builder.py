@@ -253,6 +253,8 @@ class SliceGraphBuilder:
         mem_key = self._memory_key_for(fg, state, addr_node, inputs[1], inputs[2].get("size"))
         mem_key = self._data_ref_memory_key(instr, "write", inputs[2].get("size")) or mem_key
         mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "STORE_VAL")
+        if addr_node is not None:
+            fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="STORE_ADDRESS")
         if value_node is not None:
             fg.slice_graph.add_edge(value_node, mem_node, kind="memory", opcode="STORE")
             state.expressions[mem_node] = dict(state.expressions.get(value_node) or {"kind": "value"})
@@ -274,7 +276,7 @@ class SliceGraphBuilder:
         if mem_node is not None:
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
             state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
-        elif self._is_program_memory_key(mem_key):
+        elif self._should_materialize_observed_memory(mem_key):
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
             fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
             fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
@@ -484,6 +486,9 @@ class SliceGraphBuilder:
             fg.call_pre_storage_index[pre_key] = pre_node
             if observed.value is not None:
                 fg.slice_graph.add_edge(observed.value, pre_node, kind="data", opcode="CALL_PRE_REG")
+                expression = state.expressions.get(observed.value)
+                if expression:
+                    fg.slice_graph.nodes[pre_node]["expression"] = dict(expression)
 
         if state.recent_store is not None and state.recent_store_text is not None:
             pre_kind = "CALL_PRE_STACK" if ":stack:" in state.recent_store_text else "CALL_PRE_MEM"
@@ -666,6 +671,9 @@ class SliceGraphBuilder:
 
     def _is_program_memory_key(self, mem_key: str) -> bool:
         return mem_key.startswith("global:") or mem_key.startswith("unknown:unique:")
+
+    def _should_materialize_observed_memory(self, mem_key: str) -> bool:
+        return self._is_program_memory_key(mem_key) or ":stack:" in mem_key
 
     def _display_for(
         self,

@@ -10,6 +10,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from analysis.slice_graph_builder import SliceGraphBuilder
+from core.edge import DATA_CONTROL_SLICE_EDGES
 from frontend.low_pcode_loader import LowPcodeLoader
 from query.backward_slice import BackwardSliceQuery
 from report.expected_validator import ExpectedValidator
@@ -45,13 +46,23 @@ def run_one(json_path: Path, input_root: Path, output_dir: Path, expected_path: 
     query = BackwardSliceQuery(function_graph)
 
     slices = []
+    control_slices = []
     actual_sources = set()
+    actual_control_sources = set()
     for sink_node in function_graph.sink_index.values():
         result = query.run(sink_node)
         slices.append(result)
         actual_sources.update(result.source_labels)
+        control_result = BackwardSliceQuery(function_graph, DATA_CONTROL_SLICE_EDGES, mode="data+control").run(sink_node)
+        control_slices.append(control_result)
+        actual_control_sources.update(control_result.source_labels)
+    actual_control_sources -= actual_sources
 
-    validation = ExpectedValidator(expected_path).validate(function_graph.function_name, actual_sources)
+    validation = ExpectedValidator(expected_path).validate(
+        function_graph.function_name,
+        actual_sources,
+        actual_control_sources,
+    )
 
     case_out = case_output_dir(json_path, input_root, output_dir)
     case_out.mkdir(parents=True, exist_ok=True)
@@ -66,7 +77,7 @@ def run_one(json_path: Path, input_root: Path, output_dir: Path, expected_path: 
         function_graph.warnings.append(f"graphml_export_failed:{exc}")
 
     report_path = case_out / "report.md"
-    TextReport().write(report_path, function_graph, validation, slices)
+    TextReport().write(report_path, function_graph, validation, slices + control_slices)
 
     return {
         "json": str(json_path),
@@ -77,9 +88,13 @@ def run_one(json_path: Path, input_root: Path, output_dir: Path, expected_path: 
         "verdict": validation.get("verdict"),
         "case_id": validation.get("case_id"),
         "actual_sources": validation.get("actual_sources", []),
+        "actual_control_sources": validation.get("actual_control_sources", []),
         "expected_sources": validation.get("expected_sources", []),
+        "expected_control_sources": validation.get("expected_control_sources", []),
         "missing_expected_sources": validation.get("missing_expected_sources", []),
+        "missing_expected_control_sources": validation.get("missing_expected_control_sources", []),
         "forbidden_sources_found": validation.get("forbidden_sources_found", []),
+        "forbidden_control_sources_found": validation.get("forbidden_control_sources_found", []),
         "sink_count": len(function_graph.sink_index),
         "source_count": len(function_graph.source_index),
         "warnings": list(function_graph.warnings),
@@ -95,17 +110,25 @@ def write_summary(output_dir: Path, results: list[dict], counts: dict[str, int])
     lines = ["# V8 Low-PCode Batch", "", "## Summary", ""]
     for verdict, count in sorted(counts.items()):
         lines.append(f"- {verdict}: {count}")
-    lines.extend(["", "## Cases", "", "| verdict | arch | case | function | actual | expected | report |", "|---|---|---|---|---|---|---|"])
+    lines.extend([
+        "",
+        "## Cases",
+        "",
+        "| verdict | arch | case | function | actual | control | expected | expected control | report |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ])
     for result in results:
         report = os.path.relpath(result.get("report", ""), output_dir).replace(os.sep, "/") if result.get("report") else "-"
         lines.append(
-            "| {verdict} | {architecture} | {case_id} | {function} | {actual} | {expected} | {report} |".format(
+            "| {verdict} | {architecture} | {case_id} | {function} | {actual} | {control} | {expected} | {expected_control} | {report} |".format(
                 verdict=result.get("verdict"),
                 architecture=result.get("architecture") or "-",
                 case_id=result.get("case_id") or "-",
                 function=result.get("function") or "-",
                 actual=", ".join(result.get("actual_sources", [])) or "-",
+                control=", ".join(result.get("actual_control_sources", [])) or "-",
                 expected=", ".join(result.get("expected_sources", [])) or "-",
+                expected_control=", ".join(result.get("expected_control_sources", [])) or "-",
                 report=report,
             )
         )

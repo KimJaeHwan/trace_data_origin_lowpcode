@@ -40,6 +40,18 @@ class BuildState:
     expressions: dict[ValueId, dict] = field(default_factory=dict)
     recent_store: ValueId | None = None
     recent_store_text: str | None = None
+    control_values: list[ValueId] = field(default_factory=list)
+
+    def copy(self) -> "BuildState":
+        return BuildState(
+            current=dict(self.current),
+            memory=dict(self.memory),
+            versions=self.versions,
+            expressions=dict(self.expressions),
+            recent_store=self.recent_store,
+            recent_store_text=self.recent_store_text,
+            control_values=list(self.control_values),
+        )
 
 
 class DataFlowBenchBoundaryBinder:
@@ -95,8 +107,17 @@ class SliceGraphBuilder:
         )
         function_graph.cfg = CFGBuilder().build(program.instructions)
         state = BuildState()
+        addr_to_instr = {instr["address"]: instr for instr in program.instructions}
+        block_out_states: dict[str, BuildState] = {}
 
-        for instr in program.instructions:
+        for block_start in [instr["address"] for instr in program.instructions]:
+            instr = addr_to_instr[block_start]
+            predecessors = list(function_graph.cfg.predecessors(block_start))
+            if predecessors:
+                ready_states = [block_out_states[pred] for pred in predecessors if pred in block_out_states]
+                if ready_states:
+                    state = self._merge_states(function_graph, state, ready_states, instr)
+
             sink_name = self.boundary_binder.is_sink_call(instr)
             if sink_name:
                 self._bind_sink(function_graph, state, instr, sink_name)
@@ -111,7 +132,61 @@ class SliceGraphBuilder:
             if source_name:
                 self._bind_source(function_graph, state, instr, source_name)
 
+            block_out_states[block_start] = state.copy()
+
         return function_graph
+
+    def _merge_states(
+        self,
+        fg: FunctionGraph,
+        fallback_state: BuildState,
+        predecessor_states: list[BuildState],
+        instr: dict,
+    ) -> BuildState:
+        if len(predecessor_states) == 1:
+            return predecessor_states[0].copy()
+
+        merged = predecessor_states[0].copy()
+        merged.current = dict(merged.current)
+        merged.memory = dict(merged.memory)
+        merged.expressions = dict(merged.expressions)
+        for bucket_name in ("current", "memory"):
+            keys = set()
+            for pred_state in predecessor_states:
+                keys.update(getattr(pred_state, bucket_name).keys())
+            bucket = getattr(merged, bucket_name)
+            for key in keys:
+                values = []
+                for pred_state in predecessor_states:
+                    value = getattr(pred_state, bucket_name).get(key)
+                    if value is not None and value not in values:
+                        values.append(value)
+                if not values:
+                    continue
+                if len(values) == 1:
+                    bucket[key] = values[0]
+                    continue
+                space, storage_key = key.split(":", 1)
+                phi_node = self._new_synthetic_value(fg, merged, space, storage_key, instr, "PHI")
+                fg.slice_graph.nodes[phi_node]["kind"] = "phi"
+                fg.slice_graph.nodes[phi_node]["merge_count"] = len(values)
+                for value in values:
+                    fg.slice_graph.add_edge(value, phi_node, kind="data", opcode="PHI")
+                for pred_state in predecessor_states:
+                    for control_value in pred_state.control_values:
+                        fg.slice_graph.add_edge(
+                            control_value,
+                            phi_node,
+                            kind="control",
+                            opcode="PHI_CONTROL",
+                            condition_kind="branch_condition",
+                        )
+                bucket[key] = phi_node
+                merged.expressions[phi_node] = {"kind": "value"}
+        merged.recent_store = None
+        merged.recent_store_text = None
+        merged.control_values = []
+        return merged
 
     def _process_pcode(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         opcode = pcode.get("opcode")
@@ -120,6 +195,9 @@ class SliceGraphBuilder:
             return
         if opcode == "LOAD":
             self._process_load(fg, state, instr, pcode)
+            return
+        if opcode == "CBRANCH":
+            self._process_branch(fg, state, instr, pcode)
             return
 
         inputs = [self._value_for_input(fg, state, inp, instr, pcode) for inp in pcode.get("inputs", [])]
@@ -161,6 +239,14 @@ class SliceGraphBuilder:
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
+
+    def _process_branch(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        if len(inputs) < 2:
+            return
+        condition = self._value_for_input(fg, state, inputs[1], instr, pcode)
+        if condition is not None and condition not in state.control_values:
+            state.control_values.append(condition)
 
     def _value_for_input(
         self,

@@ -10,18 +10,20 @@ from core.value_id import ValueId
 @dataclass
 class SliceResult:
     target: ValueId
+    mode: str = "data"
     visited: set[ValueId] = field(default_factory=set)
     edges: list[tuple[ValueId, ValueId, str]] = field(default_factory=list)
     source_labels: set[str] = field(default_factory=set)
 
 
 class BackwardSliceQuery:
-    def __init__(self, function_graph: FunctionGraph, edge_policy: set[str] | None = None):
+    def __init__(self, function_graph: FunctionGraph, edge_policy: set[str] | None = None, mode: str = "data"):
         self.function_graph = function_graph
         self.edge_policy = edge_policy or DATA_SLICE_EDGES
+        self.mode = mode
 
     def run(self, target: ValueId) -> SliceResult:
-        result = SliceResult(target=target)
+        result = SliceResult(target=target, mode=self.mode)
         stack = [target]
         graph = self.function_graph.slice_graph
         while stack:

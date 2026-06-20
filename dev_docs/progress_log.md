@@ -15,14 +15,16 @@ in the phase-specific files.
 - Started Phase 2 call boundary skeleton.
 - Added CALLSITE, CALL_PRE_* candidates, and safe-lazy CALL_POST_REG candidates.
 - Confirmed Phase 2 smoke keeps DFB001/DFB002 at PASS 12.
+- Implemented Phase 3 minimal branch PHI merge and control edges.
+- Verified DFB010 and DFB014 with separated data/control sources.
 
 ## Current Focus
 
-Phase 2: Convention-free Call Boundary Skeleton.
+Phase 4: Memory + Architecture Expansion.
 
 Next engineering step:
 
 ```text
-Introduce CALLSITE / CALL_PRE_* / CALL_POST_* synthetic storage without stale
-post-call dependencies.
+Lift stack/global/heap storage toward the MemoryObject model while preserving
+the current DFB001/002/010/014 regression gates.
 ```

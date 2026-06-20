@@ -11,7 +11,7 @@ class TextReport:
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         lines = [
-            f"# V8 Phase 1 Report: {function_graph.function_name}",
+            f"# V8 Low-PCode Report: {function_graph.function_name}",
             "",
             f"architecture: {function_graph.architecture.name}",
             f"verdict: {validation.get('verdict')}",
@@ -21,12 +21,14 @@ class TextReport:
             "",
             "actual: " + (", ".join(validation.get("actual_sources", [])) or "-"),
             "expected: " + (", ".join(validation.get("expected_sources", [])) or "-"),
+            "actual_control: " + (", ".join(validation.get("actual_control_sources", [])) or "-"),
+            "expected_control: " + (", ".join(validation.get("expected_control_sources", [])) or "-"),
             "",
             "## Slice Edges",
             "",
         ]
         for result in slices:
-            lines.append(f"target: {result.target}")
+            lines.append(f"target ({result.mode}): {result.target}")
             for source, target, kind in result.edges:
                 lines.append(f"  [{kind}] {source} -> {target}")
             if not result.edges:

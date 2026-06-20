@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from analysis.call_boundary_mapper import CallBoundaryMapper, CallContext
 from analysis.call_resolver import CallResolver
 from analysis.cfg_builder import CFGBuilder
+from analysis.memory_model import MemoryModel
 from core.graph import FunctionGraph
 from core.value_id import ValueId
 from frontend.low_pcode_loader import LowPcodeProgram
@@ -98,6 +99,7 @@ class SliceGraphBuilder:
         self.boundary_binder = boundary_binder or DataFlowBenchBoundaryBinder()
         self.call_resolver = CallResolver()
         self.call_boundary_mapper = CallBoundaryMapper()
+        self.memory_model = MemoryModel()
 
     def build(self, program: LowPcodeProgram) -> FunctionGraph:
         function_graph = FunctionGraph(
@@ -221,6 +223,7 @@ class SliceGraphBuilder:
         mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "STORE_VAL")
         if value_node is not None:
             fg.slice_graph.add_edge(value_node, mem_node, kind="memory", opcode="STORE")
+            state.expressions[mem_node] = dict(state.expressions.get(value_node) or {"kind": "value"})
         state.memory[mem_key] = mem_node
         if not self._is_call_instruction(instr):
             state.recent_store = mem_node
@@ -237,8 +240,10 @@ class SliceGraphBuilder:
         mem_node = state.memory.get(mem_key)
         if mem_node is not None:
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
+            state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
+            state.expressions[out_node] = {"kind": "value"}
 
     def _process_branch(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -399,8 +404,36 @@ class SliceGraphBuilder:
             fg.call_post_storage_index[post_key] = post_node
             state.current[observed.storage_key] = post_node
 
+        allocator_expr = self._allocator_expression(resolved.name, callsite_key, state)
+        if allocator_expr:
+            for storage_key in self._source_observed_storage_keys(fg):
+                post_node = state.current.get(storage_key)
+                if post_node is None:
+                    continue
+                state.expressions[post_node] = dict(allocator_expr)
+                fg.slice_graph.nodes[post_node]["points_to"] = self._heap_expression_key(allocator_expr)
+
         state.recent_store = None
         state.recent_store_text = None
+
+    def _allocator_expression(self, target_name: str | None, callsite_key: str, state: BuildState) -> dict | None:
+        if target_name in {"malloc", "calloc"}:
+            return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
+        if target_name == "realloc":
+            previous = state.expressions.get(state.recent_store) if state.recent_store is not None else None
+            if previous and previous.get("kind") == "heap_ptr":
+                preserved = dict(previous)
+                preserved["offset"] = 0
+                return preserved
+            return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
+        return None
+
+    def _heap_expression_key(self, expr: dict, size: int | None = None) -> str:
+        return self.memory_model.heap_key(
+            allocation_site=str(expr.get("allocsite") or "unknown_allocsite"),
+            offset=int(expr.get("offset") or 0),
+            size=size,
+        )
 
     def _storage_key(self, fg: FunctionGraph, varnode: dict) -> str | None:
         if varnode.get("is_register"):
@@ -430,9 +463,14 @@ class SliceGraphBuilder:
             return dict(exprs[0])
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
+            heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
             const_expr = next((expr for expr in exprs if expr and expr.get("kind") == "const"), None)
             if stack_expr and const_expr:
                 merged = dict(stack_expr)
+                merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
+                return merged
+            if heap_expr and const_expr:
+                merged = dict(heap_expr)
                 merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
                 return merged
         if opcode == "INT_SUB" and len(exprs) >= 2:
@@ -470,16 +508,18 @@ class SliceGraphBuilder:
         if expr and expr.get("kind") == "stack":
             offset = int(expr.get("offset") or 0)
             base = expr.get("base") or "STACK"
-            return f"{fg.function_name}:root:stack:{base}:{offset}:{size or '*'}"
+            return self.memory_model.stack_key(fg.function_name, fg.context_id, base, offset, size)
+        if expr and expr.get("kind") == "heap_ptr":
+            return self._heap_expression_key(expr, size)
         if addr_varnode.get("is_register"):
             base_expr = self._base_expression(fg, addr_varnode)
             if base_expr.get("kind") == "stack":
                 base = base_expr.get("base") or "STACK"
                 offset = int(base_expr.get("offset") or 0)
-                return f"{fg.function_name}:root:stack:{base}:{offset}:{size or '*'}"
+                return self.memory_model.stack_key(fg.function_name, fg.context_id, base, offset, size)
         if addr_varnode.get("is_address"):
-            return f"global:{addr_varnode.get('address') or addr_varnode.get('offset')}:{size or '*'}"
-        return f"unknown:{addr_varnode.get('address') or addr_varnode.get('offset')}:{size or '*'}"
+            return self.memory_model.global_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
+        return self.memory_model.unknown_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
 
     def _display_for(
         self,

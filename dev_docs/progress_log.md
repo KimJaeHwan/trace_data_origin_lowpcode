@@ -17,14 +17,18 @@ in the phase-specific files.
 - Confirmed Phase 2 smoke keeps DFB001/DFB002 at PASS 12.
 - Implemented Phase 3 minimal branch PHI merge and control edges.
 - Verified DFB010 and DFB014 with separated data/control sources.
+- Started Phase 4 memory model expansion.
+- Added MemoryObject skeletons and allocation-site heap tracking.
+- Verified DFB030 and DFB031 heap cases as PASS.
+- Left DFB026 as an explicit Phase 5 interprocedural global-reader gate.
 
 ## Current Focus
 
-Phase 4: Memory + Architecture Expansion.
+Phase 5: Interprocedural Skeleton + Bottom-up Auto Summary.
 
 Next engineering step:
 
 ```text
-Lift stack/global/heap storage toward the MemoryObject model while preserving
-the current DFB001/002/010/014 regression gates.
+Build direct-call connectivity and minimal auto summaries so DFB026-style
+interprocedural storage flows do not stop at call boundaries.
 ```

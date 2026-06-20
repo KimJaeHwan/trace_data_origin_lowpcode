@@ -57,8 +57,8 @@ test oracle.
 | 1 | Walking Skeleton | DFB001 / DFB002 PASS | Complete |
 | 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | In progress |
 | 3 | Control Dependency | DFB010 PASS with data/control split | Complete |
-| 4 | Memory + Architecture Expansion | global/heap skeleton and architecture storage expansion | In progress |
-| 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | Next |
+| 4 | Memory + Architecture Expansion | global/heap skeleton and architecture storage expansion | Complete |
+| 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | In progress: DFB026 all-arch PASS |
 | 6 | Summary Refinement / Libc / Cache | composite providers and reusable summary cache | Not started |
 | 7 | Symbol / PDB Overlay | optional overlay, core graph unchanged | Deferred |
 | 8 | Dynamic / Agent Overlay | optional runtime overlay, core graph unchanged | Deferred |

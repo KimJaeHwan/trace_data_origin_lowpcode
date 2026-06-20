@@ -85,6 +85,12 @@ class ArchitectureSpec:
             aliases = {
                 (0x4000, 8): RegisterAlias("x0", "x0", 0, 64),
                 (0x4000, 4): RegisterAlias("w0", "x0", 0, 32),
+                (0x4008, 8): RegisterAlias("x1", "x1", 0, 64),
+                (0x4008, 4): RegisterAlias("w1", "x1", 0, 32),
+                (0x4010, 8): RegisterAlias("x2", "x2", 0, 64),
+                (0x4010, 4): RegisterAlias("w2", "x2", 0, 32),
+                (0x4018, 8): RegisterAlias("x3", "x3", 0, 64),
+                (0x4018, 4): RegisterAlias("w3", "x3", 0, 32),
                 (0x8, 8): RegisterAlias("sp", "sp", 0, 64),
                 (0x40E8, 8): RegisterAlias("x29", "x29", 0, 64),
                 (0x40F0, 8): RegisterAlias("x30", "x30", 0, 64),

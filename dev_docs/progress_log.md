@@ -21,6 +21,11 @@ in the phase-specific files.
 - Added MemoryObject skeletons and allocation-site heap tracking.
 - Verified DFB030 and DFB031 heap cases as PASS.
 - Left DFB026 as an explicit Phase 5 interprocedural global-reader gate.
+- Started Phase 5 interprocedural summary skeleton.
+- Added program-level graph composition and minimal automatic global summaries.
+- Verified DFB026 across all six architecture/platform sample roots.
+- Backfilled Phase 4 global/heap validation across all six roots: DFB024/025/026/027/030/031 PASS 36.
+- Recorded residual non-gate control precision work for x64/aarch64 DFB010/014 variants.
 
 ## Current Focus
 
@@ -29,6 +34,6 @@ Phase 5: Interprocedural Skeleton + Bottom-up Auto Summary.
 Next engineering step:
 
 ```text
-Build direct-call connectivity and minimal auto summaries so DFB026-style
-interprocedural storage flows do not stop at call boundaries.
+Expand observed-storage summaries beyond global read/write while preserving
+the convention-free core model.
 ```

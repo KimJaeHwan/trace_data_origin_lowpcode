@@ -42,6 +42,17 @@ class CallBoundaryMapper:
             observed.append(ObservedStorage(storage_key=storage_key, confidence="candidate"))
         return observed
 
+    def primary_value_storage_keys(self, architecture: ArchitectureSpec) -> list[str]:
+        if architecture.name == "x86":
+            return ["reg:EAX:0:32"]
+        if architecture.name == "x86_64":
+            return ["reg:RAX:0:64", "reg:RAX:0:32"]
+        if architecture.name == "aarch64":
+            return ["reg:x0:0:64", "reg:x0:0:32"]
+        if architecture.name == "armv7":
+            return ["reg:r0:0:32"]
+        return []
+
     def general_register_storage_keys(self, architecture: ArchitectureSpec) -> list[str]:
         keys = set()
         for alias in architecture.register_aliases.values():

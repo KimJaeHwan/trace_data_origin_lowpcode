@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from analysis.slice_graph_builder import SliceGraphBuilder
+from analysis.interprocedural_summary import ProgramSliceGraphBuilder
 from core.edge import DATA_CONTROL_SLICE_EDGES
 from frontend.low_pcode_loader import LowPcodeLoader
 from query.backward_slice import BackwardSliceQuery
@@ -40,9 +40,15 @@ def case_output_dir(json_path: Path, input_root: Path, output_dir: Path) -> Path
     return output_dir / relative_parent / result_name_for(json_path)
 
 
-def run_one(json_path: Path, input_root: Path, output_dir: Path, expected_path: Path) -> dict:
+def run_one(
+    json_path: Path,
+    input_root: Path,
+    output_dir: Path,
+    expected_path: Path,
+    program_builder: ProgramSliceGraphBuilder,
+) -> dict:
     program = LowPcodeLoader().load(json_path)
-    function_graph = SliceGraphBuilder().build(program)
+    function_graph = program_builder.build_for_target(json_path)
     query = BackwardSliceQuery(function_graph)
 
     slices = []
@@ -149,9 +155,10 @@ def main() -> int:
     case_filter = set(args.cases) if args.cases else None
 
     results = []
+    program_builder = ProgramSliceGraphBuilder()
     for json_path in iter_json_inputs(input_dir, case_filter):
         try:
-            result = run_one(json_path, input_dir, output_dir, expected_path)
+            result = run_one(json_path, input_dir, output_dir, expected_path, program_builder)
             print("[{verdict}] {architecture} {function}".format(**result))
         except Exception as exc:
             result = {

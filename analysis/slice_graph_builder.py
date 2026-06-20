@@ -72,19 +72,47 @@ class DataFlowBenchBoundaryBinder:
         return f"{name}.ret"
 
     def choose_sink_target(self, function_graph: FunctionGraph, state: BuildState) -> ValueId | None:
-        if state.recent_store is not None:
+        if (
+            function_graph.architecture.name == "x86"
+            and state.recent_store is not None
+            and state.recent_store_text
+            and ":stack:" in state.recent_store_text
+        ):
             return state.recent_store
         arch = function_graph.architecture.name
         candidates = {
-            "x86_64": ["RCX:0:32", "RDI:0:32", "RAX:0:32"],
-            "aarch64": ["x0:0:32", "x0:0:64"],
+            "x86_64": ["RCX:0:32", "RCX:0:64", "RDI:0:32", "RDI:0:64", "RAX:0:32", "RAX:0:64"],
+            "aarch64": ["x0:0:64", "x0:0:32"],
             "armv7": ["r0:0:32"],
             "x86": ["EAX:0:32"],
         }.get(arch, [])
+        callpost_fallback = None
         for key in candidates:
             node = state.current.get(f"reg:{key}")
-            if node is not None:
-                return node
+            if node is None:
+                continue
+            attrs = function_graph.slice_graph.nodes.get(node, {})
+            if attrs.get("kind") == "call_post_storage":
+                callpost_fallback = callpost_fallback or node
+                continue
+            return node
+        if callpost_fallback is not None:
+            return callpost_fallback
+        observed = []
+        for key, node in state.current.items():
+            if not key.startswith("reg:"):
+                continue
+            canonical = key.split(":", 2)[1]
+            if canonical not in function_graph.architecture.general_registers:
+                continue
+            if canonical in function_graph.architecture.stack_pointer_regs | function_graph.architecture.frame_pointer_regs | function_graph.architecture.link_registers:
+                continue
+            attrs = function_graph.slice_graph.nodes.get(node, {})
+            if attrs.get("kind") == "call_post_storage":
+                continue
+            observed.append(node)
+        if observed:
+            return max(observed, key=lambda node: node.version or 0)
         return None
 
     def _primary_target(self, instr: dict) -> str | None:
@@ -114,7 +142,7 @@ class SliceGraphBuilder:
 
         for block_start in [instr["address"] for instr in program.instructions]:
             instr = addr_to_instr[block_start]
-            predecessors = list(function_graph.cfg.predecessors(block_start))
+            predecessors = list(function_graph.cfg.predecessors(block_start)) if function_graph.cfg.has_node(block_start) else []
             if predecessors:
                 ready_states = [block_out_states[pred] for pred in predecessors if pred in block_out_states]
                 if ready_states:
@@ -201,6 +229,9 @@ class SliceGraphBuilder:
         if opcode == "CBRANCH":
             self._process_branch(fg, state, instr, pcode)
             return
+        if opcode == "COPY" and self._is_address_copy(pcode):
+            self._process_address_copy(fg, state, instr, pcode)
+            return
 
         inputs = [self._value_for_input(fg, state, inp, instr, pcode) for inp in pcode.get("inputs", [])]
         output = pcode.get("output")
@@ -220,6 +251,7 @@ class SliceGraphBuilder:
         addr_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
         value_node = self._value_for_input(fg, state, inputs[2], instr, pcode)
         mem_key = self._memory_key_for(fg, state, addr_node, inputs[1], inputs[2].get("size"))
+        mem_key = self._data_ref_memory_key(instr, "write", inputs[2].get("size")) or mem_key
         mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "STORE_VAL")
         if value_node is not None:
             fg.slice_graph.add_edge(value_node, mem_node, kind="memory", opcode="STORE")
@@ -237,10 +269,19 @@ class SliceGraphBuilder:
         addr_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
         out_node = self._new_value(fg, state, output, instr, "LOAD")
         mem_key = self._memory_key_for(fg, state, addr_node, inputs[1], output.get("size"))
+        mem_key = self._data_ref_memory_key(instr, "read", output.get("size")) or mem_key
         mem_node = state.memory.get(mem_key)
         if mem_node is not None:
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
             state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
+        elif self._is_program_memory_key(mem_key):
+            mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
+            fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
+            fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
+            state.memory[mem_key] = mem_node
+            state.expressions[mem_node] = {"kind": "value"}
+            fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
+            state.expressions[out_node] = {"kind": "value"}
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
             state.expressions[out_node] = {"kind": "value"}
@@ -252,6 +293,53 @@ class SliceGraphBuilder:
         condition = self._value_for_input(fg, state, inputs[1], instr, pcode)
         if condition is not None and condition not in state.control_values:
             state.control_values.append(condition)
+
+    def _process_address_copy(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        if not inputs or output is None:
+            return
+
+        source_varnode = inputs[0]
+        source_node = self._memory_read_value(fg, state, source_varnode, instr) if source_varnode.get("is_address") else None
+
+        if output.get("is_address"):
+            value_node = source_node or self._value_for_input(fg, state, source_varnode, instr, pcode)
+            mem_key = self._memory_key_for(fg, state, None, output, output.get("size"))
+            mem_key = self._data_ref_memory_key(instr, "write", output.get("size")) or mem_key
+            mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "STORE_VAL")
+            fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
+            if value_node is not None:
+                fg.slice_graph.add_edge(value_node, mem_node, kind="memory", opcode="COPY_GLOBAL_STORE")
+                state.expressions[mem_node] = dict(state.expressions.get(value_node) or {"kind": "value"})
+            state.memory[mem_key] = mem_node
+            if not self._is_call_instruction(instr):
+                state.recent_store = mem_node
+                state.recent_store_text = mem_key
+            return
+
+        out_node = self._new_value(fg, state, output, instr, "COPY")
+        if source_node is not None:
+            fg.slice_graph.add_edge(source_node, out_node, kind="memory", opcode="COPY_GLOBAL_LOAD")
+            state.expressions[out_node] = dict(state.expressions.get(source_node) or {"kind": "value"})
+
+    def _memory_read_value(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        addr_varnode: dict,
+        instr: dict,
+    ) -> ValueId:
+        mem_key = self._memory_key_for(fg, state, None, addr_varnode, addr_varnode.get("size"))
+        mem_key = self._data_ref_memory_key(instr, "read", addr_varnode.get("size")) or mem_key
+        mem_node = state.memory.get(mem_key)
+        if mem_node is None:
+            mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
+            fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
+            fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
+            state.memory[mem_key] = mem_node
+            state.expressions[mem_node] = {"kind": "value"}
+        return mem_node
 
     def _value_for_input(
         self,
@@ -282,10 +370,31 @@ class SliceGraphBuilder:
         key = self._storage_key(fg, varnode)
         if key is None:
             return None
-        current = state.current.get(key)
+        current = self._current_value_for_storage(state, key)
         if current is None:
             current = self._new_synthetic_value(fg, state, *key.split(":", 1), instr, "OBSERVED_INPUT")
             state.expressions[current] = self._base_expression(fg, varnode)
+        return current
+
+    def _current_value_for_storage(self, state: BuildState, key: str) -> ValueId | None:
+        current = state.current.get(key)
+        if current is not None and current.space != "call_post_reg":
+            return current
+        if not key.startswith("reg:"):
+            return current
+        parts = key.split(":")
+        if len(parts) < 4:
+            return current
+        canonical = parts[1]
+        for candidate_key, candidate in state.current.items():
+            candidate_parts = candidate_key.split(":")
+            if (
+                len(candidate_parts) >= 4
+                and candidate_parts[0] == "reg"
+                and candidate_parts[1] == canonical
+                and candidate.space != "call_post_reg"
+            ):
+                return candidate
         return current
 
     def _new_value(self, fg: FunctionGraph, state: BuildState, varnode: dict, instr: dict, opcode: str) -> ValueId:
@@ -343,15 +452,7 @@ class SliceGraphBuilder:
             fg.warnings.append(f"sink_without_observed_storage:{instr.get('address')}:{name}")
 
     def _source_observed_storage_keys(self, fg: FunctionGraph) -> list[str]:
-        if fg.architecture.name == "x86":
-            return ["reg:EAX:0:32"]
-        if fg.architecture.name == "x86_64":
-            return ["reg:RAX:0:64", "reg:RAX:0:32"]
-        if fg.architecture.name == "aarch64":
-            return ["reg:x0:0:64", "reg:x0:0:32"]
-        if fg.architecture.name == "armv7":
-            return ["reg:r0:0:32"]
-        return []
+        return self.call_boundary_mapper.primary_value_storage_keys(fg.architecture)
 
     def _materialize_call_boundary(self, fg: FunctionGraph, state: BuildState, instr: dict) -> None:
         resolved = self.call_resolver.resolve(instr)
@@ -413,6 +514,13 @@ class SliceGraphBuilder:
                 state.expressions[post_node] = dict(allocator_expr)
                 fg.slice_graph.nodes[post_node]["points_to"] = self._heap_expression_key(allocator_expr)
 
+        thunk_expr = self._pc_thunk_expression(resolved.name, instr)
+        if thunk_expr:
+            storage_key = thunk_expr.pop("storage_key")
+            post_node = state.current.get(storage_key)
+            if post_node is not None:
+                state.expressions[post_node] = thunk_expr
+
         state.recent_store = None
         state.recent_store_text = None
 
@@ -425,8 +533,24 @@ class SliceGraphBuilder:
                 preserved = dict(previous)
                 preserved["offset"] = 0
                 return preserved
+            for value_node in state.current.values():
+                observed = state.expressions.get(value_node)
+                if observed and observed.get("kind") == "heap_ptr":
+                    preserved = dict(observed)
+                    preserved["offset"] = 0
+                    return preserved
             return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
         return None
+
+    def _pc_thunk_expression(self, target_name: str | None, instr: dict) -> dict | None:
+        if not target_name or not target_name.startswith("__x86.get_pc_thunk."):
+            return None
+        suffix = target_name.rsplit(".", 1)[-1].upper()
+        register_name = f"E{suffix}" if len(suffix) == 2 else suffix
+        fallthrough = parse_int(instr.get("fallthrough"))
+        if fallthrough is None:
+            return None
+        return {"kind": "const", "value": fallthrough, "storage_key": f"reg:{register_name}:0:32"}
 
     def _heap_expression_key(self, expr: dict, size: int | None = None) -> str:
         return self.memory_model.heap_key(
@@ -464,7 +588,8 @@ class SliceGraphBuilder:
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
-            const_expr = next((expr for expr in exprs if expr and expr.get("kind") == "const"), None)
+            const_exprs = [expr for expr in exprs if expr and expr.get("kind") == "const"]
+            const_expr = const_exprs[0] if const_exprs else None
             if stack_expr and const_expr:
                 merged = dict(stack_expr)
                 merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
@@ -473,6 +598,8 @@ class SliceGraphBuilder:
                 merged = dict(heap_expr)
                 merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
                 return merged
+            if len(const_exprs) >= 2:
+                return {"kind": "const", "value": sum(int(expr.get("value") or 0) for expr in const_exprs[:2])}
         if opcode == "INT_SUB" and len(exprs) >= 2:
             left, right = exprs[0], exprs[1]
             if left and left.get("kind") == "stack" and right and right.get("kind") == "const":
@@ -511,6 +638,8 @@ class SliceGraphBuilder:
             return self.memory_model.stack_key(fg.function_name, fg.context_id, base, offset, size)
         if expr and expr.get("kind") == "heap_ptr":
             return self._heap_expression_key(expr, size)
+        if expr and expr.get("kind") == "const":
+            return self.memory_model.global_key(f"{int(expr.get('value') or 0):x}", size)
         if addr_varnode.get("is_register"):
             base_expr = self._base_expression(fg, addr_varnode)
             if base_expr.get("kind") == "stack":
@@ -520,6 +649,23 @@ class SliceGraphBuilder:
         if addr_varnode.get("is_address"):
             return self.memory_model.global_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
         return self.memory_model.unknown_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
+
+    def _data_ref_memory_key(self, instr: dict, access: str, size: int | None) -> str | None:
+        for ref in instr.get("refs_from", []):
+            if not ref.get("is_data"):
+                continue
+            if access == "write" and not ref.get("is_write"):
+                continue
+            if access == "read" and not ref.get("is_read"):
+                continue
+            target = str(ref.get("to") or "")
+            if not target or target.startswith("Stack"):
+                continue
+            return self.memory_model.global_key(target, size)
+        return None
+
+    def _is_program_memory_key(self, mem_key: str) -> bool:
+        return mem_key.startswith("global:") or mem_key.startswith("unknown:unique:")
 
     def _display_for(
         self,
@@ -535,3 +681,12 @@ class SliceGraphBuilder:
     def _is_call_instruction(self, instr: dict) -> bool:
         mnemonic = (instr.get("mnemonic") or "").upper()
         return bool(instr.get("call_targets")) or mnemonic in {"CALL", "BL"}
+
+    def _is_address_copy(self, pcode: dict) -> bool:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        return bool(
+            output
+            and inputs
+            and (output.get("is_address") or inputs[0].get("is_address"))
+        )

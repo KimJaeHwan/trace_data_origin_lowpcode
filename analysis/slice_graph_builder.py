@@ -25,6 +25,8 @@ def parse_signed(value, size_bytes: int | None = None) -> int | None:
     parsed = parse_int(value)
     if parsed is None:
         return None
+    if parsed < 0:
+        return parsed
     bits = (size_bytes or 4) * 8
     sign_bit = 1 << (bits - 1)
     mask = 1 << bits
@@ -103,9 +105,7 @@ class DataFlowBenchBoundaryBinder:
             if not key.startswith("reg:"):
                 continue
             canonical = key.split(":", 2)[1]
-            if canonical not in function_graph.architecture.general_registers:
-                continue
-            if canonical in function_graph.architecture.stack_pointer_regs | function_graph.architecture.frame_pointer_regs | function_graph.architecture.link_registers:
+            if not function_graph.architecture.is_general_register(canonical):
                 continue
             attrs = function_graph.slice_graph.nodes.get(node, {})
             if attrs.get("kind") == "call_post_storage":
@@ -280,6 +280,8 @@ class SliceGraphBuilder:
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
             fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
             fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
+            if addr_node is not None:
+                fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             state.memory[mem_key] = mem_node
             state.expressions[mem_node] = {"kind": "value"}
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
@@ -376,6 +378,11 @@ class SliceGraphBuilder:
         if current is None:
             current = self._new_synthetic_value(fg, state, *key.split(":", 1), instr, "OBSERVED_INPUT")
             state.expressions[current] = self._base_expression(fg, varnode)
+            if self._is_callee_entry_observed_storage(fg, key):
+                fg.slice_graph.nodes[current]["kind"] = "callee_entry_observed_storage"
+                fg.slice_graph.nodes[current]["observed_storage"] = key
+                fg.slice_graph.nodes[current]["confidence"] = "use_before_def"
+                fg.callee_entry_observed_index.setdefault(key, current)
         return current
 
     def _current_value_for_storage(self, state: BuildState, key: str) -> ValueId | None:
@@ -436,6 +443,7 @@ class SliceGraphBuilder:
         source_node = self._new_synthetic_value(fg, state, "boundary", label, instr, "SOURCE_BOUNDARY_VALUE")
         fg.slice_graph.nodes[source_node]["kind"] = "source_boundary"
         fg.slice_graph.nodes[source_node]["source_label"] = label
+        fg.slice_graph.nodes[source_node]["observed_storages"] = list(self._source_observed_storage_keys(fg))
         fg.source_index[label] = source_node
 
         for key in self._source_observed_storage_keys(fg):
@@ -456,6 +464,14 @@ class SliceGraphBuilder:
     def _source_observed_storage_keys(self, fg: FunctionGraph) -> list[str]:
         return self.call_boundary_mapper.primary_value_storage_keys(fg.architecture)
 
+    def _is_callee_entry_observed_storage(self, fg: FunctionGraph, storage_key: str) -> bool:
+        if storage_key.startswith("reg:"):
+            canonical = storage_key.split(":", 2)[1]
+            return fg.architecture.is_general_register(canonical)
+        if storage_key.startswith("mem:"):
+            return ":stack:" in storage_key or storage_key.startswith("mem:global:")
+        return False
+
     def _materialize_call_boundary(self, fg: FunctionGraph, state: BuildState, instr: dict) -> None:
         resolved = self.call_resolver.resolve(instr)
         callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
@@ -473,7 +489,10 @@ class SliceGraphBuilder:
             callee_context=None,
             continuation_storage=None,
             target_confidence=resolved.confidence,
-            pre_call_observed_storages=self.call_boundary_mapper.collect_pre_call_observed_storages(state.current),
+            pre_call_observed_storages=self.call_boundary_mapper.collect_pre_call_observed_storages(
+                state.current,
+                fg.architecture,
+            ),
             post_call_observed_storages=self.call_boundary_mapper.collect_post_call_observed_storages(fg.architecture),
         )
 
@@ -490,17 +509,9 @@ class SliceGraphBuilder:
                 if expression:
                     fg.slice_graph.nodes[pre_node]["expression"] = dict(expression)
 
-        if state.recent_store is not None and state.recent_store_text is not None:
-            pre_kind = "CALL_PRE_STACK" if ":stack:" in state.recent_store_text else "CALL_PRE_MEM"
-            pre_space = "call_pre_stack" if pre_kind == "CALL_PRE_STACK" else "call_pre_mem"
-            pre_key = f"{callsite_key}:pre:mem:{state.recent_store_text}"
-            pre_node = self._new_synthetic_value(fg, state, pre_space, pre_key, instr, pre_kind)
-            fg.slice_graph.nodes[pre_node]["kind"] = "call_pre_storage"
-            fg.slice_graph.nodes[pre_node]["observed_storage"] = state.recent_store_text
-            fg.slice_graph.nodes[pre_node]["confidence"] = "candidate"
-            fg.call_pre_storage_index[pre_key] = pre_node
-            fg.slice_graph.add_edge(state.recent_store, pre_node, kind="data", opcode=pre_kind)
+        self._materialize_pre_call_memory(fg, state, instr, callsite_key)
 
+        primary_post_storages = set(self._source_observed_storage_keys(fg))
         for observed in context.post_call_observed_storages:
             post_key = f"{callsite_key}:post:{observed.storage_key}"
             post_node = self._new_synthetic_value(fg, state, "call_post_reg", post_key, instr, "CALL_POST_REG")
@@ -508,7 +519,11 @@ class SliceGraphBuilder:
             fg.slice_graph.nodes[post_node]["observed_storage"] = observed.storage_key
             fg.slice_graph.nodes[post_node]["confidence"] = observed.confidence
             fg.call_post_storage_index[post_key] = post_node
-            state.current[observed.storage_key] = post_node
+            current_node = state.current.get(observed.storage_key)
+            current_expr = state.expressions.get(current_node) if current_node is not None else None
+            preserve_current = current_expr and current_expr.get("kind") in {"stack", "heap_ptr", "const"}
+            if observed.storage_key in primary_post_storages or not preserve_current:
+                state.current[observed.storage_key] = post_node
 
         allocator_expr = self._allocator_expression(resolved.name, callsite_key, state)
         if allocator_expr:
@@ -528,6 +543,37 @@ class SliceGraphBuilder:
 
         state.recent_store = None
         state.recent_store_text = None
+
+    def _materialize_pre_call_memory(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+        callsite_key: str,
+    ) -> None:
+        candidates: dict[str, ValueId] = {
+            mem_key: node
+            for mem_key, node in state.memory.items()
+            if ":stack:" in mem_key
+        }
+        if state.recent_store is not None and state.recent_store_text is not None:
+            candidates.setdefault(state.recent_store_text, state.recent_store)
+
+        for mem_key, mem_node in sorted(candidates.items()):
+            pre_kind = "CALL_PRE_STACK" if ":stack:" in mem_key else "CALL_PRE_MEM"
+            pre_space = "call_pre_stack" if pre_kind == "CALL_PRE_STACK" else "call_pre_mem"
+            pre_key = f"{callsite_key}:pre:mem:{mem_key}"
+            if pre_key in fg.call_pre_storage_index:
+                continue
+            pre_node = self._new_synthetic_value(fg, state, pre_space, pre_key, instr, pre_kind)
+            fg.slice_graph.nodes[pre_node]["kind"] = "call_pre_storage"
+            fg.slice_graph.nodes[pre_node]["observed_storage"] = mem_key
+            fg.slice_graph.nodes[pre_node]["confidence"] = "candidate"
+            expression = state.expressions.get(mem_node)
+            if expression:
+                fg.slice_graph.nodes[pre_node]["expression"] = dict(expression)
+            fg.call_pre_storage_index[pre_key] = pre_node
+            fg.slice_graph.add_edge(mem_node, pre_node, kind="data", opcode=pre_kind)
 
     def _allocator_expression(self, target_name: str | None, callsite_key: str, state: BuildState) -> dict | None:
         if target_name in {"malloc", "calloc"}:

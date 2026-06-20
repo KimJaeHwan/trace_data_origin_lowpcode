@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,16 +22,37 @@ class LowPcodeProgram:
     def instructions(self) -> list[dict]:
         return list(self.data.get("instructions", []))
 
+    @property
+    def metadata_cache_key(self) -> str:
+        identity = self.data.get("metadata_identity") or {}
+        if identity.get("metadata_hash"):
+            return str(identity["metadata_hash"])
+        program = self.data.get("program") or {}
+        fallback = {
+            "schema_version": self.data.get("schema_version"),
+            "dumper": self.data.get("dumper"),
+            "language_id": program.get("language_id"),
+            "compiler_spec_id": program.get("compiler_spec_id"),
+            "default_pointer_size": program.get("default_pointer_size"),
+            "architecture": program.get("architecture"),
+        }
+        encoded = json.dumps(fallback, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
 
 class LowPcodeLoader:
     def load(self, path: str | Path, arch_preset: str | None = None) -> LowPcodeProgram:
         json_path = Path(path)
         with json_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        arch_name = arch_preset or self._infer_architecture(json_path)
-        return LowPcodeProgram(json_path, data, ArchitectureSpec.from_preset(arch_name))
+        arch_name = arch_preset or self._infer_architecture(json_path, data)
+        return LowPcodeProgram(json_path, data, ArchitectureSpec.from_metadata(arch_name, data.get("program") or {}))
 
-    def _infer_architecture(self, path: Path) -> str:
+    def _infer_architecture(self, path: Path, data: dict | None = None) -> str:
+        program = (data or {}).get("program") or {}
+        inferred = self._infer_architecture_from_program(program)
+        if inferred:
+            return inferred
         parts = {part.lower() for part in path.parts}
         if "pe_x86" in parts or "linux_386" in parts:
             return "x86"
@@ -41,3 +63,18 @@ class LowPcodeLoader:
         if "linux_arm_v7" in parts:
             return "armv7"
         return "x86"
+
+    def _infer_architecture_from_program(self, program: dict) -> str | None:
+        language_id = str(program.get("language_id") or "").lower()
+        processor = str(program.get("processor") or "").lower()
+        pointer_size = program.get("default_pointer_size")
+        if "aarch64" in language_id or "aarch64" in processor:
+            return "aarch64"
+        if language_id.startswith("arm:") or processor == "arm":
+            return "armv7"
+        if language_id.startswith("x86:") or processor == "x86":
+            if str(pointer_size) == "8" or ":64:" in language_id:
+                return "x86_64"
+            if str(pointer_size) == "4" or ":32:" in language_id:
+                return "x86"
+        return None

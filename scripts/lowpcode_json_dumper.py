@@ -8,11 +8,12 @@
 
 import json
 import os
+import hashlib
 from ghidra.util.task import TaskMonitor
 
 
-DUMPER_SCHEMA_VERSION = 2
-DUMPER_NAME = "lowpcode_json_dumper_v2_reachable_helpers"
+DUMPER_SCHEMA_VERSION = 4
+DUMPER_NAME = "lowpcode_json_dumper_v4_structured_metadata"
 REACHABLE_HELPER_MAX_DEPTH = 8
 
 
@@ -30,6 +31,13 @@ def safe_call(default_value, func, *args):
         return func(*args)
     except Exception:
         return default_value
+
+
+def safe_bool_method(obj, method_name):
+    method = safe_call(None, getattr, obj, method_name)
+    if method is None:
+        return False
+    return bool(safe_call(False, method))
 
 
 def to_hex_offset(value):
@@ -78,6 +86,94 @@ def get_varnode_info(vn, program):
         info["register_name"] = safe_str(reg.getName()) if reg else None
 
     return info
+
+
+def get_register_metadata(program):
+    registers = []
+    language = safe_call(None, program.getLanguage)
+    if language is None:
+        return registers
+
+    try:
+        register_iterable = language.getRegisters()
+        for reg in register_iterable:
+            base_register = safe_call(None, reg.getBaseRegister)
+            parent_register = safe_call(None, reg.getParentRegister)
+            child_registers = []
+            try:
+                children = reg.getChildRegisters()
+                for child in children:
+                    child_registers.append(safe_str(safe_call(None, child.getName)))
+            except Exception:
+                pass
+
+            size_bytes = safe_call(None, reg.getMinimumByteSize)
+            bit_length = safe_call(None, reg.getBitLength)
+            registers.append({
+                "name": safe_str(safe_call(None, reg.getName)),
+                "offset": to_hex_offset(safe_call(None, reg.getOffset)),
+                "size_bytes": size_bytes,
+                "bit_length": bit_length,
+                "least_significant_bit": safe_call(None, reg.getLeastSignificantBitInBaseRegister),
+                "base_register": safe_str(safe_call(None, base_register.getName)) if base_register else None,
+                "parent_register": safe_str(safe_call(None, parent_register.getName)) if parent_register else None,
+                "child_registers": child_registers,
+                "is_base_register": safe_bool_method(reg, "isBaseRegister"),
+                "is_program_counter": safe_bool_method(reg, "isProgramCounter"),
+                "is_context_register": safe_bool_method(reg, "isProcessorContext") or safe_bool_method(reg, "isContextRegister"),
+                "is_zero": safe_bool_method(reg, "isZero"),
+                "is_hidden": safe_bool_method(reg, "isHidden"),
+            })
+    except Exception as e:
+        print("[-] register metadata 추출 실패: %s" % str(e))
+    return registers
+
+
+def get_register_alias_metadata(registers):
+    aliases = []
+    for reg in registers:
+        offset = reg.get("offset")
+        size_bytes = reg.get("size_bytes")
+        name = reg.get("name")
+        if offset is None or size_bytes is None or not name:
+            continue
+        aliases.append({
+            "space": "register",
+            "offset": offset,
+            "size_bytes": size_bytes,
+            "display": name,
+            "canonical": reg.get("base_register") or name,
+            "parent_register": reg.get("parent_register"),
+            "least_significant_bit": reg.get("least_significant_bit"),
+            "bit_length": reg.get("bit_length"),
+            "source": "ghidra_language_register",
+        })
+    return aliases
+
+
+def get_address_space_metadata(program):
+    spaces = []
+    factory = safe_call(None, program.getAddressFactory)
+    if factory is None:
+        return spaces
+
+    try:
+        for space in factory.getAddressSpaces():
+            spaces.append({
+                "name": safe_str(safe_call(None, space.getName)),
+                "space_id": safe_call(None, space.getSpaceID),
+                "type": safe_str(safe_call(None, space.getType)),
+                "size": safe_call(None, space.getSize),
+                "addressable_unit_size": safe_call(None, space.getAddressableUnitSize),
+                "is_register_space": bool(safe_call(False, space.isRegisterSpace)),
+                "is_memory_space": bool(safe_call(False, space.isMemorySpace)),
+                "is_constant_space": bool(safe_call(False, space.isConstantSpace)),
+                "is_unique_space": bool(safe_call(False, space.isUniqueSpace)),
+                "is_overlay_space": bool(safe_call(False, space.isOverlaySpace)),
+            })
+    except Exception as e:
+        print("[-] address space metadata 추출 실패: %s" % str(e))
+    return spaces
 
 
 def get_address_ranges(addr_set):
@@ -184,15 +280,36 @@ def get_function_hints(func):
 def get_program_hints(program):
     language = safe_call(None, program.getLanguage)
     compiler_spec = safe_call(None, program.getCompilerSpec)
+    registers = get_register_metadata(program)
+    address_spaces = get_address_space_metadata(program)
+    language_id = safe_str(safe_call(None, language.getLanguageID)) if language else None
+    compiler_spec_id = safe_str(safe_call(None, compiler_spec.getCompilerSpecID)) if compiler_spec else None
+    processor = safe_str(safe_call(None, language.getProcessor)) if language else None
+    pointer_size = safe_call(None, program.getDefaultPointerSize)
+    endian = None
+    if language:
+        endian = "big" if bool(safe_call(False, language.isBigEndian)) else "little"
     return {
         "name": safe_str(safe_call(None, program.getName)),
         "executable_path": safe_str(safe_call(None, program.getExecutablePath)),
         "image_base": safe_str(safe_call(None, program.getImageBase)),
-        "language_id": safe_str(safe_call(None, language.getLanguageID)) if language else None,
-        "processor": safe_str(safe_call(None, language.getProcessor)) if language else None,
-        "compiler_spec_id": safe_str(safe_call(None, compiler_spec.getCompilerSpecID)) if compiler_spec else None,
-        "default_pointer_size": safe_call(None, program.getDefaultPointerSize),
+        "language_id": language_id,
+        "processor": processor,
+        "compiler_spec_id": compiler_spec_id,
+        "default_pointer_size": pointer_size,
         "memory_blocks": get_memory_block_info(program),
+        "registers": registers,
+        "address_spaces": address_spaces,
+        "architecture": {
+            "language_id": language_id,
+            "processor": processor,
+            "compiler_spec_id": compiler_spec_id,
+            "default_pointer_size": pointer_size,
+            "endian": endian,
+            "registers": registers,
+            "register_aliases": get_register_alias_metadata(registers),
+            "address_spaces": address_spaces,
+        },
     }
 
 
@@ -218,14 +335,147 @@ def get_call_target_info(addr):
         target_func = getFunctionContaining(addr)
     if not target_func:
         return {"address": safe_str(addr), "resolved": False}
+    thunked = safe_call(None, target_func.getThunkedFunction, True)
     return {
         "address": safe_str(addr),
         "resolved": True,
         "function_name": target_func.getName(),
         "entry": safe_str(target_func.getEntryPoint()),
         "is_thunk": bool(safe_call(False, target_func.isThunk)),
+        "thunk_target_name": thunked.getName() if thunked else None,
+        "thunk_target_entry": safe_str(thunked.getEntryPoint()) if thunked else None,
         "calling_convention": safe_call(None, target_func.getCallingConventionName),
     }
+
+
+def stable_hash(value):
+    try:
+        text = json.dumps(value, sort_keys=True, ensure_ascii=False)
+        if not isinstance(text, bytes):
+            text = text.encode("utf-8")
+        return hashlib.sha256(text).hexdigest()
+    except Exception:
+        return None
+
+
+def get_symbol_record(symbol):
+    if symbol is None:
+        return None
+    addr = safe_call(None, symbol.getAddress)
+    namespace = safe_call(None, symbol.getParentNamespace)
+    return {
+        "name": safe_str(safe_call(None, symbol.getName)),
+        "address": safe_str(addr),
+        "symbol_type": safe_str(safe_call(None, symbol.getSymbolType)),
+        "source": safe_str(safe_call(None, symbol.getSource)),
+        "namespace": safe_str(namespace),
+        "is_primary": safe_bool_method(symbol, "isPrimary"),
+        "is_external": safe_bool_method(symbol, "isExternal"),
+        "is_dynamic": safe_bool_method(symbol, "isDynamic"),
+    }
+
+
+def get_symbol_index(program):
+    by_address = {}
+    imports_by_address = {}
+    try:
+        symbol_table = program.getSymbolTable()
+        symbols = symbol_table.getAllSymbols(True)
+        while symbols.hasNext():
+            symbol = symbols.next()
+            record = get_symbol_record(symbol)
+            if record is None or not record.get("address"):
+                continue
+            by_address.setdefault(record["address"], []).append(record)
+            if record.get("is_external"):
+                imports_by_address.setdefault(record["address"], []).append(record)
+    except Exception as e:
+        print("[-] symbol index 추출 실패: %s" % str(e))
+    return by_address, imports_by_address
+
+
+def get_function_index(program):
+    by_entry = {}
+    thunks_by_entry = {}
+    imports_by_entry = {}
+    try:
+        fm = program.getFunctionManager()
+        funcs = fm.getFunctions(True)
+        while funcs.hasNext():
+            func = funcs.next()
+            entry = safe_str(func.getEntryPoint())
+            record = {
+                "name": func.getName(),
+                "entry": entry,
+                "body_ranges": get_address_ranges(func.getBody()),
+                "is_external": bool(safe_call(False, func.isExternal)),
+                "is_thunk": bool(safe_call(False, func.isThunk)),
+                "thunked_function": None,
+            }
+            thunked = safe_call(None, func.getThunkedFunction, True)
+            if thunked:
+                record["thunked_function"] = {
+                    "name": thunked.getName(),
+                    "entry": safe_str(thunked.getEntryPoint()),
+                }
+            if entry:
+                by_entry[entry] = record
+                if record["is_external"]:
+                    imports_by_entry[entry] = record
+                if record["is_thunk"]:
+                    thunks_by_entry[entry] = record
+    except Exception as e:
+        print("[-] function index 추출 실패: %s" % str(e))
+    return by_entry, imports_by_entry, thunks_by_entry
+
+
+def get_instruction_data_refs(instructions):
+    by_from = {}
+    for instr_data in instructions:
+        addr = instr_data.get("address")
+        refs = []
+        for ref in instr_data.get("refs_from", []):
+            if ref.get("is_data"):
+                refs.append(ref)
+        if refs and addr:
+            by_from[addr] = refs
+    return by_from
+
+
+def build_indices(program, instructions):
+    symbols_by_address, symbol_imports_by_address = get_symbol_index(program)
+    functions_by_entry, imports_by_entry, thunks_by_entry = get_function_index(program)
+    return {
+        "symbols_by_address": symbols_by_address,
+        "functions_by_entry": functions_by_entry,
+        "data_refs_by_from": get_instruction_data_refs(instructions),
+        "imports_by_address": symbol_imports_by_address,
+        "imports_by_entry": imports_by_entry,
+        "thunks_by_entry": thunks_by_entry,
+    }
+
+
+def build_metadata_identity(program_hints, indices):
+    identity = {
+        "schema_version": DUMPER_SCHEMA_VERSION,
+        "dumper": DUMPER_NAME,
+        "program_name": program_hints.get("name"),
+        "executable_path": program_hints.get("executable_path"),
+        "image_base": program_hints.get("image_base"),
+        "language_id": program_hints.get("language_id"),
+        "compiler_spec_id": program_hints.get("compiler_spec_id"),
+        "default_pointer_size": program_hints.get("default_pointer_size"),
+        "architecture_hash": stable_hash(program_hints.get("architecture")),
+        "indices_hash": stable_hash({
+            "symbols_by_address": indices.get("symbols_by_address"),
+            "functions_by_entry": indices.get("functions_by_entry"),
+            "imports_by_address": indices.get("imports_by_address"),
+            "imports_by_entry": indices.get("imports_by_entry"),
+            "thunks_by_entry": indices.get("thunks_by_entry"),
+        }),
+    }
+    identity["metadata_hash"] = stable_hash(identity)
+    return identity
 
 
 def get_instruction_bytes(instr):
@@ -371,12 +621,17 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
 
 
 def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
+    program_hints = get_program_hints(currentProgram)
+    manifest_indices = {
+        "functions_by_entry": get_function_index(currentProgram)[0],
+    }
     manifest = {
         "schema_version": DUMPER_SCHEMA_VERSION,
         "dumper": DUMPER_NAME,
         "mode": "case_DFB_with_reachable_internal_helpers",
         "max_depth": REACHABLE_HELPER_MAX_DEPTH,
-        "program": get_program_hints(currentProgram),
+        "program": program_hints,
+        "metadata_identity": build_metadata_identity(program_hints, manifest_indices),
         "roots": [function_record(func) for func in seed_funcs],
         "functions": [function_record(func) for func in funcs],
         "call_edges": edges,
@@ -401,7 +656,126 @@ def normalize_output_dir(path):
 
 
 def make_output_path(base_path, filename):
+    if not os.path.isdir(base_path):
+        os.makedirs(base_path)
     return os.path.join(base_path, filename)
+
+
+def get_domain_folder_parts(program):
+    domain_file = safe_call(None, program.getDomainFile)
+    if domain_file is None:
+        return []
+    parent = safe_call(None, domain_file.getParent)
+    pathname = safe_call(None, parent.getPathname) if parent else None
+    if not pathname:
+        return []
+    parts = []
+    for part in str(pathname).replace("\\", "/").split("/"):
+        if part and part != ".":
+            parts.append(part)
+    return parts
+
+
+def normalize_domain_folder_parts(parts):
+    if not parts:
+        return []
+    normalized = list(parts)
+    if normalized[0] == "arm64":
+        normalized[0] = "linux_arm64"
+    elif normalized[0] == "arm_v7":
+        normalized[0] = "linux_arm_v7"
+    return normalized
+
+
+def get_program_output_category(program):
+    name = safe_str(safe_call(None, program.getName)) or ""
+    base_name = os.path.splitext(name)[0]
+    if base_name.startswith("dfbench_"):
+        base_name = base_name[len("dfbench_"):]
+    for suffix in ("_arm64", "_arm_v7"):
+        if base_name.endswith(suffix):
+            base_name = base_name[:-len(suffix)]
+
+    for category in ("cpp_exceptions", "posix_runtime", "win_core", "cpp"):
+        if category in base_name:
+            return category
+    return None
+
+
+def get_script_options():
+    options = {
+        "output_root": None,
+        "output_dir": None,
+        "use_project_path": True,
+        "use_program_category": True,
+        "root_prefix": "case_DFB",
+        "max_depth": REACHABLE_HELPER_MAX_DEPTH,
+    }
+    args = []
+    try:
+        args = list(getScriptArgs())
+    except Exception:
+        args = []
+
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in ("--output-root", "-o") and index + 1 < len(args):
+            options["output_root"] = args[index + 1]
+            index += 2
+            continue
+        if arg == "--output-dir" and index + 1 < len(args):
+            options["output_dir"] = args[index + 1]
+            options["use_project_path"] = False
+            index += 2
+            continue
+        if arg == "--flat-output":
+            options["use_project_path"] = False
+            index += 1
+            continue
+        if arg == "--no-program-category":
+            options["use_program_category"] = False
+            index += 1
+            continue
+        if arg == "--root-prefix" and index + 1 < len(args):
+            options["root_prefix"] = args[index + 1]
+            index += 2
+            continue
+        if arg == "--max-depth" and index + 1 < len(args):
+            try:
+                options["max_depth"] = int(args[index + 1])
+            except Exception:
+                options["max_depth"] = REACHABLE_HELPER_MAX_DEPTH
+            index += 2
+            continue
+        if options["output_root"] is None:
+            options["output_root"] = arg
+        index += 1
+    return options
+
+
+def resolve_output_dir(options):
+    if options.get("output_dir"):
+        return normalize_output_dir(options["output_dir"])
+    output_root = options.get("output_root")
+    if output_root:
+        base = normalize_output_dir(output_root)
+        if options.get("use_project_path"):
+            parts = normalize_domain_folder_parts(get_domain_folder_parts(currentProgram))
+            if options.get("use_program_category"):
+                category = get_program_output_category(currentProgram)
+                if category and (not parts or parts[-1] != category):
+                    parts.append(category)
+            if parts:
+                return os.path.join(base, *parts)
+        return base
+
+    try:
+        selected_dir = askDirectory("case_DFB* 및 reachable helper Low P-Code JSON 저장 폴더를 선택하세요", "저장")
+        return normalize_output_dir(selected_dir.getAbsolutePath())
+    except Exception:
+        print("[-] 경로 선택이 취소되었습니다.")
+        return None
 
 def dump_low_pcode_and_flow(func):
     """
@@ -414,6 +788,7 @@ def dump_low_pcode_and_flow(func):
     # 함수의 시작과 끝 주소 범위 가져오기
     addr_set = func.getBody()
     instructions = listing.getInstructions(addr_set, True)
+    program_hints = get_program_hints(program)
     
     func_data = {
         "schema_version": DUMPER_SCHEMA_VERSION,
@@ -423,9 +798,14 @@ def dump_low_pcode_and_flow(func):
             "legacy_instruction_low_pcode_shape_preserved": True,
             "new_fields_are_optional_hints": True
         },
-        "program": get_program_hints(program),
+        "program": program_hints,
         "ghidra_hints": {
-            "function": get_function_hints(func)
+            "function": get_function_hints(func),
+            "metadata_policy": {
+                "registers_and_address_spaces_are_storage_metadata": True,
+                "calling_convention_signature_parameters_are_compatibility_hints_only": True,
+                "core_must_not_interpret_parameters_or_returns": True,
+            }
         },
         "function_name": func.getName(),
         "start_address": func.getEntryPoint().toString(),
@@ -499,50 +879,56 @@ def dump_low_pcode_and_flow(func):
         }
         func_data["instructions"].append(instr_data)
         
+    func_data["indices"] = build_indices(program, func_data["instructions"])
+    func_data["metadata_identity"] = build_metadata_identity(program_hints, func_data["indices"])
     return func_data
 
-# --- 스크립트 실행부 ---
-import json
+def run():
+    options = get_script_options()
+    base_path = resolve_output_dir(options)
 
-try:
-    selected_dir = askDirectory("case_DFB* 및 reachable helper Low P-Code JSON 저장 폴더를 선택하세요", "저장")
-    base_path = normalize_output_dir(selected_dir.getAbsolutePath())
-except Exception as e:
-    print("[-] 경로 선택이 취소되었습니다.")
-    base_path = None
+    if not base_path:
+        return
 
-if base_path:
-    seed_funcs = find_functions_by_prefix("case_DFB")
+    root_prefix = options.get("root_prefix") or "case_DFB"
+    max_depth = options.get("max_depth") or REACHABLE_HELPER_MAX_DEPTH
+    seed_funcs = find_functions_by_prefix(root_prefix)
 
     if not seed_funcs:
         cursor_func = getFunctionContaining(currentAddress)
         if cursor_func is not None:
             seed_funcs = [cursor_func]
-            print("[!] case_DFB* 함수를 찾지 못해 커서 함수만 추출합니다: %s" % cursor_func.getName())
+            print("[!] %s* 함수를 찾지 못해 커서 함수만 추출합니다: %s" % (root_prefix, cursor_func.getName()))
 
     if not seed_funcs:
-        print("[-] 추출할 함수가 없습니다. case_DFB* 함수가 존재하는지 확인하세요.")
-    else:
-        funcs, call_edges, skipped_targets = collect_reachable_internal_functions(seed_funcs, REACHABLE_HELPER_MAX_DEPTH)
-        print("[*] case_DFB root 함수 수: %d" % len(seed_funcs))
-        print("[*] reachable 내부 helper 포함 추출 대상 함수 수: %d" % len(funcs))
-        print("[*] skipped external/source/sink/empty target 수: %d" % len(skipped_targets))
-        success_count = 0
-        fail_count = 0
-        for func in funcs:
-            try:
-                output_path = write_json_file(base_path, func)
-                success_count += 1
-                print("[+] %s -> %s" % (func.getName(), output_path))
-            except Exception as e:
-                fail_count += 1
-                print("[-] %s 추출 실패: %s" % (func.getName(), str(e)))
+        print("[-] 추출할 함수가 없습니다. %s* 함수가 존재하는지 확인하세요." % root_prefix)
+        return
 
+    funcs, call_edges, skipped_targets = collect_reachable_internal_functions(seed_funcs, max_depth)
+    print("[*] 출력 경로: %s" % base_path)
+    print("[*] %s* root 함수 수: %d" % (root_prefix, len(seed_funcs)))
+    print("[*] reachable 내부 helper 포함 추출 대상 함수 수: %d" % len(funcs))
+    print("[*] skipped external/source/sink/empty target 수: %d" % len(skipped_targets))
+    success_count = 0
+    fail_count = 0
+    for func in funcs:
         try:
-            manifest_path = write_manifest_file(base_path, seed_funcs, funcs, call_edges, skipped_targets)
-            print("[+] manifest -> %s" % manifest_path)
+            output_path = write_json_file(base_path, func)
+            success_count += 1
+            print("[+] %s -> %s" % (func.getName(), output_path))
         except Exception as e:
-            print("[-] manifest 저장 실패: %s" % str(e))
+            fail_count += 1
+            print("[-] %s 추출 실패: %s" % (func.getName(), str(e)))
 
-        print("[*] 일괄 추출 완료: success=%d fail=%d" % (success_count, fail_count))
-        print("[*] 이 경로의 JSON 파일들을 Python 3 NetworkX 엔진에 로드하여 분석하세요.")
+    try:
+        manifest_path = write_manifest_file(base_path, seed_funcs, funcs, call_edges, skipped_targets)
+        print("[+] manifest -> %s" % manifest_path)
+    except Exception as e:
+        print("[-] manifest 저장 실패: %s" % str(e))
+
+    print("[*] 일괄 추출 완료: success=%d fail=%d" % (success_count, fail_count))
+    print("[*] 이 경로의 JSON 파일들을 Python 3 NetworkX 엔진에 로드하여 분석하세요.")
+
+
+# --- 스크립트 실행부 ---
+run()

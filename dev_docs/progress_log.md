@@ -32,14 +32,41 @@ in the phase-specific files.
 - Verified DFB050/DFB056 across all six roots: PASS 12.
 - Verified x86_64 DFB058/DFB059 for PE_x64 and linux_amd64.
 - Ran the full testbed at `output/v8_full_after_summary_refine2`: PASS 273 / FAIL 215, with 13 improvements and 0 regressions against `output/v8_full_after_observed_summary`.
+- Loaded Ghidra register/address-space metadata into `ArchitectureSpec` as storage hints while preserving the convention-free core model.
+- Generalized observed-memory output summaries across x86, x86_64, AArch64, and ARMv7 sample roots.
+- Verified DFB058/DFB059 across all six architecture/platform sample roots: PASS 12.
+- Preserved meaningful stack/heap/constant expressions across broad post-call storage candidates to avoid metadata-driven clobbering.
+- Verified the metadata-backed Phase 5 gate at `output/v8_metadata_phase5_gate_final`: PASS 72.
+- Ran the full testbed at `output/v8_metadata_full_final`: PASS 313 / FAIL 175, with 40 improvements and 0 regressions against `output/v8_full_after_summary_refine2`.
+- Upgraded the Ghidra low-pcode dumper output to schema v4 structured metadata:
+  architecture registers, register aliases, address spaces, symbol/data-ref/import/thunk indices, and metadata hashes.
+- Re-extracted low pcode with Ghidra headless into `samples/low_pcode`: 848 function JSON files, with all extraction batches reporting `fail=0`.
+- Verified schema v4 metadata presence across all extracted JSON files: no missing register aliases, address spaces, structured indices, or metadata hashes.
+- Verified the schema v4 Phase 5 gate at `output/v8_metadata_v4_phase5_gate`: PASS 72.
+- Ran the schema v4 full testbed at `output/v8_metadata_v4_full`: PASS 313 / FAIL 175, with 0 regressions against `output/v8_metadata_full_final`.
+
+## 2026-06-21
+
+- Added callee-entry observed storage indexing from Low P-code use-before-def evidence.
+- Added verified `call_in_reg` / `call_in_stack` / `call_in_mem` edges for observed callee-entry storage only; unverified convention-like candidates remain excluded from default data slicing.
+- Added source-boundary to observed-primary summaries for callees that produce an internal source value.
+- Added field-sensitive observed-memory input summaries for pointer-to-field reads without introducing argument, return, parameter, ABI, or calling-convention semantics.
+- Added address edges for materialized observed-memory loads so pointer provenance survives into summary generation.
+- Fixed negative constant parsing for already-negative Low P-code constants.
+- Added persistent summary cache files under `output/.summary_cache`, keyed by the metadata-aware directory fingerprint and summary cache schema.
+- Verified the completed Phase 5 gate at `output/v8_phase5_completed_gate`: PASS 84.
+- Ran high-risk interprocedural residual checks at `output/v8_phase5_completed_risky`: PASS 42 / FAIL 24, with expected residuals only in 021/023/053/055.
+- Ran the full testbed at `output/v8_phase5_completed_full2`: PASS 334 / FAIL 154, with 21 improvements and 0 regressions against `output/v8_metadata_v4_full`.
 
 ## Current Focus
 
-Phase 5: Interprocedural Skeleton + Bottom-up Auto Summary.
+Post-Phase 5 residual reduction.
 
 Next engineering step:
 
 ```text
-Generalize callee-entry observed storage and field-sensitive memory summaries
-while preserving the convention-free core model.
+Move to the next phase/residual cluster: precision-heavy bitfield/overlap,
+recursive-global effects, unresolved indirect/callback flows, libc buffer
+summaries, C++ exception flow, and thread/runtime cases. Keep convention
+metadata as optional interpretation only, not core semantics.
 ```

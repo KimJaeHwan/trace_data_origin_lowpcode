@@ -29,11 +29,19 @@ class CallContext:
 
 
 class CallBoundaryMapper:
-    def collect_pre_call_observed_storages(self, state_current: dict[str, ValueId]) -> list[ObservedStorage]:
+    def collect_pre_call_observed_storages(
+        self,
+        state_current: dict[str, ValueId],
+        architecture: ArchitectureSpec,
+    ) -> list[ObservedStorage]:
         observed = []
         for storage_key, value in sorted(state_current.items()):
-            if storage_key.startswith("reg:"):
-                observed.append(ObservedStorage(storage_key=storage_key, value=value, confidence="observed"))
+            if not storage_key.startswith("reg:"):
+                continue
+            canonical = storage_key.split(":", 2)[1]
+            if not architecture.is_general_register(canonical):
+                continue
+            observed.append(ObservedStorage(storage_key=storage_key, value=value, confidence="observed"))
         return observed
 
     def collect_post_call_observed_storages(self, architecture: ArchitectureSpec) -> list[ObservedStorage]:
@@ -55,10 +63,7 @@ class CallBoundaryMapper:
 
     def general_register_storage_keys(self, architecture: ArchitectureSpec) -> list[str]:
         keys = set()
-        preserved = architecture.stack_pointer_regs | architecture.frame_pointer_regs | architecture.link_registers
         for alias in architecture.register_aliases.values():
-            if alias.canonical in architecture.general_registers:
-                if alias.canonical in preserved:
-                    continue
+            if architecture.is_general_register(alias.canonical):
                 keys.add(f"reg:{alias.canonical}:{alias.offset_bits}:{alias.size_bits}")
         return sorted(keys)

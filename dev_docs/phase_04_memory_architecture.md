@@ -47,7 +47,15 @@ reader connectivity and belongs to Phase 5 summary/call graph work.
   - Remaining: full symbolic names/types for globals are not attached to memory
     objects yet.
 - [ ] Add full heap alias groups.
-- [ ] Add byte-range or field-sensitive memory precision beyond fixed offsets.
+- [x] Add byte-range memory precision beyond fixed offsets.
+  - Loads materialize exact byte ranges and connect overlapping prior writes.
+  - Byte-lane demand from `SUBPIECE`, low-byte `AND` masks, and 1-byte
+    register views narrows broad loads without adding argument/return or
+    calling-convention facts.
+  - Exact byte `memory_range` nodes are preserved when they carry summary
+    copy provenance such as `call_out_mem`.
+  - Remaining field-sensitive aggregate and bitfield precision is tracked
+    separately from byte-range overlap.
 
 ## Current Policy
 
@@ -66,6 +74,21 @@ upstream source boundary nodes.
 `realloc` preserves the prior heap allocation-site expression when the old heap
 pointer is observed in the most recent pre-call memory store.
 
+Partial overwrite policy:
+
+- A broad memory load remains conservative and may connect every overlapping
+  write.
+- When later p-code proves a narrower byte demand, for example `AL`,
+  `SUBPIECE(..., 0)`, or `AND 0xff`, the graph creates a byte-lane view that
+  keeps only memory predecessors overlapping that requested byte.
+- Larger register aliases are not treated as ABI facts. Stale covered aliases
+  are discarded only when they are not data ancestors of the new wider write,
+  preserving zero/sign-extension chains while removing obsolete source/call
+  observations.
+- Summary-produced memory ranges are not flattened away during narrowing, so
+  `call_out_mem` edges from external or interprocedural summaries remain
+  visible to the backward slice.
+
 ## Verification Log
 
 | Date | Command | Result | Notes |
@@ -74,3 +97,5 @@ pointer is observed in the most recent pre-call memory store.
 | 2026-06-20 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase4_regression_basic expected --cases case_DFB001 case_DFB002` | PASS 12 | All architecture/platform sample roots |
 | 2026-06-20 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode/PE_x86/win_core output/v8_phase4_regression_x86 expected --cases case_DFB010 case_DFB014 case_DFB024 case_DFB025 case_DFB027 case_DFB030 case_DFB031` | PASS 7 | x86 control/global/heap gate |
 | 2026-06-20 | `python3 scripts/run_ghidra_headless_lowpcode.py` | 848 function JSON files extracted | Schema v4 structured architecture metadata and indices, all Ghidra extraction batches reported `fail=0` |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_partial_overwrite_probe9 expected --cases case_DFB046 case_DFB049 case_DFB122` | PASS 18 | Byte-lane narrowing, exact byte load ranges, and summary-copy memory ranges pass across all roots |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_partial_overwrite_struct_gate4 expected --cases case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049` | PASS 60 | Struct/offset/partial-overwrite gate across all architecture/platform roots |

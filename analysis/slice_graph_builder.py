@@ -246,6 +246,12 @@ class SliceGraphBuilder:
         if opcode == "COPY" and self._is_address_copy(pcode):
             self._process_address_copy(fg, state, instr, pcode)
             return
+        if opcode == "SUBPIECE":
+            self._process_subpiece(fg, state, instr, pcode)
+            return
+        if opcode == "INT_AND":
+            self._process_int_and(fg, state, instr, pcode)
+            return
 
         inputs = [self._value_for_input(fg, state, inp, instr, pcode) for inp in pcode.get("inputs", [])]
         output = pcode.get("output")
@@ -321,6 +327,57 @@ class SliceGraphBuilder:
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
             state.expressions[out_node] = {"kind": "value"}
+
+    def _process_subpiece(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        if len(inputs) < 2 or output is None:
+            return
+
+        source = self._value_for_input(fg, state, inputs[0], instr, pcode)
+        offset_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
+        out_node = self._new_value(fg, state, output, instr, "SUBPIECE")
+        narrowed = self._narrowed_sources_for_byte_range(
+            fg,
+            source,
+            parse_int(inputs[1].get("offset")) or 0,
+            int(output.get("size") or 0),
+        )
+        if narrowed:
+            self._add_narrowed_edges(fg, narrowed, out_node, "SUBPIECE_RANGE")
+        elif source is not None:
+            fg.slice_graph.add_edge(source, out_node, kind="data", opcode="SUBPIECE")
+        if offset_node is not None:
+            fg.slice_graph.add_edge(offset_node, out_node, kind="data", opcode="SUBPIECE_OFFSET")
+        state.expressions[out_node] = dict(state.expressions.get(source) or {"kind": "value"})
+
+    def _process_int_and(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        if len(inputs) < 2 or output is None:
+            return
+
+        input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
+        out_node = self._new_value(fg, state, output, instr, "INT_AND")
+        mask_index = self._constant_input_index(inputs)
+        value_index = 1 - mask_index if mask_index in (0, 1) else None
+        narrowed: list[ValueId] = []
+        if mask_index is not None and value_index is not None:
+            byte_size = self._low_mask_byte_size(parse_int(inputs[mask_index].get("offset")) or 0)
+            value_size = int(inputs[value_index].get("size") or output.get("size") or 0)
+            if 0 < byte_size < value_size:
+                narrowed = self._narrowed_sources_for_byte_range(fg, input_nodes[value_index], 0, byte_size)
+
+        if narrowed:
+            self._add_narrowed_edges(fg, narrowed, out_node, "INT_AND_LOW_MASK_RANGE")
+            constant_node = input_nodes[mask_index] if mask_index is not None else None
+            if constant_node is not None:
+                fg.slice_graph.add_edge(constant_node, out_node, kind="data", opcode="INT_AND_MASK")
+        else:
+            for source in input_nodes:
+                if source is not None:
+                    fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_AND")
+        state.expressions[out_node] = self._expression_for("INT_AND", input_nodes, state, output)
 
     def _process_branch(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -432,6 +489,9 @@ class SliceGraphBuilder:
         key = self._storage_key(fg, varnode)
         if key is None:
             return None
+        exact_current = state.current.get(key)
+        if exact_current is not None and exact_current.space != "call_post_reg":
+            return exact_current
         current = self._current_value_for_storage(state, key)
         if current is None:
             current = self._new_synthetic_value(fg, state, *key.split(":", 1), instr, "OBSERVED_INPUT")
@@ -441,6 +501,10 @@ class SliceGraphBuilder:
                 fg.slice_graph.nodes[current]["observed_storage"] = key
                 fg.slice_graph.nodes[current]["confidence"] = "use_before_def"
                 fg.callee_entry_observed_index.setdefault(key, current)
+        elif varnode.get("is_register"):
+            narrowed = self._subregister_view_for_input(fg, state, key, current, instr)
+            if narrowed is not None:
+                return narrowed
         return current
 
     def _current_value_for_storage(self, state: BuildState, key: str) -> ValueId | None:
@@ -463,6 +527,200 @@ class SliceGraphBuilder:
             ):
                 return candidate
         return current
+
+    def _subregister_view_for_input(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        requested_key: str,
+        current: ValueId,
+        instr: dict,
+    ) -> ValueId | None:
+        requested_range = self._register_byte_range(requested_key)
+        current_range = self._register_byte_range(fg.slice_graph.nodes[current].get("storage") or "")
+        if requested_range is None or current_range is None:
+            return None
+        requested_canonical, requested_start, requested_size = requested_range
+        current_canonical, current_start, current_size = current_range
+        if requested_size != 1:
+            return None
+        if requested_canonical != current_canonical:
+            return None
+        if requested_start < current_start or requested_start + requested_size > current_start + current_size:
+            return None
+        if requested_start == current_start and requested_size == current_size:
+            return None
+
+        offset_within_current = requested_start - current_start
+        narrowed_sources = self._narrowed_memory_sources_for_value(
+            fg,
+            current,
+            offset_within_current,
+            requested_size,
+        )
+        if not narrowed_sources:
+            return None
+
+        _, storage_key = requested_key.split(":", 1)
+        view_node = self._new_synthetic_value(fg, state, "reg", storage_key, instr, "SUBREGISTER_VIEW")
+        fg.slice_graph.nodes[view_node]["kind"] = "subregister_view"
+        fg.slice_graph.nodes[view_node]["narrowed_from"] = current.stable_id()
+        fg.slice_graph.nodes[view_node]["byte_offset"] = offset_within_current
+        fg.slice_graph.nodes[view_node]["byte_size"] = requested_size
+        for source in narrowed_sources:
+            fg.slice_graph.add_edge(
+                source,
+                view_node,
+                kind="memory",
+                opcode="SUBREGISTER_LOAD_RANGE",
+            )
+        state.expressions[view_node] = dict(state.expressions.get(current) or {"kind": "value"})
+        return view_node
+
+    def _narrowed_memory_sources_for_value(
+        self,
+        fg: FunctionGraph,
+        value: ValueId,
+        byte_offset: int,
+        byte_size: int,
+    ) -> list[ValueId]:
+        seen: set[ValueId] = set()
+        stack = [value]
+        narrowed: list[ValueId] = []
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            for pred in fg.slice_graph.predecessors(node):
+                edge = fg.slice_graph.edges[pred, node]
+                kind = edge.get("kind")
+                if kind == "data":
+                    stack.append(pred)
+                    continue
+                if not self._is_memory_dependency_kind(kind):
+                    continue
+                for source in self._narrow_memory_predecessor(fg, node, pred, byte_offset, byte_size):
+                    if source not in narrowed:
+                        narrowed.append(source)
+        return narrowed
+
+    def _narrowed_sources_for_byte_range(
+        self,
+        fg: FunctionGraph,
+        value: ValueId | None,
+        byte_offset: int,
+        byte_size: int,
+    ) -> list[ValueId]:
+        if value is None or byte_size <= 0 or byte_offset < 0:
+            return []
+        return self._narrowed_memory_sources_for_value(fg, value, byte_offset, byte_size)
+
+    def _add_narrowed_edges(
+        self,
+        fg: FunctionGraph,
+        sources: list[ValueId],
+        target: ValueId,
+        opcode: str,
+    ) -> None:
+        for source in sources:
+            fg.slice_graph.add_edge(source, target, kind="memory", opcode=opcode)
+
+    def _constant_input_index(self, inputs: list[dict]) -> int | None:
+        for index, varnode in enumerate(inputs[:2]):
+            if varnode.get("is_constant"):
+                return index
+        return None
+
+    def _low_mask_byte_size(self, mask: int) -> int:
+        if mask <= 0:
+            return 0
+        bit_count = mask.bit_length()
+        if bit_count % 8 != 0:
+            return 0
+        if mask != (1 << bit_count) - 1:
+            return 0
+        return bit_count // 8
+
+    def _narrow_memory_predecessor(
+        self,
+        fg: FunctionGraph,
+        load_node: ValueId,
+        memory_node: ValueId,
+        byte_offset: int,
+        byte_size: int,
+    ) -> list[ValueId]:
+        load_range = self._load_range_for_memory_predecessors(fg, load_node)
+        if load_range is None:
+            return []
+        wanted = MemoryRange(load_range.identity, load_range.start + byte_offset, byte_size)
+        memory_attrs = fg.slice_graph.nodes[memory_node]
+        memory_range = self._memory_range_for_storage(memory_attrs.get("storage") or "")
+        if memory_attrs.get("kind") == "memory_range":
+            if memory_range == wanted:
+                return [memory_node]
+            selected: list[ValueId] = []
+            has_summary_copy_edge = False
+            for pred in fg.slice_graph.predecessors(memory_node):
+                edge_kind = fg.slice_graph.edges[pred, memory_node].get("kind")
+                if not self._is_memory_dependency_kind(edge_kind):
+                    continue
+                if edge_kind in {"call_out_mem", "call_out_global"}:
+                    has_summary_copy_edge = True
+                    selected.append(pred)
+                    continue
+                pred_range = self._memory_range_for_storage(fg.slice_graph.nodes[pred].get("storage") or "")
+                if pred_range is not None and pred_range.overlaps(wanted):
+                    selected.append(pred)
+            if has_summary_copy_edge and memory_node not in selected:
+                selected.append(memory_node)
+            return selected
+        if memory_range is not None and memory_range.overlaps(wanted):
+            return [memory_node]
+        return []
+
+    def _load_range_for_memory_predecessors(self, fg: FunctionGraph, load_node: ValueId) -> MemoryRange | None:
+        exact_ranges: list[MemoryRange] = []
+        ranges: list[MemoryRange] = []
+        for pred in fg.slice_graph.predecessors(load_node):
+            edge = fg.slice_graph.edges[pred, load_node]
+            if not self._is_memory_dependency_kind(edge.get("kind")):
+                continue
+            memory_range = self._memory_range_for_storage(fg.slice_graph.nodes[pred].get("storage") or "")
+            if memory_range is not None:
+                ranges.append(memory_range)
+                if edge.get("opcode") == "LOAD":
+                    exact_ranges.append(memory_range)
+        if exact_ranges:
+            return max(exact_ranges, key=lambda item: item.size)
+        if not ranges:
+            return None
+        return max(ranges, key=lambda item: item.size)
+
+    def _register_byte_range(self, storage: str) -> tuple[str, int, int] | None:
+        text = storage
+        if text.startswith("reg:"):
+            text = text.removeprefix("reg:")
+        parts = text.split(":")
+        if len(parts) < 3:
+            return None
+        try:
+            offset_bits = int(parts[-2])
+            size_bits = int(parts[-1])
+        except ValueError:
+            return None
+        if offset_bits % 8 != 0 or size_bits % 8 != 0:
+            return None
+        canonical = ":".join(parts[:-2])
+        return canonical, offset_bits // 8, size_bits // 8
+
+    def _memory_range_for_storage(self, storage: str) -> MemoryRange | None:
+        if not storage.startswith("mem:"):
+            return None
+        return self._memory_range_for_key(storage.removeprefix("mem:"))
+
+    def _is_memory_dependency_kind(self, kind: str | None) -> bool:
+        return kind in {"memory", "call_out_mem", "call_out_global"}
 
     def _new_value(self, fg: FunctionGraph, state: BuildState, varnode: dict, instr: dict, opcode: str) -> ValueId:
         key = self._storage_key(fg, varnode)
@@ -494,7 +752,52 @@ class SliceGraphBuilder:
             storage=f"{space}:{storage_key}",
         )
         state.current[counter_key] = node
+        self._discard_covered_register_aliases(fg, state, counter_key, node)
         return node
+
+    def _discard_covered_register_aliases(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        written_key: str,
+        written_node: ValueId,
+    ) -> None:
+        written = self._register_byte_range(written_key)
+        if written is None:
+            return
+        written_canonical, written_start, written_size = written
+        written_end = written_start + written_size
+        for candidate_key, candidate in list(state.current.items()):
+            if candidate_key == written_key:
+                continue
+            candidate_range = self._register_byte_range(candidate_key)
+            if candidate_range is None:
+                continue
+            candidate_canonical, candidate_start, candidate_size = candidate_range
+            candidate_end = candidate_start + candidate_size
+            if (
+                candidate_canonical == written_canonical
+                and written_start <= candidate_start
+                and candidate_end <= written_end
+            ):
+                if self._is_data_ancestor(fg, written_node, candidate):
+                    continue
+                state.current.pop(candidate_key, None)
+
+    def _is_data_ancestor(self, fg: FunctionGraph, node: ValueId, candidate: ValueId) -> bool:
+        seen: set[ValueId] = set()
+        stack = [node]
+        while stack and len(seen) < 64:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            if current == candidate:
+                return True
+            for pred in fg.slice_graph.predecessors(current):
+                if fg.slice_graph.edges[pred, current].get("kind") == "data":
+                    stack.append(pred)
+        return False
 
     def _bind_source(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
         label = self.boundary_binder.source_label(name)

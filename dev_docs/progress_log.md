@@ -134,6 +134,17 @@ in the phase-specific files.
   DFB120-123 at `output/v8_probe_external_memapi_call_preserved`: PASS 4.
 - Kept generated probe JSON out of git via `samples/low_pcode_probes/` so the
   default repository stays light while preserving a reproducible local probe.
+- Added byte-lane demand narrowing for partial-overwrite flows without using
+  function signatures, arguments, returns, or calling conventions. The graph now
+  narrows broad loads when low p-code proves a 1-byte demand via subregister
+  reads, `SUBPIECE`, or low-byte masks, while exact byte `memory_range` nodes
+  preserve `call_out_mem` summary provenance.
+- Verified the focused byte-lane gate at `output/v8_partial_overwrite_probe9`:
+  PASS 18 across DFB046, DFB049, and DFB122 on all roots.
+- Verified the struct/offset partial-overwrite gate at
+  `output/v8_partial_overwrite_struct_gate4`: PASS 60.
+- Verified the byte-lane risky gate at `output/v8_byte_lane_risky_gate2`: PASS
+  60, including DFB120-123 and DFB007 subregister alias coverage.
 
 ## Current Focus
 

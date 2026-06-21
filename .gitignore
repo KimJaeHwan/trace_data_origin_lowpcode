@@ -6,3 +6,4 @@ output/
 venv/
 samples/v7_batch/reports/
 samples/low_pcode/
+samples/low_pcode_probes/

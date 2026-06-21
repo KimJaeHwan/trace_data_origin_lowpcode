@@ -126,6 +126,14 @@ in the phase-specific files.
   partial-overwrite, large-struct, and deep-field clusters.
 - Ran the full testbed at `output/v8_phase2_callout_full`: PASS 370 / FAIL
   118, improving by 36 PASS against `output/v8_phase5_completed_full2`.
+- Added an external memory API call-preserved probe outside the default full
+  regression root. The probe builds a small PE x64 DLL with builtin expansion
+  disabled, confirms `memcpy`, `memmove`, `memset`, and `strcpy` imports are
+  preserved, extracts low-pcode to
+  `samples/low_pcode_probes/external_memapi_call_preserved`, and verifies
+  DFB120-123 at `output/v8_probe_external_memapi_call_preserved`: PASS 4.
+- Kept generated probe JSON out of git via `samples/low_pcode_probes/` so the
+  default repository stays light while preserving a reproducible local probe.
 
 ## Current Focus
 

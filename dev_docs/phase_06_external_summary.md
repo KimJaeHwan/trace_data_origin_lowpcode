@@ -427,6 +427,8 @@ edge provenance samples
     because the compiler lowered `memcpy`/`memmove` into ordinary low-pcode
     load/store ranges. They are now covered by byte-range overlap memory
     modeling in the core low-pcode builder.
+  - A separate `external_memapi_call_preserved` probe verifies the true
+    external-summary path when `memcpy`/`memmove` survive as call targets.
 - [x] Add `ExternalSummaryProvider` for read/write source/sink effects.
   - Infrastructure is present for POSIX/WinAPI read/write style effects.
   - Dedicated runtime test coverage is still pending because the current
@@ -457,3 +459,4 @@ edge provenance samples
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_outparam_closed_v2 expected --cases case_DFB021 case_DFB022 case_DFB023` | PASS 18 | Source-to-memory outparam and double-pointer observed memory writes pass across all roots |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 24 | External and compiler-lowered buffer flows remain stable after `call_out_mem` promotion |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_risky_after_callout expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 104 / FAIL 28 | DFB021/DFB023 outparam residuals closed; remaining failures are bitfield, partial-overwrite, large-struct, and deep-field clusters |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode_probes/external_memapi_call_preserved output/v8_probe_external_memapi_call_preserved expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 4 | Focused PE x64 probe with preserved external `memcpy`, `memmove`, `strcpy`, `memset`, and partial `memcpy` call targets |

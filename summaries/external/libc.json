@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "functions": [
+    {
+      "id": "libc_malloc",
+      "match": {
+        "names": ["malloc"]
+      },
+      "effect": "alloc",
+      "roles": {
+        "size": 0
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "libc_calloc",
+      "match": {
+        "names": ["calloc"]
+      },
+      "effect": "alloc",
+      "roles": {
+        "count": 0,
+        "size": 1
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "libc_realloc",
+      "match": {
+        "names": ["realloc"]
+      },
+      "effect": "realloc",
+      "roles": {
+        "existing_pointer": 0,
+        "size": 1
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "libc_free",
+      "match": {
+        "names": ["free"]
+      },
+      "effect": "free",
+      "roles": {
+        "pointer": 0
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "libc_memory_copy",
+      "match": {
+        "names": ["memcpy", "__memcpy_chk", "memmove", "bcopy", "strcpy", "strncpy"]
+      },
+      "effect": "memory_copy",
+      "roles": {
+        "write_buffer": 0,
+        "read_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "libc_memory_fill",
+      "match": {
+        "names": ["memset", "__memset_chk", "bzero", "explicit_bzero"]
+      },
+      "effect": "memory_fill",
+      "roles": {
+        "write_buffer": 0,
+        "fill_value": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    }
+  ]
+}

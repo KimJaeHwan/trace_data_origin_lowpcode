@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "functions": [
+    {
+      "id": "posix_read_source",
+      "match": {
+        "names": ["read", "recv", "recvfrom", "fread"]
+      },
+      "effect": "external_read_source",
+      "roles": {
+        "write_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "posix_write_sink",
+      "match": {
+        "names": ["write", "send", "sendto", "fwrite"]
+      },
+      "effect": "external_write_sink",
+      "roles": {
+        "read_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    }
+  ]
+}

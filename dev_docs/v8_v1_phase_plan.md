@@ -58,10 +58,32 @@ test oracle.
 | 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | In progress |
 | 3 | Control Dependency | DFB010 PASS with data/control split | Complete |
 | 4 | Memory + Architecture Expansion | global/heap skeleton and architecture storage expansion | Complete |
-| 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | In progress: DFB026 all-arch PASS |
-| 6 | Summary Refinement / Libc / Cache | composite providers and reusable summary cache | Not started |
+| 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | Complete |
+| 6 | External Summary Resolution / Summary Refinement | resolved external summaries, composite providers, reusable cache | In progress |
 | 7 | Symbol / PDB Overlay | optional overlay, core graph unchanged | Deferred |
 | 8 | Dynamic / Agent Overlay | optional runtime overlay, core graph unchanged | Deferred |
+
+## Phase 6 Position
+
+Phase 6 starts with external-summary infrastructure before implementing any
+specific libc or WinAPI effect provider.
+
+Development order:
+
+```text
+0. Repository hygiene: stop tracking generated samples/low_pcode JSON outputs.
+1. Add the ResolvedExternalSummary design and data model.
+2. Extend Ghidra extraction for external prototype metadata.
+3. Add CompositeSummaryProvider and route current auto summaries through it.
+4. Add a small curated KnownExternalEffectRegistry.
+5. Implement ExternalSummaryProvider for libc/POSIX/WinAPI effects.
+6. Close or replace the remaining Phase 2 call_out_* taxonomy item.
+7. Run residual clusters with trusted external summaries on/off.
+```
+
+`LibcSummaryProvider` is intentionally not a standalone phase item anymore.
+libc, POSIX, MSVCRT/UCRT, and WinAPI functions are handled through the same
+external summary resolution path.
 
 ## Phase 1 Scope
 

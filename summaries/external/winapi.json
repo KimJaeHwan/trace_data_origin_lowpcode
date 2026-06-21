@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "functions": [
+    {
+      "id": "winapi_heap_alloc",
+      "match": {
+        "names": ["HeapAlloc", "RtlAllocateHeap"]
+      },
+      "effect": "alloc",
+      "roles": {
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "winapi_heap_free",
+      "match": {
+        "names": ["HeapFree", "RtlFreeHeap"]
+      },
+      "effect": "free",
+      "roles": {
+        "pointer": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "winapi_memory_copy",
+      "match": {
+        "names": ["CopyMemory", "MoveMemory", "RtlCopyMemory", "RtlMoveMemory"]
+      },
+      "effect": "memory_copy",
+      "roles": {
+        "write_buffer": 0,
+        "read_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "winapi_memory_fill",
+      "match": {
+        "names": ["ZeroMemory", "RtlZeroMemory"]
+      },
+      "effect": "memory_fill",
+      "roles": {
+        "write_buffer": 0,
+        "size": 1
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "winapi_read_file_source",
+      "match": {
+        "names": ["ReadFile", "WSARecv"]
+      },
+      "effect": "external_read_source",
+      "roles": {
+        "write_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    },
+    {
+      "id": "winapi_write_file_sink",
+      "match": {
+        "names": ["WriteFile", "WSASend"]
+      },
+      "effect": "external_write_sink",
+      "roles": {
+        "read_buffer": 1,
+        "size": 2
+      },
+      "trust": "trusted_external_prototype"
+    }
+  ]
+}

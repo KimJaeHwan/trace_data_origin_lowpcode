@@ -12,8 +12,8 @@ import hashlib
 from ghidra.util.task import TaskMonitor
 
 
-DUMPER_SCHEMA_VERSION = 4
-DUMPER_NAME = "lowpcode_json_dumper_v4_structured_metadata"
+DUMPER_SCHEMA_VERSION = 5
+DUMPER_NAME = "lowpcode_json_dumper_v5_external_prototypes"
 REACHABLE_HELPER_MAX_DEPTH = 8
 
 
@@ -214,11 +214,15 @@ def get_memory_block_info(program):
 def get_variable_info(var_obj):
     if var_obj is None:
         return None
+    data_type = safe_call(None, var_obj.getDataType)
+    symbol = safe_call(None, var_obj.getSymbol)
     info = {
         "name": safe_str(safe_call(None, var_obj.getName)),
-        "data_type": safe_str(safe_call(None, var_obj.getDataType)),
+        "data_type": safe_str(data_type),
+        "data_type_info": get_data_type_info(data_type),
         "storage": safe_str(safe_call(None, var_obj.getVariableStorage)),
         "first_use_offset": safe_call(None, var_obj.getFirstUseOffset),
+        "source": safe_str(safe_call(None, symbol.getSource)) if symbol else None,
         "is_stack": bool(safe_call(False, var_obj.isStackVariable)),
         "is_register": bool(safe_call(False, var_obj.isRegisterVariable)),
         "is_memory": bool(safe_call(False, var_obj.isMemoryVariable)),
@@ -229,6 +233,133 @@ def get_variable_info(var_obj):
     return info
 
 
+def get_data_type_info(data_type):
+    if data_type is None:
+        return None
+    pointer_depth = 0
+    current = data_type
+    seen = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        class_name = safe_str(safe_call(None, current.getClass))
+        name = safe_str(safe_call(None, current.getName)) or ""
+        if "Pointer" not in str(class_name) and not name.endswith(" *"):
+            break
+        pointer_depth += 1
+        current = safe_call(None, current.getDataType)
+    source_archive = safe_call(None, data_type.getSourceArchive)
+    return {
+        "name": safe_str(safe_call(None, data_type.getName)),
+        "display_name": safe_str(data_type),
+        "length": safe_call(None, data_type.getLength),
+        "category_path": safe_str(safe_call(None, data_type.getCategoryPath)),
+        "universal_id": safe_str(safe_call(None, data_type.getUniversalID)),
+        "source_archive": safe_str(safe_call(None, source_archive.getName)) if source_archive else None,
+        "pointer_depth": pointer_depth,
+    }
+
+
+def get_function_output_info(func):
+    output = {
+        "data_type": safe_str(safe_call(None, func.getReturnType)),
+        "data_type_info": get_data_type_info(safe_call(None, func.getReturnType)),
+        "storage": None,
+        "source": None,
+    }
+    return_var = safe_call(None, func.getReturn)
+    if return_var:
+        output["storage"] = safe_str(safe_call(None, return_var.getVariableStorage))
+        symbol = safe_call(None, return_var.getSymbol)
+        output["source"] = safe_str(safe_call(None, symbol.getSource)) if symbol else None
+    return output
+
+
+def get_external_location_info(func):
+    location = safe_call(None, func.getExternalLocation)
+    if location is None:
+        return None
+    return {
+        "library_name": safe_str(safe_call(None, location.getLibraryName)),
+        "label": safe_str(safe_call(None, location.getLabel)),
+        "address": safe_str(safe_call(None, location.getAddress)),
+        "external_space_address": safe_str(safe_call(None, location.getExternalSpaceAddress)),
+        "source": safe_str(safe_call(None, location.getSource)),
+    }
+
+
+def normalize_external_name(name):
+    if not name:
+        return None
+    normalized = str(name)
+    if normalized.startswith("__imp_"):
+        normalized = normalized[len("__imp_"):]
+    while normalized.startswith("_") and len(normalized) > 1:
+        normalized = normalized[1:]
+    at_index = normalized.find("@")
+    if at_index > 0:
+        suffix = normalized[at_index + 1:]
+        if suffix.isdigit():
+            normalized = normalized[:at_index]
+    return normalized
+
+
+def get_external_prototype(func):
+    if func is None:
+        return None
+    entry = safe_str(safe_call(None, func.getEntryPoint))
+    location = get_external_location_info(func)
+    library_name = location.get("library_name") if location else None
+    name = safe_str(safe_call(None, func.getName))
+    normalized_name = normalize_external_name(name)
+    thunked = safe_call(None, func.getThunkedFunction, True)
+    params = []
+    try:
+        for param in func.getParameters():
+            item = get_variable_info(param)
+            item["ordinal"] = safe_call(None, param.getOrdinal)
+            params.append(item)
+    except Exception:
+        pass
+    prototype = {
+        "id": stable_hash({
+            "source": "ghidra",
+            "library": library_name,
+            "entry": entry,
+            "name": name,
+            "signature": safe_str(safe_call(None, func.getSignature)),
+        }),
+        "source": "ghidra",
+        "library": library_name,
+        "name": name,
+        "normalized_name": normalized_name,
+        "entry": entry,
+        "external_location": location,
+        "thunk_target": {
+            "name": thunked.getName(),
+            "entry": safe_str(thunked.getEntryPoint()),
+            "is_external": bool(safe_call(False, thunked.isExternal)),
+        } if thunked else None,
+        "signature": safe_str(safe_call(None, func.getSignature)),
+        "prototype_string": safe_str(safe_call(None, func.getPrototypeString, True, True)),
+        "signature_source": safe_str(safe_call(None, func.getSignatureSource)),
+        "calling_convention_name": safe_str(safe_call(None, func.getCallingConventionName)),
+        "parameters": params,
+        "output": get_function_output_info(func),
+        "flags": {
+            "is_external": bool(safe_call(False, func.isExternal)),
+            "is_thunk": bool(safe_call(False, func.isThunk)),
+            "has_varargs": bool(safe_call(False, func.hasVarArgs)),
+            "has_no_return": bool(safe_call(False, func.hasNoReturn)),
+            "has_custom_variable_storage": bool(safe_call(False, func.hasCustomVariableStorage)),
+            "is_inline": bool(safe_call(False, func.isInline)),
+        },
+        "stack_purge_size": safe_call(None, func.getStackPurgeSize),
+        "confidence": "ghidra_function_metadata",
+    }
+    prototype["metadata_hash"] = stable_hash(prototype)
+    return prototype
+
+
 def get_function_hints(func):
     hints = {
         "name": func.getName(),
@@ -236,8 +367,13 @@ def get_function_hints(func):
         "body_ranges": get_address_ranges(func.getBody()),
         "calling_convention": safe_call(None, func.getCallingConventionName),
         "signature": safe_str(safe_call(None, func.getSignature)),
+        "signature_source": safe_str(safe_call(None, func.getSignatureSource)),
+        "prototype_string": safe_str(safe_call(None, func.getPrototypeString, True, True)),
         "is_thunk": bool(safe_call(False, func.isThunk)),
+        "is_external": bool(safe_call(False, func.isExternal)),
         "thunked_function": None,
+        "external_location": get_external_location_info(func),
+        "output": get_function_output_info(func),
         "parameters": [],
         "local_variables": [],
         "stack_frame": {},
@@ -344,7 +480,12 @@ def get_call_target_info(addr):
         "is_thunk": bool(safe_call(False, target_func.isThunk)),
         "thunk_target_name": thunked.getName() if thunked else None,
         "thunk_target_entry": safe_str(thunked.getEntryPoint()) if thunked else None,
-        "calling_convention": safe_call(None, target_func.getCallingConventionName),
+        "calling_convention": safe_str(safe_call(None, target_func.getCallingConventionName)),
+        "signature": safe_str(safe_call(None, target_func.getSignature)),
+        "signature_source": safe_str(safe_call(None, target_func.getSignatureSource)),
+        "is_external": bool(safe_call(False, target_func.isExternal)),
+        "external_prototype": get_external_prototype(target_func)
+        if bool(safe_call(False, target_func.isExternal)) or bool(safe_call(False, target_func.isThunk)) else None,
     }
 
 
@@ -398,6 +539,8 @@ def get_function_index(program):
     by_entry = {}
     thunks_by_entry = {}
     imports_by_entry = {}
+    external_prototypes_by_entry = {}
+    external_prototypes_by_name = {}
     try:
         fm = program.getFunctionManager()
         funcs = fm.getFunctions(True)
@@ -411,6 +554,9 @@ def get_function_index(program):
                 "is_external": bool(safe_call(False, func.isExternal)),
                 "is_thunk": bool(safe_call(False, func.isThunk)),
                 "thunked_function": None,
+                "signature": safe_str(safe_call(None, func.getSignature)),
+                "signature_source": safe_str(safe_call(None, func.getSignatureSource)),
+                "calling_convention": safe_str(safe_call(None, func.getCallingConventionName)),
             }
             thunked = safe_call(None, func.getThunkedFunction, True)
             if thunked:
@@ -424,9 +570,16 @@ def get_function_index(program):
                     imports_by_entry[entry] = record
                 if record["is_thunk"]:
                     thunks_by_entry[entry] = record
+                if record["is_external"] or record["is_thunk"]:
+                    prototype = get_external_prototype(func)
+                    if prototype:
+                        external_prototypes_by_entry[entry] = prototype
+                        for name_key in (prototype.get("name"), prototype.get("normalized_name")):
+                            if name_key:
+                                external_prototypes_by_name.setdefault(name_key, []).append(prototype)
     except Exception as e:
         print("[-] function index 추출 실패: %s" % str(e))
-    return by_entry, imports_by_entry, thunks_by_entry
+    return by_entry, imports_by_entry, thunks_by_entry, external_prototypes_by_entry, external_prototypes_by_name
 
 
 def get_instruction_data_refs(instructions):
@@ -444,7 +597,13 @@ def get_instruction_data_refs(instructions):
 
 def build_indices(program, instructions):
     symbols_by_address, symbol_imports_by_address = get_symbol_index(program)
-    functions_by_entry, imports_by_entry, thunks_by_entry = get_function_index(program)
+    (
+        functions_by_entry,
+        imports_by_entry,
+        thunks_by_entry,
+        external_prototypes_by_entry,
+        external_prototypes_by_name,
+    ) = get_function_index(program)
     return {
         "symbols_by_address": symbols_by_address,
         "functions_by_entry": functions_by_entry,
@@ -452,6 +611,8 @@ def build_indices(program, instructions):
         "imports_by_address": symbol_imports_by_address,
         "imports_by_entry": imports_by_entry,
         "thunks_by_entry": thunks_by_entry,
+        "external_prototypes_by_entry": external_prototypes_by_entry,
+        "external_prototypes_by_name": external_prototypes_by_name,
     }
 
 
@@ -472,6 +633,8 @@ def build_metadata_identity(program_hints, indices):
             "imports_by_address": indices.get("imports_by_address"),
             "imports_by_entry": indices.get("imports_by_entry"),
             "thunks_by_entry": indices.get("thunks_by_entry"),
+            "external_prototypes_by_entry": indices.get("external_prototypes_by_entry"),
+            "external_prototypes_by_name": indices.get("external_prototypes_by_name"),
         }),
     }
     identity["metadata_hash"] = stable_hash(identity)
@@ -622,8 +785,19 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
 
 def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
     program_hints = get_program_hints(currentProgram)
+    (
+        functions_by_entry,
+        imports_by_entry,
+        thunks_by_entry,
+        external_prototypes_by_entry,
+        external_prototypes_by_name,
+    ) = get_function_index(currentProgram)
     manifest_indices = {
-        "functions_by_entry": get_function_index(currentProgram)[0],
+        "functions_by_entry": functions_by_entry,
+        "imports_by_entry": imports_by_entry,
+        "thunks_by_entry": thunks_by_entry,
+        "external_prototypes_by_entry": external_prototypes_by_entry,
+        "external_prototypes_by_name": external_prototypes_by_name,
     }
     manifest = {
         "schema_version": DUMPER_SCHEMA_VERSION,
@@ -632,6 +806,7 @@ def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
         "max_depth": REACHABLE_HELPER_MAX_DEPTH,
         "program": program_hints,
         "metadata_identity": build_metadata_identity(program_hints, manifest_indices),
+        "indices": manifest_indices,
         "roots": [function_record(func) for func in seed_funcs],
         "functions": [function_record(func) for func in funcs],
         "call_edges": edges,
@@ -804,6 +979,7 @@ def dump_low_pcode_and_flow(func):
             "metadata_policy": {
                 "registers_and_address_spaces_are_storage_metadata": True,
                 "calling_convention_signature_parameters_are_compatibility_hints_only": True,
+                "external_prototypes_are_summary_resolution_metadata_only": True,
                 "core_must_not_interpret_parameters_or_returns": True,
             }
         },

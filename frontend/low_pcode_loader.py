@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.architecture import ArchitectureSpec
+from frontend.external_prototype import ExternalPrototype, load_external_prototypes
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,10 @@ class LowPcodeProgram:
         }
         encoded = json.dumps(fallback, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+    @property
+    def external_prototypes(self) -> dict[str, ExternalPrototype]:
+        return load_external_prototypes(self.data)
 
 
 class LowPcodeLoader:

@@ -57,16 +57,31 @@ in the phase-specific files.
 - Verified the completed Phase 5 gate at `output/v8_phase5_completed_gate`: PASS 84.
 - Ran high-risk interprocedural residual checks at `output/v8_phase5_completed_risky`: PASS 42 / FAIL 24, with expected residuals only in 021/023/053/055.
 - Ran the full testbed at `output/v8_phase5_completed_full2`: PASS 334 / FAIL 154, with 21 improvements and 0 regressions against `output/v8_metadata_v4_full`.
+- Started Phase 6 external summary resolution.
+- Stopped tracking generated `samples/low_pcode` JSON outputs for future commits
+  while preserving the local files for regression runs.
+- Upgraded the Ghidra dumper to schema v5 external prototype metadata:
+  `external_prototypes_by_entry`, `external_prototypes_by_name`, normalized
+  names, external locations, thunk targets, signature/prototype metadata,
+  parameter/output metadata, flags, and per-prototype metadata hashes.
+- Added `ExternalPrototype`, `KnownExternalEffectRegistry`, and
+  `ResolvedExternalSummary` infrastructure without applying external summary
+  edges yet.
+- Added initial curated external effect registry files for libc, POSIX, and
+  WinAPI effects.
+- Verified Phase 6 infrastructure smoke: synthetic `memcpy` prototype resolves
+  to `memory_copy`, and DFB001/DFB002 remain PASS 12.
 
 ## Current Focus
 
-Post-Phase 5 residual reduction.
+Phase 6 external summary resolution.
 
 Next engineering step:
 
 ```text
-Move to the next phase/residual cluster: precision-heavy bitfield/overlap,
-recursive-global effects, unresolved indirect/callback flows, libc buffer
-summaries, C++ exception flow, and thread/runtime cases. Keep convention
-metadata as optional interpretation only, not core semantics.
+Start Phase 6 with ResolvedExternalSummary infrastructure before implementing
+specific libc/POSIX/WinAPI effects. Ghidra/PDB-style external prototype metadata
+is joined with a curated external effect registry, then applied through an
+optional ExternalSummaryProvider. Keep trusted external semantics outside the
+core graph model and record provenance on every summary edge.
 ```

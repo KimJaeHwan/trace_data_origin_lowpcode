@@ -106,6 +106,26 @@ in the phase-specific files.
 - Ran byte-range risky cases at `output/v8_memory_overlap_risky`: PASS 92 /
   FAIL 40. Remaining failures are expected residual clusters: outparam,
   bitfield, partial-overwrite, large-struct, and deep-field summaries.
+- Closed the remaining Phase 2 `call_out_*` taxonomy item by promoting verified
+  automatic and external summary outputs to first-class `call_out_reg`,
+  `call_out_mem`, and `call_out_global` edges. Legacy summary labels are kept
+  as provenance, not core edge taxonomy.
+- Added source-boundary to observed-memory output summaries for callees that
+  store source-derived values through observed pointers.
+- Added double-dereference observed-memory summaries using low-pcode
+  LOAD/STORE evidence, including ARM/AArch64 `LOAD <- OBSERVED_MEMORY`
+  address forms.
+- Verified outparam closure at `output/v8_phase2_outparam_closed_v2`: PASS 18
+  across PE/Linux x86/x64 and Linux ARM/AArch64 roots.
+- Verified Phase 5 gate after `call_out_*` promotion at
+  `output/v8_phase2_callout_phase5_gate`: PASS 84.
+- Verified memory API cluster after `call_out_mem` promotion at
+  `output/v8_phase2_callout_libc_buffer`: PASS 24.
+- Re-ran risky residuals at `output/v8_phase2_risky_after_callout`: PASS 104 /
+  FAIL 28. DFB021/DFB023 residuals are closed; remaining failures are bitfield,
+  partial-overwrite, large-struct, and deep-field clusters.
+- Ran the full testbed at `output/v8_phase2_callout_full`: PASS 370 / FAIL
+  118, improving by 36 PASS against `output/v8_phase5_completed_full2`.
 
 ## Current Focus
 
@@ -114,10 +134,10 @@ Phase 6 external summary resolution.
 Next engineering step:
 
 ```text
-Continue Phase 6 with residual clustering after byte-range memory overlap and
-the first ExternalSummaryProvider pass. Memory API cases DFB120-123 now pass
-across all roots. The next targets are outparam/double-pointer precision,
-bitfield and partial-overwrite range precision, and large-struct/deep-field
-summary residuals. Keep trusted external semantics outside the core graph model
-and record provenance on every summary edge.
+Continue Phase 6 with residual clustering after Phase 2 call boundary closure.
+Memory API cases DFB120-123 and outparam/double-pointer cases DFB021-023 now
+pass across all roots. The next targets are bitfield and partial-overwrite
+range precision, large-struct/deep-field summary residuals, and trusted
+external import helper coverage. Keep trusted external semantics outside the
+core graph model and record provenance on every summary edge.
 ```

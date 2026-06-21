@@ -19,7 +19,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 2
+SUMMARY_CACHE_SCHEMA_VERSION = 6
 
 
 @dataclass
@@ -28,6 +28,7 @@ class AutoFunctionSummary:
     global_writes: dict[str, set[ValueId]] = field(default_factory=dict)
     global_reads_to_storage: dict[str, set[str]] = field(default_factory=dict)
     source_to_primary: dict[str, set[ValueId]] = field(default_factory=dict)
+    source_to_memory: dict[str, dict[str, set[ValueId]]] = field(default_factory=dict)
     observed_to_primary: dict[str, set[str]] = field(default_factory=dict)
     observed_memory_to_primary: dict[str, set[str]] = field(default_factory=dict)
     observed_to_memory: dict[str, dict[str, set[str]]] = field(default_factory=dict)
@@ -53,6 +54,12 @@ class MinimalAutoFunctionSummaryProvider:
                             summary.source_to_primary.setdefault(alias_storage, set()).add(node)
             if self._is_observed_pointer_memory_storage(storage):
                 address_storages = self._observed_address_storages_reaching(graph, node, function_graph)
+                source_nodes = self._source_boundaries_reaching(graph, node)
+                if source_nodes:
+                    for address_storage in address_storages or {""}:
+                        summary.source_to_memory.setdefault(address_storage, {}).setdefault(storage, set()).update(
+                            source_nodes
+                        )
                 if address_storages:
                     input_storages = self._observed_storages_reaching(graph, node, function_graph)
                     for input_storage in input_storages:
@@ -263,6 +270,39 @@ class MinimalAutoFunctionSummaryProvider:
             if graph.edges[pred, target].get("kind") != "address":
                 continue
             found.update(self._observed_storages_reaching(graph, pred, function_graph))
+            found.update(self._observed_deref_address_storages_reaching(graph, pred, function_graph))
+        return found
+
+    def _observed_deref_address_storages_reaching(
+        self,
+        graph: nx.DiGraph,
+        target: ValueId,
+        function_graph: FunctionGraph,
+    ) -> set[str]:
+        found: set[str] = set()
+        seen: set[ValueId] = set()
+        stack = [target]
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            attrs = graph.nodes[node]
+            if attrs.get("opcode") == "LOAD":
+                for pred in graph.predecessors(node):
+                    edge_kind = graph.edges[pred, node].get("kind")
+                    if edge_kind == "address":
+                        for storage in self._observed_storages_reaching(graph, pred, function_graph):
+                            found.add(f"deref:{storage}")
+                    if edge_kind == "memory":
+                        for address_pred in graph.predecessors(pred):
+                            if graph.edges[address_pred, pred].get("kind") != "address":
+                                continue
+                            for storage in self._observed_storages_reaching(graph, address_pred, function_graph):
+                                found.add(f"deref:{storage}")
+            for pred in graph.predecessors(node):
+                if graph.edges[pred, node].get("kind") in DATA_SLICE_EDGES:
+                    stack.append(pred)
         return found
 
     def _is_summary_input_storage(self, storage: str, function_graph: FunctionGraph) -> bool:
@@ -332,6 +372,10 @@ def merge_function_summary(target: AutoFunctionSummary, source: AutoFunctionSumm
         target.global_reads_to_storage.setdefault(key, set()).update(values)
     for key, nodes in source.source_to_primary.items():
         target.source_to_primary.setdefault(key, set()).update(nodes)
+    for address_storage, outputs_by_memory in source.source_to_memory.items():
+        target_outputs = target.source_to_memory.setdefault(address_storage, {})
+        for output_memory, nodes in outputs_by_memory.items():
+            target_outputs.setdefault(output_memory, set()).update(nodes)
     for key, values in source.observed_to_primary.items():
         target.observed_to_primary.setdefault(key, set()).update(values)
     for key, values in source.observed_memory_to_primary.items():
@@ -491,6 +535,13 @@ class ProgramSliceGraphBuilder:
                 key: sorted(node.stable_id() for node in nodes)
                 for key, nodes in summary.source_to_primary.items()
             },
+            "source_to_memory": {
+                address_storage: {
+                    output_memory: sorted(node.stable_id() for node in nodes)
+                    for output_memory, nodes in outputs_by_memory.items()
+                }
+                for address_storage, outputs_by_memory in summary.source_to_memory.items()
+            },
             "observed_to_primary": {
                 key: sorted(values)
                 for key, values in summary.observed_to_primary.items()
@@ -521,6 +572,13 @@ class ProgramSliceGraphBuilder:
         summary.source_to_primary = {
             key: {node_lookup[node_id] for node_id in node_ids}
             for key, node_ids in (data.get("source_to_primary") or {}).items()
+        }
+        summary.source_to_memory = {
+            address_storage: {
+                output_memory: {node_lookup[node_id] for node_id in node_ids}
+                for output_memory, node_ids in outputs_by_memory.items()
+            }
+            for address_storage, outputs_by_memory in (data.get("source_to_memory") or {}).items()
         }
         summary.observed_to_primary = {
             key: set(values)
@@ -629,11 +687,51 @@ class ProgramSliceGraphBuilder:
                         program_graph.slice_graph.add_edge(
                             source_node,
                             post_node,
-                            kind="summary_data",
+                            kind="call_out_reg",
                             opcode="SUMMARY_SOURCE_TO_OBSERVED_STORAGE",
+                            summary_kind="summary_data",
                             callee=resolved.name,
                             observed_output=output_storage,
                         )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            "call_out_reg",
+                            observed_output=output_storage,
+                            opcode="SUMMARY_SOURCE_TO_OBSERVED_STORAGE",
+                        )
+
+                for address_storage, outputs_by_memory in sorted(summary.source_to_memory.items()):
+                    for output_memory, source_nodes in sorted(outputs_by_memory.items()):
+                        for memory_node in self._caller_summary_memory_output_nodes(
+                            caller_graph,
+                            callsite_key,
+                            output_memory,
+                            address_storage,
+                        ):
+                            for source_node in source_nodes:
+                                program_graph.slice_graph.add_edge(
+                                    source_node,
+                                    memory_node,
+                                    kind="call_out_mem",
+                                    opcode="SUMMARY_SOURCE_TO_OBSERVED_MEMORY_WRITE",
+                                    summary_kind="summary_memory",
+                                    callee=resolved.name,
+                                    observed_address=address_storage,
+                                    observed_output=output_memory,
+                                )
+                                self._record_summary_call_out_boundary(
+                                    program_graph,
+                                    caller_graph,
+                                    resolved.name,
+                                    callsite_key,
+                                    "call_out_mem",
+                                    observed_address=address_storage,
+                                    observed_output=output_memory,
+                                    opcode="SUMMARY_SOURCE_TO_OBSERVED_MEMORY_WRITE",
+                                )
 
                 for global_key, source_nodes in sorted(summary.global_writes.items()):
                     post_node = self._summary_memory_node(program_graph, caller_graph, callsite_key, global_key, instr)
@@ -641,9 +739,19 @@ class ProgramSliceGraphBuilder:
                         program_graph.slice_graph.add_edge(
                             source_node,
                             post_node,
-                            kind="summary_memory",
+                            kind="call_out_global",
                             opcode="SUMMARY_GLOBAL_WRITE",
+                            summary_kind="summary_memory",
                             callee=resolved.name,
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            "call_out_global",
+                            global_key=global_key,
+                            opcode="SUMMARY_GLOBAL_WRITE",
                         )
                     global_state[global_key] = post_node
 
@@ -659,19 +767,21 @@ class ProgramSliceGraphBuilder:
                         program_graph.slice_graph.add_edge(
                             current_global,
                             post_node,
-                            kind="summary_memory",
+                            kind=self._call_out_kind_for_storage(storage_key),
                             opcode="SUMMARY_GLOBAL_READ",
+                            summary_kind="summary_memory",
                             callee=resolved.name,
                             observed_storage=storage_key,
                         )
-                        program_graph.boundary_edges.append(
-                            {
-                                "caller": caller_graph.function_name,
-                                "callee": resolved.name,
-                                "global": global_key,
-                                "observed_storage": storage_key,
-                                "callsite": callsite_key,
-                            }
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            self._call_out_kind_for_storage(storage_key),
+                            global_key=global_key,
+                            observed_storage=storage_key,
+                            opcode="SUMMARY_GLOBAL_READ",
                         )
 
                 for input_storage, output_storages in sorted(summary.observed_to_primary.items()):
@@ -686,11 +796,22 @@ class ProgramSliceGraphBuilder:
                         program_graph.slice_graph.add_edge(
                             input_node,
                             post_node,
-                            kind="summary_data",
+                            kind="call_out_reg",
                             opcode="SUMMARY_OBSERVED_STORAGE",
+                            summary_kind="summary_data",
                             callee=resolved.name,
                             observed_input=input_storage,
                             observed_output=output_storage,
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            "call_out_reg",
+                            observed_input=input_storage,
+                            observed_output=output_storage,
+                            opcode="SUMMARY_OBSERVED_STORAGE",
                         )
 
                 for address_storage, output_storages in sorted(summary.observed_memory_to_primary.items()):
@@ -711,11 +832,22 @@ class ProgramSliceGraphBuilder:
                             program_graph.slice_graph.add_edge(
                                 memory_node,
                                 post_node,
-                                kind="summary_memory",
+                                kind="call_out_reg",
                                 opcode="SUMMARY_OBSERVED_MEMORY_READ",
+                                summary_kind="summary_memory",
                                 callee=resolved.name,
                                 observed_address=address_storage,
                                 observed_output=output_storage,
+                            )
+                            self._record_summary_call_out_boundary(
+                                program_graph,
+                                caller_graph,
+                                resolved.name,
+                                callsite_key,
+                                "call_out_reg",
+                                observed_address=address_storage,
+                                observed_output=output_storage,
+                                opcode="SUMMARY_OBSERVED_MEMORY_READ",
                             )
 
                 for input_storage, outputs_by_address in sorted(summary.observed_to_memory.items()):
@@ -733,12 +865,24 @@ class ProgramSliceGraphBuilder:
                                 program_graph.slice_graph.add_edge(
                                     input_node,
                                     memory_node,
-                                    kind="summary_memory",
+                                    kind="call_out_mem",
                                     opcode="SUMMARY_OBSERVED_MEMORY_WRITE",
+                                    summary_kind="summary_memory",
                                     callee=resolved.name,
                                     observed_input=input_storage,
                                     observed_address=address_storage,
                                     observed_output=output_memory,
+                                )
+                                self._record_summary_call_out_boundary(
+                                    program_graph,
+                                    caller_graph,
+                                    resolved.name,
+                                    callsite_key,
+                                    "call_out_mem",
+                                    observed_input=input_storage,
+                                    observed_address=address_storage,
+                                    observed_output=output_memory,
+                                    opcode="SUMMARY_OBSERVED_MEMORY_WRITE",
                                 )
 
     def _inject_external_summary_edges(
@@ -782,8 +926,9 @@ class ProgramSliceGraphBuilder:
                 program_graph.slice_graph.add_edge(
                     read_memory,
                     write_memory,
-                    kind="summary_memory",
+                    kind="call_out_mem",
                     opcode="EXTERNAL_MEMORY_COPY",
+                    summary_kind="summary_memory",
                     callee=summary.prototype.normalized_name,
                     provider="external",
                     effect=summary.effect.effect,
@@ -811,8 +956,9 @@ class ProgramSliceGraphBuilder:
             program_graph.slice_graph.add_edge(
                 fill_node,
                 write_memory,
-                kind="summary_memory",
+                kind="call_out_mem",
                 opcode="EXTERNAL_MEMORY_FILL",
+                summary_kind="summary_memory",
                 callee=summary.prototype.normalized_name,
                 provider="external",
                 effect=summary.effect.effect,
@@ -837,8 +983,9 @@ class ProgramSliceGraphBuilder:
             program_graph.slice_graph.add_edge(
                 source_node,
                 write_memory,
-                kind="summary_memory",
+                kind="call_out_mem",
                 opcode="EXTERNAL_READ_SOURCE",
+                summary_kind="summary_memory",
                 callee=summary.prototype.normalized_name,
                 provider="external",
                 effect=summary.effect.effect,
@@ -1058,6 +1205,34 @@ class ProgramSliceGraphBuilder:
             }
         )
 
+    def _record_summary_call_out_boundary(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callee_name: str,
+        callsite_key: str,
+        kind: str,
+        **details: str,
+    ) -> None:
+        record = {
+            "caller": caller_graph.function_name,
+            "callee": callee_name,
+            "callsite": callsite_key,
+            "kind": kind,
+            "provider": "auto_summary",
+        }
+        record.update({key: value for key, value in details.items() if value})
+        program_graph.boundary_edges.append(record)
+
+    def _call_out_kind_for_storage(self, storage_key: str) -> str:
+        if storage_key.startswith("reg:"):
+            return "call_out_reg"
+        if storage_key.startswith("mem:global:"):
+            return "call_out_global"
+        if storage_key.startswith("mem:"):
+            return "call_out_mem"
+        return "call_out_reg"
+
     def _summary_memory_node(
         self,
         program_graph: ProgramSliceGraph,
@@ -1163,6 +1338,15 @@ class ProgramSliceGraphBuilder:
         if not self._is_observed_pointer_memory_storage(output_memory):
             return []
         if address_storage:
+            if address_storage.startswith("deref:"):
+                pointed_nodes = self._memory_nodes_for_loaded_observed_pointer(
+                    caller_graph,
+                    callsite_key,
+                    address_storage.removeprefix("deref:"),
+                    output_memory,
+                )
+                if pointed_nodes:
+                    return pointed_nodes
             address_node = self._caller_summary_input_node(caller_graph, callsite_key, address_storage)
             pointed_nodes = self._memory_nodes_for_observed_pointer(caller_graph, address_node, output_memory, callsite_key)
             if pointed_nodes:
@@ -1197,6 +1381,15 @@ class ProgramSliceGraphBuilder:
         expression = caller_graph.slice_graph.nodes[address_node].get("expression")
         if not expression:
             return []
+        return self._memory_nodes_for_expression(caller_graph, expression, output_memory, callsite_key)
+
+    def _memory_nodes_for_expression(
+        self,
+        caller_graph: FunctionGraph,
+        expression: dict,
+        output_memory: str,
+        callsite_key: str,
+    ) -> list[ValueId]:
         memory_key = self._memory_key_from_expression(caller_graph, expression, output_memory)
         if memory_key is None:
             return []
@@ -1222,6 +1415,63 @@ class ProgramSliceGraphBuilder:
             for node in candidates
             if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == latest_addr
         ]
+
+    def _memory_nodes_for_loaded_observed_pointer(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        pointer_storage: str,
+        output_memory: str,
+    ) -> list[ValueId]:
+        pointer_node = self._caller_summary_input_node(caller_graph, callsite_key, pointer_storage)
+        pointer_memory_nodes = self._memory_nodes_for_observed_pointer(
+            caller_graph,
+            pointer_node,
+            f"mem:summary:pointer:{caller_graph.architecture.pointer_size}",
+            callsite_key,
+        )
+        results: list[ValueId] = []
+        for memory_node in pointer_memory_nodes:
+            snapshot_expression = self._pre_call_memory_expression_for_node(caller_graph, callsite_key, memory_node)
+            if snapshot_expression:
+                for pointed_node in self._memory_nodes_for_expression(
+                    caller_graph,
+                    snapshot_expression,
+                    output_memory,
+                    callsite_key,
+                ):
+                    if pointed_node not in results:
+                        results.append(pointed_node)
+            for value_node in caller_graph.slice_graph.predecessors(memory_node):
+                if caller_graph.slice_graph.edges[value_node, memory_node].get("kind") != "memory":
+                    continue
+                for pointed_node in self._memory_nodes_for_observed_pointer(
+                    caller_graph,
+                    value_node,
+                    output_memory,
+                    callsite_key,
+                ):
+                    if pointed_node not in results:
+                        results.append(pointed_node)
+        return results
+
+    def _pre_call_memory_expression_for_node(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        memory_node: ValueId,
+    ) -> dict | None:
+        preferred_prefix = f"{callsite_key}:pre:mem:"
+        for key, pre_node in caller_graph.call_pre_storage_index.items():
+            if not key.startswith(preferred_prefix):
+                continue
+            expression = caller_graph.slice_graph.nodes[pre_node].get("expression")
+            if not expression:
+                continue
+            for pred in caller_graph.slice_graph.predecessors(pre_node):
+                if pred == memory_node:
+                    return dict(expression)
+        return None
 
     def _caller_memory_input_nodes_for_observed_pointer(
         self,

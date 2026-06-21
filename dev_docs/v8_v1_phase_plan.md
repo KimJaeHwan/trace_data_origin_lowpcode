@@ -55,7 +55,7 @@ test oracle.
 | Phase | Name | Gate | Status |
 | --- | --- | --- | --- |
 | 1 | Walking Skeleton | DFB001 / DFB002 PASS | Complete |
-| 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | In progress |
+| 2 | Convention-free Call Boundary Skeleton | synthetic CALL_POST storage exists without stale dependency | Complete |
 | 3 | Control Dependency | DFB010 PASS with data/control split | Complete |
 | 4 | Memory + Architecture Expansion | global/heap skeleton and architecture storage expansion | Complete |
 | 5 | Interprocedural Skeleton + Bottom-up Auto Summary | direct-call summary connectivity | Complete |
@@ -77,12 +77,12 @@ Development order:
 3. Add CompositeSummaryProvider and route current auto summaries through it. [done]
 4. Add a small curated KnownExternalEffectRegistry. [done]
 5. Implement ExternalSummaryProvider for libc/POSIX/WinAPI effects. [first pass done]
-6. Close or replace the remaining Phase 2 call_out_* taxonomy item.
+6. Close or replace the remaining Phase 2 call_out_* taxonomy item. [done]
 7. Run residual clusters with trusted external summaries on/off.
 8. Add byte-range overlap memory modeling for compiler-lowered copy sequences
    such as DFB120/DFB121. [done]
-9. Continue residual clustering: outparam/double-pointer, bitfield,
-   partial-overwrite, large-struct, and deep-field summaries.
+9. Continue residual clustering: bitfield, partial-overwrite, large-struct,
+   deep-field summaries, and trusted external import helpers.
 ```
 
 `LibcSummaryProvider` is intentionally not a standalone phase item anymore.

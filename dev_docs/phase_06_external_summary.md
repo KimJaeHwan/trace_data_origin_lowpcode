@@ -421,7 +421,7 @@ edge provenance samples
     provenance without adding argument/return semantics to the core graph.
 - [x] Add `ExternalSummaryProvider` for memory copy/fill/string copy effects.
   - Provider resolves Ghidra prototype storage to observed callsite storage and
-    adds `summary_memory` edges with external provenance.
+    adds first-class `call_out_mem` edges with external provenance.
   - DFB122 `strcpy` is now covered across all architecture/platform roots.
   - DFB120/DFB121 are not external-summary cases in the current binaries
     because the compiler lowered `memcpy`/`memmove` into ordinary low-pcode
@@ -454,3 +454,6 @@ edge provenance samples
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 24 | Byte-range overlap memory modeling covers compiler-lowered DFB120/121 and keeps external DFB122/DFB123 stable across all roots |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Existing Phase 5 summary gate remains stable after byte-range overlap edges |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_risky expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 92 / FAIL 40 | Memory API cluster passes; remaining residuals are outparam, bitfield, partial-overwrite, large-struct, and deep-field cases |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_outparam_closed_v2 expected --cases case_DFB021 case_DFB022 case_DFB023` | PASS 18 | Source-to-memory outparam and double-pointer observed memory writes pass across all roots |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 24 | External and compiler-lowered buffer flows remain stable after `call_out_mem` promotion |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_risky_after_callout expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 104 / FAIL 28 | DFB021/DFB023 outparam residuals closed; remaining failures are bitfield, partial-overwrite, large-struct, and deep-field clusters |

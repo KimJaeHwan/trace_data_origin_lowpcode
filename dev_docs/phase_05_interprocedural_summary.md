@@ -42,8 +42,10 @@ DFB152 callee use-before-def case PASS across all architecture sample roots.
 ## Current Policy
 
 The Phase 5 MVP handles direct calls by composing per-function slice graphs into
-a program-level graph, then applying automatic summaries as explicit
-`summary_memory` edges.
+a program-level graph, then applying automatic summaries as first-class
+`call_out_*` boundary edges. The older `summary_data` / `summary_memory`
+relation names are retained only as edge provenance (`summary_kind` / `opcode`)
+so reports can explain why the boundary edge exists.
 
 The current automatic summary is intentionally narrow:
 
@@ -52,7 +54,9 @@ source boundary -> global storage write
 global storage read -> primary observed value storage
 observed storage -> primary observed value storage
 observed storage -> observed memory write, when the caller pointer expression resolves
+source boundary -> observed memory write, when callee low-pcode stores a source-derived value through an observed pointer
 observed memory read through observed pointer -> primary observed value storage
+observed storage -> double-dereferenced observed memory write, when low-pcode shows pointer-loaded address flow
 ```
 
 This is enough for DFB026-style flows where one callee writes source-derived
@@ -73,7 +77,8 @@ Current residuals:
 
 ```text
 Full testbed remains intentionally incomplete for recursion-global, indirect/callback,
-libc buffer, C++/exception, thread/runtime, and precision-heavy bitfield/overlap cases.
+C++/exception, thread/runtime, large-struct/deep-field summaries, and
+precision-heavy bitfield/partial-overwrite cases.
 ```
 
 ## Verification Log
@@ -97,3 +102,7 @@ libc buffer, C++/exception, thread/runtime, and precision-heavy bitfield/overlap
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase5_completed_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Completed Phase 5 gate with field-sensitive observed-memory input and callee use-before-def coverage |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase5_completed_risky expected --cases case_DFB021 case_DFB022 case_DFB023 case_DFB053 case_DFB055 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB151 case_DFB152` | PASS 42 / FAIL 24 | Expected residuals stay in 021/023/053/055; 056/057/058/059/151/152 PASS across all roots |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase5_completed_full2 expected --cases` | PASS 334 / FAIL 154 | Full testbed, +21 PASS and 0 regressions against `output/v8_metadata_v4_full` |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_outparam_closed_v2 expected --cases case_DFB021 case_DFB022 case_DFB023` | PASS 18 | Source-to-memory outparam and double-pointer summaries now pass across all architecture/platform roots |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Phase 5 gate remains stable after first-class `call_out_*` boundary promotion |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_risky_after_callout expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 104 / FAIL 28 | DFB021/DFB023 residuals closed; remaining failures are bitfield, partial-overwrite, large-struct, and deep-field clusters |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_full expected --cases` | PASS 370 / FAIL 118 | Full testbed, +36 PASS against `output/v8_phase5_completed_full2` |

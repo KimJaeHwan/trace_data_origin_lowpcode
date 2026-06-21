@@ -85,13 +85,27 @@ in the phase-specific files.
 - Verified external libc buffer cluster at
   `output/v8_phase6_external_libc_buffer`: PASS 12 / FAIL 12. DFB122 `strcpy`
   improved to PASS across all architecture/platform roots, DFB123 stayed PASS,
-  and DFB120/DFB121 remain inline-copy residuals because the current compiler
-  output has no surviving `memcpy`/`memmove` call target.
+  and DFB120/DFB121 were identified as compiler-lowered inline-copy residuals
+  with no surviving `memcpy`/`memmove` call target.
 - Verified Phase 5 regression gate after Phase 6 provider wiring at
   `output/v8_phase6_phase5_gate`: PASS 84.
 - Checked DFB130/DFB131 at `output/v8_phase6_external_import_probe`: FAIL 12,
   expected for now because the DFB helper imports are not registry-known
   libc/POSIX/WinAPI APIs.
+- Added byte-range overlap memory modeling for stack/global/heap memory keys.
+  Loads now materialize their requested byte range and connect overlapping
+  prior memory writes with `LOAD_OVERLAP`, so compiler-lowered copy sequences
+  can flow from narrow source stores through wider loads/stores and back to
+  narrow sink loads.
+- Verified the memory API cluster at `output/v8_memory_overlap_libc_buffer`:
+  PASS 24 across all architecture/platform roots. This covers DFB120/DFB121
+  lowered `memcpy`/`memmove`, DFB122 external `strcpy`, and DFB123
+  memset/partial-copy behavior.
+- Verified the Phase 5 regression gate after byte-range overlap modeling at
+  `output/v8_memory_overlap_phase5_gate`: PASS 84.
+- Ran byte-range risky cases at `output/v8_memory_overlap_risky`: PASS 92 /
+  FAIL 40. Remaining failures are expected residual clusters: outparam,
+  bitfield, partial-overwrite, large-struct, and deep-field summaries.
 
 ## Current Focus
 
@@ -100,9 +114,10 @@ Phase 6 external summary resolution.
 Next engineering step:
 
 ```text
-Continue Phase 6 with residual clustering after the first ExternalSummaryProvider
-pass. DFB122 is now covered by trusted external `strcpy` summaries; DFB120/121
-need inline-copy memory-pattern modeling because the compiler removed the
-external `memcpy`/`memmove` call boundary. Keep trusted external semantics
-outside the core graph model and record provenance on every summary edge.
+Continue Phase 6 with residual clustering after byte-range memory overlap and
+the first ExternalSummaryProvider pass. Memory API cases DFB120-123 now pass
+across all roots. The next targets are outparam/double-pointer precision,
+bitfield and partial-overwrite range precision, and large-struct/deep-field
+summary residuals. Keep trusted external semantics outside the core graph model
+and record provenance on every summary edge.
 ```

@@ -79,8 +79,10 @@ Development order:
 5. Implement ExternalSummaryProvider for libc/POSIX/WinAPI effects. [first pass done]
 6. Close or replace the remaining Phase 2 call_out_* taxonomy item.
 7. Run residual clusters with trusted external summaries on/off.
-8. Add inline-copy memory-pattern modeling for compiler-lowered memcpy/memmove
-   residuals such as DFB120/DFB121.
+8. Add byte-range overlap memory modeling for compiler-lowered copy sequences
+   such as DFB120/DFB121. [done]
+9. Continue residual clustering: outparam/double-pointer, bitfield,
+   partial-overwrite, large-struct, and deep-field summaries.
 ```
 
 `LibcSummaryProvider` is intentionally not a standalone phase item anymore.

@@ -423,9 +423,10 @@ edge provenance samples
   - Provider resolves Ghidra prototype storage to observed callsite storage and
     adds `summary_memory` edges with external provenance.
   - DFB122 `strcpy` is now covered across all architecture/platform roots.
-  - DFB120/DFB121 remain residual because the current compiler output has no
-    surviving `memcpy`/`memmove` call target; those cases need inline-copy
-    memory-pattern modeling, not external call summary.
+  - DFB120/DFB121 are not external-summary cases in the current binaries
+    because the compiler lowered `memcpy`/`memmove` into ordinary low-pcode
+    load/store ranges. They are now covered by byte-range overlap memory
+    modeling in the core low-pcode builder.
 - [x] Add `ExternalSummaryProvider` for read/write source/sink effects.
   - Infrastructure is present for POSIX/WinAPI read/write style effects.
   - Dedicated runtime test coverage is still pending because the current
@@ -450,3 +451,6 @@ edge provenance samples
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_external_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 12 / FAIL 12 | DFB122 and DFB123 PASS across all roots; DFB120/121 remain inline-copy residuals with no surviving external call target |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Composite provider and external edge injection caused no regression in Phase 5 gate |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_external_import_probe expected --cases case_DFB130 case_DFB131` | FAIL 12 | Expected residual: DFB helper imports are not registry-known external APIs yet |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 24 | Byte-range overlap memory modeling covers compiler-lowered DFB120/121 and keeps external DFB122/DFB123 stable across all roots |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Existing Phase 5 summary gate remains stable after byte-range overlap edges |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_memory_overlap_risky expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 92 / FAIL 40 | Memory API cluster passes; remaining residuals are outparam, bitfield, partial-overwrite, large-struct, and deep-field cases |

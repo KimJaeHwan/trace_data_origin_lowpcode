@@ -57,6 +57,20 @@ class BuildState:
         )
 
 
+@dataclass(frozen=True)
+class MemoryRange:
+    identity: str
+    start: int
+    size: int
+
+    @property
+    def end(self) -> int:
+        return self.start + self.size
+
+    def overlaps(self, other: "MemoryRange") -> bool:
+        return self.identity == other.identity and self.start < other.end and other.start < self.end
+
+
 class DataFlowBenchBoundaryBinder:
     def is_source_call(self, instr: dict) -> str | None:
         target = self._primary_target(instr)
@@ -272,10 +286,28 @@ class SliceGraphBuilder:
         out_node = self._new_value(fg, state, output, instr, "LOAD")
         mem_key = self._memory_key_for(fg, state, addr_node, inputs[1], output.get("size"))
         mem_key = self._data_ref_memory_key(instr, "read", output.get("size")) or mem_key
-        mem_node = state.memory.get(mem_key)
-        if mem_node is not None:
+        memory_nodes = self._memory_input_nodes_for_load(state, mem_key)
+        exact_node = state.memory.get(mem_key)
+        if memory_nodes and exact_node is None and self._memory_range_for_key(mem_key) is not None:
+            mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "LOAD_RANGE")
+            fg.slice_graph.nodes[mem_node]["kind"] = "memory_range"
+            fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
+            if addr_node is not None:
+                fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
+            for source_node in memory_nodes:
+                fg.slice_graph.add_edge(source_node, mem_node, kind="memory", opcode="LOAD_OVERLAP")
+            state.memory[mem_key] = mem_node
+            state.expressions[mem_node] = {"kind": "value"}
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
-            state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
+            state.expressions[out_node] = {"kind": "value"}
+        elif memory_nodes:
+            for mem_node in memory_nodes:
+                opcode = "LOAD" if fg.slice_graph.nodes[mem_node].get("storage") == f"mem:{mem_key}" else "LOAD_OVERLAP"
+                fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode=opcode)
+            if len(memory_nodes) == 1:
+                state.expressions[out_node] = dict(state.expressions.get(memory_nodes[0]) or {"kind": "value"})
+            else:
+                state.expressions[out_node] = {"kind": "value"}
         elif self._should_materialize_observed_memory(mem_key):
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
             fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
@@ -283,8 +315,8 @@ class SliceGraphBuilder:
             if addr_node is not None:
                 fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             state.memory[mem_key] = mem_node
-            state.expressions[mem_node] = {"kind": "value"}
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
+            state.expressions[mem_node] = {"kind": "value"}
             state.expressions[out_node] = {"kind": "value"}
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
@@ -336,6 +368,9 @@ class SliceGraphBuilder:
     ) -> ValueId:
         mem_key = self._memory_key_for(fg, state, None, addr_varnode, addr_varnode.get("size"))
         mem_key = self._data_ref_memory_key(instr, "read", addr_varnode.get("size")) or mem_key
+        memory_nodes = self._memory_input_nodes_for_load(state, mem_key)
+        if memory_nodes:
+            return memory_nodes[0]
         mem_node = state.memory.get(mem_key)
         if mem_node is None:
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
@@ -344,6 +379,29 @@ class SliceGraphBuilder:
             state.memory[mem_key] = mem_node
             state.expressions[mem_node] = {"kind": "value"}
         return mem_node
+
+    def _memory_input_nodes_for_load(self, state: BuildState, mem_key: str) -> list[ValueId]:
+        exact_node = state.memory.get(mem_key)
+        exact = self._memory_range_for_key(mem_key)
+        if exact is None:
+            return [exact_node] if exact_node is not None else []
+
+        matches: list[tuple[int, int, ValueId]] = []
+        for candidate_key, candidate_node in state.memory.items():
+            candidate = self._memory_range_for_key(candidate_key)
+            if candidate is None or not candidate.overlaps(exact):
+                continue
+            overlap_start = max(candidate.start, exact.start)
+            overlap_end = min(candidate.end, exact.end)
+            matches.append((overlap_end - overlap_start, candidate_node.version or 0, candidate_node))
+        if not matches and exact_node is not None:
+            return [exact_node]
+        matches.sort(key=lambda item: (-item[0], -item[1], item[2].stable_id()))
+        nodes: list[ValueId] = []
+        for _, _, node in matches:
+            if node not in nodes:
+                nodes.append(node)
+        return nodes
 
     def _value_for_input(
         self,
@@ -700,6 +758,58 @@ class SliceGraphBuilder:
         if addr_varnode.get("is_address"):
             return self.memory_model.global_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
         return self.memory_model.unknown_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
+
+    def _memory_range_for_key(self, mem_key: str) -> MemoryRange | None:
+        if ":stack:" in mem_key:
+            prefix, rest = mem_key.split(":stack:", 1)
+            parts = rest.rsplit(":", 2)
+            if len(parts) != 3:
+                return None
+            base, offset_text, size_text = parts
+            size = self._parse_memory_size(size_text)
+            if size is None:
+                return None
+            try:
+                offset = int(offset_text)
+            except ValueError:
+                return None
+            return MemoryRange(identity=f"{prefix}:stack:{base}", start=offset, size=size)
+
+        if mem_key.startswith("global:"):
+            parts = mem_key.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._parse_memory_size(parts[1])
+            if size is None:
+                return None
+            return MemoryRange(identity=parts[0], start=0, size=size)
+
+        if mem_key.startswith("heap:allocsite:") and ":offset:" in mem_key:
+            prefix, rest = mem_key.split(":offset:", 1)
+            parts = rest.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._parse_memory_size(parts[1])
+            if size is None:
+                return None
+            try:
+                offset = int(parts[0])
+            except ValueError:
+                return None
+            return MemoryRange(identity=prefix, start=offset, size=size)
+
+        return None
+
+    def _parse_memory_size(self, size_text: str) -> int | None:
+        if size_text == "*":
+            return None
+        try:
+            size = int(size_text)
+        except ValueError:
+            return None
+        if size <= 0:
+            return None
+        return size
 
     def _data_ref_memory_key(self, instr: dict, access: str, size: int | None) -> str | None:
         for ref in instr.get("refs_from", []):

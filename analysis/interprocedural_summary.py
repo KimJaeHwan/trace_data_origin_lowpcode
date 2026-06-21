@@ -408,7 +408,7 @@ class ProgramSliceGraphBuilder:
             architecture=target_graph.architecture,
             cfg=target_graph.cfg,
             slice_graph=program_graph.slice_graph,
-            sink_index=dict(target_graph.sink_index),
+            sink_index=self._reachable_sink_index(program_graph, target_program.function_name),
             source_index=self._merged_source_index(program_graph.functions),
             call_pre_storage_index=dict(target_graph.call_pre_storage_index),
             call_post_storage_index=dict(target_graph.call_post_storage_index),
@@ -417,6 +417,17 @@ class ProgramSliceGraphBuilder:
             warnings=list(target_graph.warnings),
         )
         return composed
+
+    def _reachable_sink_index(self, program_graph: ProgramSliceGraph, function_name: str) -> dict[str, ValueId]:
+        sinks = dict(program_graph.functions[function_name].sink_index)
+        reachable = nx.descendants(program_graph.call_graph, function_name) if function_name in program_graph.call_graph else set()
+        for callee_name in sorted(reachable):
+            callee_graph = program_graph.functions.get(callee_name)
+            if callee_graph is None:
+                continue
+            for key, sink in callee_graph.sink_index.items():
+                sinks.setdefault(f"{callee_name}:{key}", sink)
+        return sinks
 
     def _build_directory(self, directory: Path) -> ProgramSliceGraph:
         directory = directory.resolve()
@@ -1348,6 +1359,14 @@ class ProgramSliceGraphBuilder:
                 if pointed_nodes:
                     return pointed_nodes
             address_node = self._caller_summary_input_node(caller_graph, callsite_key, address_storage)
+            pointed_nodes = self._memory_nodes_for_observed_pointer_after_call(
+                caller_graph,
+                address_node,
+                output_memory,
+                callsite_key,
+            )
+            if pointed_nodes:
+                return pointed_nodes
             pointed_nodes = self._memory_nodes_for_observed_pointer(caller_graph, address_node, output_memory, callsite_key)
             if pointed_nodes:
                 return pointed_nodes

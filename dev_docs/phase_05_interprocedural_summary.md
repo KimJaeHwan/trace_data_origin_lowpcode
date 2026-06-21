@@ -57,6 +57,7 @@ observed storage -> observed memory write, when the caller pointer expression re
 source boundary -> observed memory write, when callee low-pcode stores a source-derived value through an observed pointer
 observed memory read through observed pointer -> primary observed value storage
 observed storage -> double-dereferenced observed memory write, when low-pcode shows pointer-loaded address flow
+observed storage -> caller memory after call, when callee low-pcode writes through an observed pointer and caller post-call memory evidence exists
 ```
 
 This is enough for DFB026-style flows where one callee writes source-derived
@@ -77,8 +78,8 @@ Current residuals:
 
 ```text
 Full testbed remains intentionally incomplete for recursion-global, indirect/callback,
-C++/exception, thread/runtime, large-struct/deep-field summaries, and
-precision-heavy bitfield/partial-overwrite cases.
+C++/exception, thread/runtime, deep-field nested pointer passthrough summaries,
+and trusted external import helper coverage.
 ```
 
 ## Verification Log
@@ -106,3 +107,5 @@ precision-heavy bitfield/partial-overwrite cases.
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Phase 5 gate remains stable after first-class `call_out_*` boundary promotion |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_risky_after_callout expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 104 / FAIL 28 | DFB021/DFB023 residuals closed; remaining failures are bitfield, partial-overwrite, large-struct, and deep-field clusters |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_full expected --cases` | PASS 370 / FAIL 118 | Full testbed, +36 PASS against `output/v8_phase5_completed_full2` |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_deep_struct_probe2 expected --cases case_DFB053 case_DFB055` | PASS 6 / FAIL 6 | DFB053 large struct return-buffer flow passes across all roots; DFB055 remains nested deep-field passthrough work |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_large_struct_regression_gate expected --cases case_DFB050 case_DFB053 case_DFB056 case_DFB057 case_DFB058 case_DFB059` | PASS 36 | Large-struct return-buffer closure preserves existing interprocedural summary gate cases |

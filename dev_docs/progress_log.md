@@ -145,6 +145,30 @@ in the phase-specific files.
   `output/v8_partial_overwrite_struct_gate4`: PASS 60.
 - Verified the byte-lane risky gate at `output/v8_byte_lane_risky_gate2`: PASS
   60, including DFB120-123 and DFB007 subregister alias coverage.
+- Added bit-range demand tracking for bitfield read-modify-write flows without
+  adding argument, return, parameter, stack-frame, ABI, or calling-convention
+  assumptions. The graph now tracks contributors through masks, shifts, OR
+  merges, subpieces, extensions, low-pcode constant masks, and memory-backed
+  load leaves.
+- Added latest-byte coverage selection for overlapping zero-initializer and
+  byte-store patterns so zero-init stores do not obscure later bitfield byte
+  writes.
+- Verified bitfield precision at `output/v8_bitfield_probe5`: PASS 12 across
+  DFB034/DFB035 on all architecture/platform roots.
+- Verified offset/partial-overwrite regression after bit-range tracking at
+  `output/v8_bitfield_offset_gate`: PASS 60.
+- Verified risky bitfield/byte-lane/memory-API subset at
+  `output/v8_bitfield_risky_gate`: PASS 54.
+- Closed DFB053 large-struct return-buffer flow by resolving automatic
+  observed-memory write summaries to caller post-call memory evidence, not to
+  pre-call buffer contents.
+- Included reachable callee sinks in target slice queries so nested sink cases
+  can be analyzed without treating helper arguments or returns as conventions.
+- Verified `output/v8_deep_struct_probe2`: DFB053 PASS 6 across all roots;
+  DFB055 remains FAIL 6 and is now isolated to nested deep-field pointer
+  passthrough summary composition.
+- Verified `output/v8_large_struct_regression_gate`: PASS 36 across DFB050,
+  DFB053, and DFB056-059 on all roots.
 
 ## Current Focus
 
@@ -155,8 +179,9 @@ Next engineering step:
 ```text
 Continue Phase 6 with residual clustering after Phase 2 call boundary closure.
 Memory API cases DFB120-123 and outparam/double-pointer cases DFB021-023 now
-pass across all roots. The next targets are bitfield and partial-overwrite
-range precision, large-struct/deep-field summary residuals, and trusted
-external import helper coverage. Keep trusted external semantics outside the
-core graph model and record provenance on every summary edge.
+pass across all roots. Bitfield, partial-overwrite byte/bit precision, and
+large-struct return-buffer flow now pass across focused all-root gates. The next
+target is DFB055-style nested deep-field pointer passthrough summary composition
+plus trusted external import helper coverage. Keep trusted external semantics
+outside the core graph model and record provenance on every summary edge.
 ```

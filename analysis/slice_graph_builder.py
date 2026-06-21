@@ -252,6 +252,9 @@ class SliceGraphBuilder:
         if opcode == "INT_AND":
             self._process_int_and(fg, state, instr, pcode)
             return
+        if opcode in {"INT_LEFT", "INT_RIGHT", "INT_SRIGHT"}:
+            self._process_shift(fg, state, instr, pcode)
+            return
 
         inputs = [self._value_for_input(fg, state, inp, instr, pcode) for inp in pcode.get("inputs", [])]
         output = pcode.get("output")
@@ -349,7 +352,15 @@ class SliceGraphBuilder:
             fg.slice_graph.add_edge(source, out_node, kind="data", opcode="SUBPIECE")
         if offset_node is not None:
             fg.slice_graph.add_edge(offset_node, out_node, kind="data", opcode="SUBPIECE_OFFSET")
-        state.expressions[out_node] = dict(state.expressions.get(source) or {"kind": "value"})
+        expr = dict(state.expressions.get(source) or {"kind": "value"})
+        source_expr = self._bit_expr_for_node(source, state, int(inputs[0].get("size") or 0) * 8)
+        if source_expr is not None:
+            expr["bit_expr"] = {
+                "op": "subpiece",
+                "value": source_expr,
+                "offset": (parse_int(inputs[1].get("offset")) or 0) * 8,
+            }
+        state.expressions[out_node] = expr
 
     def _process_int_and(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -361,15 +372,27 @@ class SliceGraphBuilder:
         out_node = self._new_value(fg, state, output, instr, "INT_AND")
         mask_index = self._constant_input_index(inputs)
         value_index = 1 - mask_index if mask_index in (0, 1) else None
+        expr = self._expression_for("INT_AND", input_nodes, state, output)
+        bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
+        bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
         narrowed: list[ValueId] = []
-        if mask_index is not None and value_index is not None:
+        if (
+            value_index is not None
+            and bit_sources == [input_nodes[value_index]]
+            and input_nodes[value_index] is not None
+            and not (state.expressions.get(input_nodes[value_index]) or {}).get("bit_expr")
+        ):
+            bit_sources = []
+        if bit_sources:
+            narrowed = bit_sources
+        elif mask_index is not None and value_index is not None:
             byte_size = self._low_mask_byte_size(parse_int(inputs[mask_index].get("offset")) or 0)
             value_size = int(inputs[value_index].get("size") or output.get("size") or 0)
             if 0 < byte_size < value_size:
                 narrowed = self._narrowed_sources_for_byte_range(fg, input_nodes[value_index], 0, byte_size)
 
         if narrowed:
-            self._add_narrowed_edges(fg, narrowed, out_node, "INT_AND_LOW_MASK_RANGE")
+            self._add_narrowed_edges(fg, narrowed, out_node, "INT_AND_BIT_RANGE")
             constant_node = input_nodes[mask_index] if mask_index is not None else None
             if constant_node is not None:
                 fg.slice_graph.add_edge(constant_node, out_node, kind="data", opcode="INT_AND_MASK")
@@ -377,7 +400,29 @@ class SliceGraphBuilder:
             for source in input_nodes:
                 if source is not None:
                     fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_AND")
-        state.expressions[out_node] = self._expression_for("INT_AND", input_nodes, state, output)
+        state.expressions[out_node] = expr
+
+    def _process_shift(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        opcode = pcode.get("opcode")
+        if len(inputs) < 2 or output is None or opcode is None:
+            return
+
+        input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
+        out_node = self._new_value(fg, state, output, instr, opcode)
+        expr = self._expression_for(opcode, input_nodes, state, output)
+        bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
+        bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
+        if bit_sources:
+            self._add_narrowed_edges(fg, bit_sources, out_node, f"{opcode}_BIT_RANGE")
+            if input_nodes[1] is not None:
+                fg.slice_graph.add_edge(input_nodes[1], out_node, kind="data", opcode=f"{opcode}_SHIFT")
+        else:
+            for source in input_nodes:
+                if source is not None:
+                    fg.slice_graph.add_edge(source, out_node, kind="data", opcode=opcode)
+        state.expressions[out_node] = expr
 
     def _process_branch(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -443,22 +488,54 @@ class SliceGraphBuilder:
         if exact is None:
             return [exact_node] if exact_node is not None else []
 
-        matches: list[tuple[int, int, ValueId]] = []
-        for candidate_key, candidate_node in state.memory.items():
+        selected: list[ValueId] = []
+        covered: list[tuple[int, int]] = []
+        for candidate_key, candidate_node in reversed(list(state.memory.items())):
             candidate = self._memory_range_for_key(candidate_key)
             if candidate is None or not candidate.overlaps(exact):
                 continue
             overlap_start = max(candidate.start, exact.start)
             overlap_end = min(candidate.end, exact.end)
-            matches.append((overlap_end - overlap_start, candidate_node.version or 0, candidate_node))
-        if not matches and exact_node is not None:
+            uncovered = self._subtract_covered_ranges(overlap_start, overlap_end, covered)
+            if not uncovered:
+                continue
+            if candidate_node not in selected:
+                selected.append(candidate_node)
+            covered.extend(uncovered)
+            if self._covered_size(exact.start, exact.end, covered) >= exact.size:
+                break
+        if not selected and exact_node is not None:
             return [exact_node]
-        matches.sort(key=lambda item: (-item[0], -item[1], item[2].stable_id()))
-        nodes: list[ValueId] = []
-        for _, _, node in matches:
-            if node not in nodes:
-                nodes.append(node)
-        return nodes
+        return selected
+
+    def _subtract_covered_ranges(
+        self,
+        start: int,
+        end: int,
+        covered: list[tuple[int, int]],
+    ) -> list[tuple[int, int]]:
+        ranges = [(start, end)]
+        for cover_start, cover_end in covered:
+            next_ranges: list[tuple[int, int]] = []
+            for range_start, range_end in ranges:
+                if cover_end <= range_start or range_end <= cover_start:
+                    next_ranges.append((range_start, range_end))
+                    continue
+                if range_start < cover_start:
+                    next_ranges.append((range_start, cover_start))
+                if cover_end < range_end:
+                    next_ranges.append((cover_end, range_end))
+            ranges = next_ranges
+            if not ranges:
+                break
+        return ranges
+
+    def _covered_size(self, start: int, end: int, covered: list[tuple[int, int]]) -> int:
+        bits = set()
+        for cover_start, cover_end in covered:
+            for item in range(max(start, cover_start), min(end, cover_end)):
+                bits.add(item)
+        return len(bits)
 
     def _value_for_input(
         self,
@@ -483,6 +560,8 @@ class SliceGraphBuilder:
             state.expressions[node] = {
                 "kind": "const",
                 "value": parse_signed(varnode.get("offset"), varnode.get("size")),
+                "unsigned_value": parse_int(varnode.get("offset")),
+                "size_bits": int(varnode.get("size") or 0) * 8,
             }
             return node
 
@@ -641,6 +720,206 @@ class SliceGraphBuilder:
         if mask != (1 << bit_count) - 1:
             return 0
         return bit_count // 8
+
+    def _bit_sources_for_output(self, expr: dict, output_bits: int) -> list[ValueId]:
+        if output_bits <= 0:
+            return []
+        bit_expr = expr.get("bit_expr")
+        if bit_expr is None:
+            return []
+        return [node for node, _, _ in self._resolve_bit_source_ranges(bit_expr, 0, output_bits)]
+
+    def _bit_source_ranges_for_output(self, expr: dict, output_bits: int) -> list[tuple[ValueId, int, int]]:
+        if output_bits <= 0:
+            return []
+        bit_expr = expr.get("bit_expr")
+        if bit_expr is None:
+            return []
+        return self._resolve_bit_source_ranges(bit_expr, 0, output_bits)
+
+    def _bit_expr_for_node(
+        self,
+        node: ValueId | None,
+        state: BuildState,
+        size_bits: int | None = None,
+    ) -> dict | None:
+        if node is None:
+            return None
+        expr = state.expressions.get(node) or {}
+        bit_expr = expr.get("bit_expr")
+        if bit_expr is not None:
+            return bit_expr
+        if expr.get("kind") == "const":
+            return {
+                "op": "const",
+                "value": self._unsigned_const_value(expr, size_bits),
+                "size": size_bits or expr.get("size_bits"),
+            }
+        return {"op": "leaf", "node": node, "size": size_bits or expr.get("size_bits")}
+
+    def _unsigned_const_value(self, expr: dict | None, size_bits: int | None = None) -> int | None:
+        if not expr:
+            return None
+        if expr.get("unsigned_value") is not None:
+            return int(expr.get("unsigned_value") or 0)
+        if expr.get("value") is None:
+            return None
+        value = int(expr.get("value") or 0)
+        if size_bits and size_bits > 0:
+            return value & ((1 << size_bits) - 1)
+        return value
+
+    def _const_expr_value(self, expr: dict | None, size_bits: int | None = None) -> int | None:
+        if not expr or expr.get("kind") != "const":
+            return None
+        return self._unsigned_const_value(expr, size_bits)
+
+    def _resolve_bit_sources(self, bit_expr: dict | None, start: int, size: int) -> list[ValueId]:
+        return [node for node, _, _ in self._resolve_bit_source_ranges(bit_expr, start, size)]
+
+    def _resolve_bit_source_ranges(
+        self,
+        bit_expr: dict | None,
+        start: int,
+        size: int,
+    ) -> list[tuple[ValueId, int, int]]:
+        if bit_expr is None or size <= 0:
+            return []
+        if start < 0:
+            size += start
+            start = 0
+            if size <= 0:
+                return []
+        op = bit_expr.get("op")
+        if op == "const":
+            return []
+        if op == "leaf":
+            node = bit_expr.get("node")
+            if node is None:
+                return []
+            leaf_size = bit_expr.get("size")
+            if leaf_size is not None and start >= int(leaf_size):
+                return []
+            if leaf_size is not None:
+                size = min(size, int(leaf_size) - start)
+            return [(node, start, size)] if size > 0 else []
+        if op == "subpiece":
+            return self._resolve_bit_source_ranges(
+                bit_expr.get("value"),
+                start + int(bit_expr.get("offset") or 0),
+                size,
+            )
+        if op == "zext":
+            from_size = int(bit_expr.get("from_size") or 0)
+            if from_size <= 0 or start >= from_size:
+                return []
+            clipped = min(size, from_size - start)
+            return self._resolve_bit_source_ranges(bit_expr.get("value"), start, clipped)
+        if op == "sext":
+            from_size = int(bit_expr.get("from_size") or 0)
+            if from_size <= 0:
+                return self._resolve_bit_source_ranges(bit_expr.get("value"), start, size)
+            low = []
+            if start < from_size:
+                low = self._resolve_bit_source_ranges(bit_expr.get("value"), start, min(size, from_size - start))
+            high_start = max(start, from_size)
+            high_end = start + size
+            if high_start < high_end:
+                sign_sources = self._resolve_bit_source_ranges(bit_expr.get("value"), from_size - 1, 1)
+                low = self._merge_source_ranges(low, sign_sources)
+            return low
+        if op == "and":
+            mask = int(bit_expr.get("mask") or 0)
+            sources: list[tuple[ValueId, int, int]] = []
+            bit = start
+            end = start + size
+            while bit < end:
+                while bit < end and not (mask & (1 << bit)):
+                    bit += 1
+                run_start = bit
+                while bit < end and (mask & (1 << bit)):
+                    bit += 1
+                if run_start < bit:
+                    sources = self._merge_source_ranges(
+                        sources,
+                        self._resolve_bit_source_ranges(bit_expr.get("value"), run_start, bit - run_start),
+                    )
+            return sources
+        if op == "or":
+            sources: list[tuple[ValueId, int, int]] = []
+            for value in bit_expr.get("values") or []:
+                sources = self._merge_source_ranges(sources, self._resolve_bit_source_ranges(value, start, size))
+            return sources
+        if op == "shift_left":
+            amount = int(bit_expr.get("amount") or 0)
+            mapped_start = max(start, amount) - amount
+            mapped_end = start + size - amount
+            if mapped_end <= mapped_start:
+                return []
+            return self._resolve_bit_source_ranges(bit_expr.get("value"), mapped_start, mapped_end - mapped_start)
+        if op in {"shift_right", "shift_sright"}:
+            amount = int(bit_expr.get("amount") or 0)
+            return self._resolve_bit_source_ranges(bit_expr.get("value"), start + amount, size)
+        return []
+
+    def _expand_bit_source_ranges(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        ranges: list[tuple[ValueId, int, int]],
+    ) -> list[ValueId]:
+        sources: list[ValueId] = []
+        for node, bit_start, bit_size in ranges:
+            expanded = self._expand_memory_bit_source(fg, state, node, bit_start, bit_size)
+            sources = self._merge_source_lists(sources, expanded or [node])
+        return sources
+
+    def _expand_memory_bit_source(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        node: ValueId,
+        bit_start: int,
+        bit_size: int,
+    ) -> list[ValueId]:
+        if bit_size <= 0:
+            return []
+        byte_start = bit_start // 8
+        byte_end = (bit_start + bit_size + 7) // 8
+        narrowed = self._narrowed_sources_for_byte_range(fg, node, byte_start, byte_end - byte_start)
+        expanded: list[ValueId] = []
+        for source in narrowed:
+            expr = state.expressions.get(source) or {}
+            bit_expr = expr.get("bit_expr")
+            if bit_expr is None:
+                expanded = self._merge_source_lists(expanded, [source])
+                continue
+            source_range = self._memory_range_for_storage(fg.slice_graph.nodes[source].get("storage") or "")
+            node_range = self._load_range_for_memory_predecessors(fg, node)
+            adjusted_start = bit_start
+            if source_range is not None and node_range is not None:
+                adjusted_start = bit_start - ((source_range.start - node_range.start) * 8)
+            resolved = self._resolve_bit_sources(bit_expr, adjusted_start, bit_size)
+            expanded = self._merge_source_lists(expanded, resolved or [source])
+        return expanded
+
+    def _merge_source_lists(self, left: list[ValueId], right: list[ValueId]) -> list[ValueId]:
+        merged = list(left)
+        for source in right:
+            if source not in merged:
+                merged.append(source)
+        return merged
+
+    def _merge_source_ranges(
+        self,
+        left: list[tuple[ValueId, int, int]],
+        right: list[tuple[ValueId, int, int]],
+    ) -> list[tuple[ValueId, int, int]]:
+        merged = list(left)
+        for source in right:
+            if source not in merged:
+                merged.append(source)
+        return merged
 
     def _narrow_memory_predecessor(
         self,
@@ -995,8 +1274,20 @@ class SliceGraphBuilder:
         output: dict,
     ) -> dict:
         exprs = [state.expressions.get(node) for node in inputs if node is not None]
+        bit_expr = self._bit_expression_for(opcode, inputs, state, output)
+        output_bits = int(output.get("size") or 0) * 8
+        const_result = self._constant_expression_for(opcode, exprs, output_bits)
+        if const_result is not None:
+            const_result["size_bits"] = output_bits
+            if bit_expr is not None:
+                const_result["bit_expr"] = bit_expr
+            return const_result
         if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE"} and exprs and exprs[0]:
-            return dict(exprs[0])
+            merged = dict(exprs[0])
+            merged["size_bits"] = output_bits
+            if bit_expr is not None:
+                merged["bit_expr"] = bit_expr
+            return merged
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
@@ -1005,24 +1296,140 @@ class SliceGraphBuilder:
             if stack_expr and const_expr:
                 merged = dict(stack_expr)
                 merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
                 return merged
             if heap_expr and const_expr:
                 merged = dict(heap_expr)
                 merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
                 return merged
             if len(const_exprs) >= 2:
-                return {"kind": "const", "value": sum(int(expr.get("value") or 0) for expr in const_exprs[:2])}
+                value = sum(int(expr.get("value") or 0) for expr in const_exprs[:2])
+                return {
+                    "kind": "const",
+                    "value": value,
+                    "unsigned_value": value & ((1 << output_bits) - 1) if output_bits > 0 else value,
+                    "size_bits": output_bits,
+                }
         if opcode == "INT_SUB" and len(exprs) >= 2:
             left, right = exprs[0], exprs[1]
             if left and left.get("kind") == "stack" and right and right.get("kind") == "const":
                 merged = dict(left)
                 merged["offset"] = int(merged.get("offset") or 0) - int(right.get("value") or 0)
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
                 return merged
-        return {"kind": "value"}
+        expr = {"kind": "value", "size_bits": output_bits}
+        if bit_expr is not None:
+            expr["bit_expr"] = bit_expr
+        return expr
+
+    def _constant_expression_for(self, opcode: str, exprs: list[dict | None], output_bits: int) -> dict | None:
+        if not exprs or any(expr is None or expr.get("kind") != "const" for expr in exprs):
+            return None
+        mask = (1 << output_bits) - 1 if output_bits > 0 else None
+        values = [self._unsigned_const_value(expr, output_bits) for expr in exprs]
+        if any(value is None for value in values):
+            return None
+        result: int | None = None
+        if opcode == "INT_AND" and len(values) >= 2:
+            result = int(values[0]) & int(values[1])
+        elif opcode == "INT_OR" and len(values) >= 2:
+            result = int(values[0]) | int(values[1])
+        elif opcode == "INT_XOR" and len(values) >= 2:
+            result = int(values[0]) ^ int(values[1])
+        elif opcode == "INT_LEFT" and len(values) >= 2:
+            result = int(values[0]) << int(values[1])
+        elif opcode in {"INT_RIGHT", "INT_SRIGHT"} and len(values) >= 2:
+            result = int(values[0]) >> int(values[1])
+        elif opcode == "INT_SUB" and len(values) >= 2:
+            result = int(values[0]) - int(values[1])
+        elif opcode == "INT_NEGATE" and values:
+            result = ~int(values[0])
+        if result is None:
+            return None
+        unsigned = result & mask if mask is not None else result
+        return {"kind": "const", "value": unsigned, "unsigned_value": unsigned}
+
+    def _bit_expression_for(
+        self,
+        opcode: str,
+        inputs: list[ValueId | None],
+        state: BuildState,
+        output: dict,
+    ) -> dict | None:
+        if not inputs:
+            return None
+        output_bits = int(output.get("size") or 0) * 8
+        input_exprs = [self._bit_expr_for_node(node, state) for node in inputs]
+        first = input_exprs[0] if input_exprs else None
+        if opcode == "COPY":
+            return first
+        if opcode == "INT_ZEXT":
+            source_bits = self._bit_size_for_node(inputs[0], state)
+            return {"op": "zext", "value": first, "from_size": source_bits} if first is not None else None
+        if opcode == "INT_SEXT":
+            source_bits = self._bit_size_for_node(inputs[0], state)
+            return {"op": "sext", "value": first, "from_size": source_bits} if first is not None else None
+        if opcode == "INT_AND" and len(inputs) >= 2:
+            exprs = [state.expressions.get(node) for node in inputs]
+            left_const = self._const_expr_value(exprs[0], output_bits) if len(exprs) > 0 else None
+            right_const = self._const_expr_value(exprs[1], output_bits) if len(exprs) > 1 else None
+            if left_const is not None and input_exprs[1] is not None:
+                return {"op": "and", "value": input_exprs[1], "mask": left_const}
+            if right_const is not None and input_exprs[0] is not None:
+                return {"op": "and", "value": input_exprs[0], "mask": right_const}
+            if left_const is not None and right_const is not None:
+                return {"op": "const", "value": left_const & right_const, "size": output_bits}
+        if opcode == "INT_OR" and len(input_exprs) >= 2:
+            values = [expr for expr in input_exprs[:2] if expr is not None]
+            return {"op": "or", "values": values} if values else None
+        if opcode == "INT_LEFT" and len(inputs) >= 2 and first is not None:
+            amount = self._const_expr_value(state.expressions.get(inputs[1]), output_bits)
+            if amount is not None:
+                return {"op": "shift_left", "value": first, "amount": amount}
+        if opcode in {"INT_RIGHT", "INT_SRIGHT"} and len(inputs) >= 2 and first is not None:
+            amount = self._const_expr_value(state.expressions.get(inputs[1]), output_bits)
+            if amount is not None:
+                op = "shift_sright" if opcode == "INT_SRIGHT" else "shift_right"
+                return {"op": op, "value": first, "amount": amount}
+        return None
+
+    def _bit_size_for_node(self, node: ValueId | None, state: BuildState) -> int:
+        if node is None:
+            return 0
+        expr = state.expressions.get(node) or {}
+        if expr.get("size_bits") is not None:
+            return int(expr.get("size_bits") or 0)
+        bit_expr = expr.get("bit_expr") or {}
+        if bit_expr.get("size") is not None:
+            return int(bit_expr.get("size") or 0)
+        parts = node.key.split(":")
+        if node.space == "reg" and len(parts) >= 2:
+            try:
+                return int(parts[-1])
+            except ValueError:
+                return 0
+        if node.space == "mem" and parts:
+            try:
+                return int(parts[-1]) * 8
+            except ValueError:
+                return 0
+        return 0
 
     def _base_expression(self, fg: FunctionGraph, varnode: dict) -> dict:
         if varnode.get("is_constant"):
-            return {"kind": "const", "value": parse_signed(varnode.get("offset"), varnode.get("size"))}
+            return {
+                "kind": "const",
+                "value": parse_signed(varnode.get("offset"), varnode.get("size")),
+                "unsigned_value": parse_int(varnode.get("offset")),
+                "size_bits": int(varnode.get("size") or 0) * 8,
+            }
         if varnode.get("is_register"):
             offset = parse_int(varnode.get("offset")) or 0
             reg = fg.architecture.canonicalize_register(
@@ -1031,9 +1438,9 @@ class SliceGraphBuilder:
                 varnode.get("register_name"),
             )
             if reg.canonical in fg.architecture.stack_pointer_regs | fg.architecture.frame_pointer_regs:
-                return {"kind": "stack", "base": reg.canonical, "offset": 0}
-            return {"kind": "register", "key": reg.key()}
-        return {"kind": "value"}
+                return {"kind": "stack", "base": reg.canonical, "offset": 0, "size_bits": int(varnode.get("size") or 0) * 8}
+            return {"kind": "register", "key": reg.key(), "size_bits": int(varnode.get("size") or 0) * 8}
+        return {"kind": "value", "size_bits": int(varnode.get("size") or 0) * 8}
 
     def _memory_key_for(
         self,

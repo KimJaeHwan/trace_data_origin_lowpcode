@@ -413,12 +413,28 @@ edge provenance samples
   - `analysis.external_summary` resolves prototypes against the curated
     registry, binds roles when prototype parameter metadata exists, records
     trust level, provenance, and cache keys.
-- [ ] Add `CompositeSummaryProvider`.
-- [ ] Move current automatic summaries behind the composite provider.
-- [ ] Add `ExternalSummaryProvider` for alloc/realloc/free effects.
-- [ ] Add `ExternalSummaryProvider` for memory copy/fill/string copy effects.
-- [ ] Add `ExternalSummaryProvider` for read/write source/sink effects.
+- [x] Add `CompositeSummaryProvider`.
+- [x] Move current automatic summaries behind the composite provider.
+- [x] Add `ExternalSummaryProvider` for alloc/realloc/free boundary effects.
+  - Allocation pointer expressions still come from the existing low-pcode call
+    boundary materialization. Phase 6 records resolved external lifetime
+    provenance without adding argument/return semantics to the core graph.
+- [x] Add `ExternalSummaryProvider` for memory copy/fill/string copy effects.
+  - Provider resolves Ghidra prototype storage to observed callsite storage and
+    adds `summary_memory` edges with external provenance.
+  - DFB122 `strcpy` is now covered across all architecture/platform roots.
+  - DFB120/DFB121 remain residual because the current compiler output has no
+    surviving `memcpy`/`memmove` call target; those cases need inline-copy
+    memory-pattern modeling, not external call summary.
+- [x] Add `ExternalSummaryProvider` for read/write source/sink effects.
+  - Infrastructure is present for POSIX/WinAPI read/write style effects.
+  - Dedicated runtime test coverage is still pending because the current
+    DFB130/DFB131 shared-import cases are benchmark helpers, not registry-known
+    libc/POSIX/WinAPI functions.
 - [ ] Add summary cache invalidation for external prototype and registry hashes.
+  - Directory fingerprints already include per-file metadata hashes.
+  - Persistent external edge caching is not added yet, so registry hash
+    invalidation remains a future cache item.
 - [ ] Verify trusted external summaries on/off across residual clusters.
 
 ## Verification Log
@@ -428,3 +444,9 @@ edge provenance samples
 | 2026-06-21 | `python3 -m py_compile frontend/external_prototype.py frontend/low_pcode_loader.py analysis/external_summary.py scripts/lowpcode_json_dumper.py` | PASS | Loader, resolver, registry, and dumper syntax |
 | 2026-06-21 | synthetic schema v5 `memcpy` prototype resolver smoke | PASS | Resolved `memory_copy` with `trusted_external_prototype` and bound roles |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_external_infra_smoke expected --cases case_DFB001 case_DFB002` | PASS 12 | Existing Phase 1 dataflow path unchanged |
+| 2026-06-21 | `python3 scripts/run_ghidra_headless_lowpcode.py` | PASS | Re-extracted schema v5 low-pcode JSON with Ghidra headless: 848 function JSON files, 22 manifests, all observed batches `fail=0` |
+| 2026-06-21 | schema v5 metadata validation script over `samples/low_pcode` | PASS | 848/848 files at schema v5, 36,461 external prototype entries, 0 missing prototype metadata hashes, 7,236 registry matches |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode/linux_amd64/win_core output/v8_phase6_external_probe expected --cases case_DFB122 case_DFB123` | PASS 2 | Local probe: external `strcpy` summary fixes DFB122 and keeps DFB123 stable |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_external_libc_buffer expected --cases case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 12 / FAIL 12 | DFB122 and DFB123 PASS across all roots; DFB120/121 remain inline-copy residuals with no surviving external call target |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Composite provider and external edge injection caused no regression in Phase 5 gate |
+| 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase6_external_import_probe expected --cases case_DFB130 case_DFB131` | FAIL 12 | Expected residual: DFB helper imports are not registry-known external APIs yet |

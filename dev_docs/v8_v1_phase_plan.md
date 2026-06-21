@@ -71,14 +71,16 @@ specific libc or WinAPI effect provider.
 Development order:
 
 ```text
-0. Repository hygiene: stop tracking generated samples/low_pcode JSON outputs.
-1. Add the ResolvedExternalSummary design and data model.
-2. Extend Ghidra extraction for external prototype metadata.
-3. Add CompositeSummaryProvider and route current auto summaries through it.
-4. Add a small curated KnownExternalEffectRegistry.
-5. Implement ExternalSummaryProvider for libc/POSIX/WinAPI effects.
+0. Repository hygiene: stop tracking generated samples/low_pcode JSON outputs. [done]
+1. Add the ResolvedExternalSummary design and data model. [done]
+2. Extend Ghidra extraction for external prototype metadata. [done]
+3. Add CompositeSummaryProvider and route current auto summaries through it. [done]
+4. Add a small curated KnownExternalEffectRegistry. [done]
+5. Implement ExternalSummaryProvider for libc/POSIX/WinAPI effects. [first pass done]
 6. Close or replace the remaining Phase 2 call_out_* taxonomy item.
 7. Run residual clusters with trusted external summaries on/off.
+8. Add inline-copy memory-pattern modeling for compiler-lowered memcpy/memmove
+   residuals such as DFB120/DFB121.
 ```
 
 `LibcSummaryProvider` is intentionally not a standalone phase item anymore.

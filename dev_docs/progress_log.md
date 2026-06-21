@@ -71,6 +71,27 @@ in the phase-specific files.
   WinAPI effects.
 - Verified Phase 6 infrastructure smoke: synthetic `memcpy` prototype resolves
   to `memory_copy`, and DFB001/DFB002 remain PASS 12.
+- Re-extracted schema v5 low-pcode JSON with Ghidra headless: 848 function JSON
+  files and 22 manifests under `samples/low_pcode`, with observed extraction
+  batches reporting `fail=0`.
+- Verified schema v5 metadata across the extracted samples: 848/848 files at
+  schema v5, 36,461 external prototype entries, 0 missing prototype metadata
+  hashes, and 7,236 curated registry matches.
+- Added `CompositeSummaryProvider` and routed the existing automatic
+  low-pcode function summaries behind it.
+- Added `ExternalSummaryProvider` for resolved external memory copy/fill,
+  read/write source/sink, and allocation lifetime boundary effects. External
+  edges carry provider, effect, trust, provenance, and resolver cache keys.
+- Verified external libc buffer cluster at
+  `output/v8_phase6_external_libc_buffer`: PASS 12 / FAIL 12. DFB122 `strcpy`
+  improved to PASS across all architecture/platform roots, DFB123 stayed PASS,
+  and DFB120/DFB121 remain inline-copy residuals because the current compiler
+  output has no surviving `memcpy`/`memmove` call target.
+- Verified Phase 5 regression gate after Phase 6 provider wiring at
+  `output/v8_phase6_phase5_gate`: PASS 84.
+- Checked DFB130/DFB131 at `output/v8_phase6_external_import_probe`: FAIL 12,
+  expected for now because the DFB helper imports are not registry-known
+  libc/POSIX/WinAPI APIs.
 
 ## Current Focus
 
@@ -79,9 +100,9 @@ Phase 6 external summary resolution.
 Next engineering step:
 
 ```text
-Start Phase 6 with ResolvedExternalSummary infrastructure before implementing
-specific libc/POSIX/WinAPI effects. Ghidra/PDB-style external prototype metadata
-is joined with a curated external effect registry, then applied through an
-optional ExternalSummaryProvider. Keep trusted external semantics outside the
-core graph model and record provenance on every summary edge.
+Continue Phase 6 with residual clustering after the first ExternalSummaryProvider
+pass. DFB122 is now covered by trusted external `strcpy` summaries; DFB120/121
+need inline-copy memory-pattern modeling because the compiler removed the
+external `memcpy`/`memmove` call boundary. Keep trusted external semantics
+outside the core graph model and record provenance on every summary edge.
 ```

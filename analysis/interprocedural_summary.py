@@ -9,11 +9,13 @@ import networkx as nx
 
 from analysis.call_boundary_mapper import CallBoundaryMapper
 from analysis.call_resolver import CallResolver
+from analysis.external_summary import ExternalSummaryResolver, ResolvedExternalSummary
 from analysis.memory_model import MemoryModel
 from analysis.slice_graph_builder import SliceGraphBuilder, parse_int
 from core.edge import DATA_SLICE_EDGES
 from core.graph import FunctionGraph, ProgramSliceGraph
 from core.value_id import ValueId
+from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
@@ -272,11 +274,80 @@ class MinimalAutoFunctionSummaryProvider:
         return function_graph.architecture.is_general_register(canonical)
 
 
+class CompositeSummaryProvider:
+    def __init__(self, providers: list[MinimalAutoFunctionSummaryProvider]):
+        self.providers = providers
+
+    def summarize(self, function_graph: FunctionGraph) -> AutoFunctionSummary:
+        merged = AutoFunctionSummary(function_graph.function_name)
+        for provider in self.providers:
+            merge_function_summary(merged, provider.summarize(function_graph))
+        return merged
+
+
+class ExternalSummaryProvider:
+    def __init__(self, resolver: ExternalSummaryResolver | None = None):
+        self.resolver = resolver or ExternalSummaryResolver()
+
+    def resolve_program_callsites(self, program: LowPcodeProgram) -> dict[str, ResolvedExternalSummary]:
+        resolved_by_entry = self.resolver.resolve(program.external_prototypes)
+        if not resolved_by_entry:
+            return {}
+        by_callsite: dict[str, ResolvedExternalSummary] = {}
+        for instr in program.instructions:
+            resolved_call = CallResolver().resolve(instr)
+            callsite_key = f"{instr.get('address')}:{resolved_call.name or resolved_call.address or 'unresolved'}"
+            for target in instr.get("call_targets") or []:
+                for entry in self._target_entries(target):
+                    summary = resolved_by_entry.get(entry)
+                    if summary is not None:
+                        by_callsite[callsite_key] = summary
+                        break
+                if callsite_key in by_callsite:
+                    break
+        return by_callsite
+
+    def _target_entries(self, target: dict) -> list[str]:
+        entries: list[str] = []
+        for key in ("address", "entry"):
+            value = target.get(key)
+            if value is not None:
+                entries.append(str(value))
+        raw = target.get("external_prototype") or {}
+        for key in ("entry",):
+            value = raw.get(key)
+            if value is not None:
+                entries.append(str(value))
+        thunk = raw.get("thunk_target") or {}
+        value = thunk.get("entry")
+        if value is not None:
+            entries.append(str(value))
+        return entries
+
+
+def merge_function_summary(target: AutoFunctionSummary, source: AutoFunctionSummary) -> None:
+    for key, nodes in source.global_writes.items():
+        target.global_writes.setdefault(key, set()).update(nodes)
+    for key, values in source.global_reads_to_storage.items():
+        target.global_reads_to_storage.setdefault(key, set()).update(values)
+    for key, nodes in source.source_to_primary.items():
+        target.source_to_primary.setdefault(key, set()).update(nodes)
+    for key, values in source.observed_to_primary.items():
+        target.observed_to_primary.setdefault(key, set()).update(values)
+    for key, values in source.observed_memory_to_primary.items():
+        target.observed_memory_to_primary.setdefault(key, set()).update(values)
+    for input_storage, outputs_by_address in source.observed_to_memory.items():
+        target_outputs = target.observed_to_memory.setdefault(input_storage, {})
+        for address_storage, output_memories in outputs_by_address.items():
+            target_outputs.setdefault(address_storage, set()).update(output_memories)
+
+
 class ProgramSliceGraphBuilder:
     def __init__(self):
         self.loader = LowPcodeLoader()
         self.function_builder = SliceGraphBuilder()
-        self.summary_provider = MinimalAutoFunctionSummaryProvider()
+        self.summary_provider = CompositeSummaryProvider([MinimalAutoFunctionSummaryProvider()])
+        self.external_summary_provider = ExternalSummaryProvider()
         self.call_resolver = CallResolver()
         self.memory_model = MemoryModel()
         self.summary_cache_dir = Path("output/.summary_cache")
@@ -329,6 +400,7 @@ class ProgramSliceGraphBuilder:
         self._record_direct_calls(program_graph, programs)
         self._record_call_in_edges(program_graph, programs)
         self._inject_summary_edges(program_graph, programs, summaries)
+        self._inject_external_summary_edges(program_graph, programs)
         self._record_sccs(program_graph)
         self._cache[cache_key] = program_graph
         return program_graph
@@ -668,6 +740,323 @@ class ProgramSliceGraphBuilder:
                                     observed_address=address_storage,
                                     observed_output=output_memory,
                                 )
+
+    def _inject_external_summary_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            summaries_by_callsite = self.external_summary_provider.resolve_program_callsites(program)
+            if not summaries_by_callsite:
+                continue
+            for callsite_key, summary in sorted(summaries_by_callsite.items()):
+                effect = summary.effect.effect
+                if effect == "memory_copy":
+                    self._inject_external_memory_copy(program_graph, caller_graph, callsite_key, summary)
+                elif effect == "memory_fill":
+                    self._inject_external_memory_fill(program_graph, caller_graph, callsite_key, summary)
+                elif effect == "external_read_source":
+                    self._inject_external_read_source(program_graph, caller_graph, callsite_key, summary)
+                elif effect == "external_write_sink":
+                    self._inject_external_write_sink(program_graph, caller_graph, callsite_key, summary)
+                elif effect in {"alloc", "realloc", "free"}:
+                    self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "external_lifetime")
+
+    def _inject_external_memory_copy(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> None:
+        read_param = self._external_role_parameter(summary, "read_buffer")
+        write_param = self._external_role_parameter(summary, "write_buffer")
+        read_address = self._external_role_input_node(caller_graph, callsite_key, read_param)
+        write_address = self._external_role_input_node(caller_graph, callsite_key, write_param)
+        read_memories = self._external_memory_nodes_for_pointer(caller_graph, read_address, callsite_key, after_call=False)
+        write_memories = self._external_memory_nodes_for_pointer(caller_graph, write_address, callsite_key, after_call=True)
+        for read_memory in read_memories:
+            for write_memory in write_memories:
+                program_graph.slice_graph.add_edge(
+                    read_memory,
+                    write_memory,
+                    kind="summary_memory",
+                    opcode="EXTERNAL_MEMORY_COPY",
+                    callee=summary.prototype.normalized_name,
+                    provider="external",
+                    effect=summary.effect.effect,
+                    trust=summary.trust_level,
+                    provenance=summary.provenance,
+                    cache_key=summary.cache_key,
+                )
+                self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "call_out_mem")
+
+    def _inject_external_memory_fill(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> None:
+        write_param = self._external_role_parameter(summary, "write_buffer")
+        write_address = self._external_role_input_node(caller_graph, callsite_key, write_param)
+        write_memories = self._external_memory_nodes_for_pointer(caller_graph, write_address, callsite_key, after_call=True)
+        fill_param = self._external_role_parameter(summary, "fill_value")
+        fill_node = self._external_role_input_node(caller_graph, callsite_key, fill_param)
+        if fill_node is None:
+            return
+        for write_memory in write_memories:
+            program_graph.slice_graph.add_edge(
+                fill_node,
+                write_memory,
+                kind="summary_memory",
+                opcode="EXTERNAL_MEMORY_FILL",
+                callee=summary.prototype.normalized_name,
+                provider="external",
+                effect=summary.effect.effect,
+                trust=summary.trust_level,
+                provenance=summary.provenance,
+                cache_key=summary.cache_key,
+            )
+            self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "call_out_mem")
+
+    def _inject_external_read_source(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> None:
+        write_param = self._external_role_parameter(summary, "write_buffer")
+        write_address = self._external_role_input_node(caller_graph, callsite_key, write_param)
+        write_memories = self._external_memory_nodes_for_pointer(caller_graph, write_address, callsite_key, after_call=True)
+        source_node = self._external_source_node(program_graph, caller_graph, callsite_key, summary)
+        for write_memory in write_memories:
+            program_graph.slice_graph.add_edge(
+                source_node,
+                write_memory,
+                kind="summary_memory",
+                opcode="EXTERNAL_READ_SOURCE",
+                callee=summary.prototype.normalized_name,
+                provider="external",
+                effect=summary.effect.effect,
+                trust=summary.trust_level,
+                provenance=summary.provenance,
+                cache_key=summary.cache_key,
+            )
+            self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "call_out_mem")
+
+    def _inject_external_write_sink(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> None:
+        read_param = self._external_role_parameter(summary, "read_buffer")
+        read_address = self._external_role_input_node(caller_graph, callsite_key, read_param)
+        read_memories = self._external_memory_nodes_for_pointer(caller_graph, read_address, callsite_key, after_call=False)
+        sink_node = self._external_sink_node(program_graph, caller_graph, callsite_key, summary)
+        for read_memory in read_memories:
+            program_graph.slice_graph.add_edge(
+                read_memory,
+                sink_node,
+                kind="summary_memory",
+                opcode="EXTERNAL_WRITE_SINK",
+                callee=summary.prototype.normalized_name,
+                provider="external",
+                effect=summary.effect.effect,
+                trust=summary.trust_level,
+                provenance=summary.provenance,
+                cache_key=summary.cache_key,
+            )
+            self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "external_sink")
+
+    def _external_role_parameter(
+        self,
+        summary: ResolvedExternalSummary,
+        role: str,
+    ) -> ExternalParameter | None:
+        resolved = summary.role_resolution.get(role)
+        if resolved is None:
+            return None
+        return resolved.parameter
+
+    def _external_role_input_node(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        parameter: ExternalParameter | None,
+    ) -> ValueId | None:
+        storage = self._external_parameter_storage_key(caller_graph, parameter)
+        if storage is None:
+            return None
+        return self._caller_summary_input_node(caller_graph, callsite_key, storage)
+
+    def _external_parameter_storage_key(
+        self,
+        caller_graph: FunctionGraph,
+        parameter: ExternalParameter | None,
+    ) -> str | None:
+        if parameter is None or not parameter.storage:
+            return None
+        storage = parameter.storage
+        if storage.startswith("Stack["):
+            try:
+                offset_text, size_text = storage.split("[", 1)[1].split("]", 1)[0], storage.rsplit(":", 1)[1]
+                offset = parse_int(offset_text)
+                size = int(size_text)
+            except (IndexError, ValueError):
+                return None
+            if offset is None:
+                return None
+            stack_reg = sorted(caller_graph.architecture.stack_pointer_regs)[0]
+            return f"mem:external:root:stack:{stack_reg}:{offset}:{size}"
+        if ":" not in storage:
+            return None
+        name, size_text = storage.rsplit(":", 1)
+        try:
+            size_bytes = int(size_text)
+        except ValueError:
+            return None
+        reg = caller_graph.architecture.canonicalize_register(-1, size_bytes, name)
+        return f"reg:{reg.key()}"
+
+    def _external_memory_nodes_for_pointer(
+        self,
+        caller_graph: FunctionGraph,
+        address_node: ValueId | None,
+        callsite_key: str,
+        after_call: bool,
+    ) -> list[ValueId]:
+        if address_node is None:
+            return []
+        sizes = [1, caller_graph.architecture.pointer_size, 4, 8, None]
+        nodes: list[ValueId] = []
+        for size in sizes:
+            output_memory = f"mem:summary:field:{size or '*'}"
+            if after_call:
+                candidates = self._memory_nodes_for_observed_pointer_after_call(
+                    caller_graph,
+                    address_node,
+                    output_memory,
+                    callsite_key,
+                )
+            else:
+                candidates = self._memory_nodes_for_observed_pointer(
+                    caller_graph,
+                    address_node,
+                    output_memory,
+                    callsite_key,
+                )
+            for candidate in candidates:
+                if candidate not in nodes:
+                    nodes.append(candidate)
+        return nodes
+
+    def _memory_nodes_for_observed_pointer_after_call(
+        self,
+        caller_graph: FunctionGraph,
+        address_node: ValueId | None,
+        output_memory: str,
+        callsite_key: str,
+    ) -> list[ValueId]:
+        if address_node is None:
+            return []
+        expression = caller_graph.slice_graph.nodes[address_node].get("expression")
+        if not expression:
+            return []
+        memory_key = self._memory_key_from_expression(caller_graph, expression, output_memory)
+        if memory_key is None:
+            return []
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        prefix = memory_key.rsplit(":", 1)[0]
+        exact = f"mem:{memory_key}"
+        prefix_text = f"mem:{prefix}:"
+        candidates = [
+            node
+            for node, attrs in caller_graph.slice_graph.nodes(data=True)
+            if (parse_int(attrs.get("addr")) or 0) >= callsite_addr
+            and (attrs.get("storage") == exact or (attrs.get("storage") or "").startswith(prefix_text))
+        ]
+        if not candidates:
+            return []
+        earliest_addr = min(parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0 for node in candidates)
+        return [
+            node
+            for node in candidates
+            if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == earliest_addr
+        ]
+
+    def _external_source_node(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> ValueId:
+        label = f"external:{summary.prototype.normalized_name}:{callsite_key}"
+        node = ValueId(caller_graph.function_name, caller_graph.context_id, "boundary", label)
+        if not caller_graph.slice_graph.has_node(node):
+            caller_graph.slice_graph.add_node(
+                node,
+                kind="source_boundary",
+                display=label,
+                opcode="EXTERNAL_SOURCE_BOUNDARY",
+                source_label=label,
+                provider="external",
+                provenance=summary.provenance,
+            )
+            caller_graph.source_index[label] = node
+        if not program_graph.slice_graph.has_node(node):
+            program_graph.slice_graph.add_node(node, **caller_graph.slice_graph.nodes[node])
+        return node
+
+    def _external_sink_node(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> ValueId:
+        label = f"{callsite_key}:external_sink:{summary.prototype.normalized_name}"
+        node = ValueId(caller_graph.function_name, caller_graph.context_id, "sink", label)
+        if not caller_graph.slice_graph.has_node(node):
+            caller_graph.slice_graph.add_node(
+                node,
+                kind="sink_boundary",
+                display=label,
+                opcode="EXTERNAL_SINK_BOUNDARY",
+                sink_name=summary.prototype.normalized_name,
+                provider="external",
+                provenance=summary.provenance,
+            )
+        if not program_graph.slice_graph.has_node(node):
+            program_graph.slice_graph.add_node(node, **caller_graph.slice_graph.nodes[node])
+        return node
+
+    def _record_external_boundary(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+        kind: str,
+    ) -> None:
+        program_graph.boundary_edges.append(
+            {
+                "caller": caller_graph.function_name,
+                "callee": summary.prototype.normalized_name,
+                "callsite": callsite_key,
+                "kind": kind,
+                "provider": "external",
+                "effect": summary.effect.effect,
+                "trust": summary.trust_level,
+                "cache_key": summary.cache_key,
+            }
+        )
 
     def _summary_memory_node(
         self,

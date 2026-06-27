@@ -19,7 +19,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 6
+SUMMARY_CACHE_SCHEMA_VERSION = 7
 
 
 @dataclass
@@ -32,6 +32,7 @@ class AutoFunctionSummary:
     observed_to_primary: dict[str, set[str]] = field(default_factory=dict)
     observed_memory_to_primary: dict[str, set[str]] = field(default_factory=dict)
     observed_to_memory: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    observed_memory_to_sink: dict[str, set[ValueId]] = field(default_factory=dict)
 
 
 class MinimalAutoFunctionSummaryProvider:
@@ -108,6 +109,9 @@ class MinimalAutoFunctionSummaryProvider:
             reached_storages = self._primary_storages_reached(graph, node, primary_storages)
             if reached_storages:
                 summary.global_reads_to_storage.setdefault(program_key, set()).update(reached_storages)
+        for sink_node in function_graph.sink_index.values():
+            for address_storage in self._observed_memory_address_storages_reaching(graph, sink_node, function_graph):
+                summary.observed_memory_to_sink.setdefault(address_storage, set()).add(sink_node)
         return summary
 
     def _is_program_memory_storage(self, storage: str) -> bool:
@@ -384,13 +388,16 @@ def merge_function_summary(target: AutoFunctionSummary, source: AutoFunctionSumm
         target_outputs = target.observed_to_memory.setdefault(input_storage, {})
         for address_storage, output_memories in outputs_by_address.items():
             target_outputs.setdefault(address_storage, set()).update(output_memories)
+    for key, nodes in source.observed_memory_to_sink.items():
+        target.observed_memory_to_sink.setdefault(key, set()).update(nodes)
 
 
 class ProgramSliceGraphBuilder:
     def __init__(self):
         self.loader = LowPcodeLoader()
         self.function_builder = SliceGraphBuilder()
-        self.summary_provider = CompositeSummaryProvider([MinimalAutoFunctionSummaryProvider()])
+        self.auto_summary_provider = MinimalAutoFunctionSummaryProvider()
+        self.summary_provider = CompositeSummaryProvider([self.auto_summary_provider])
         self.external_summary_provider = ExternalSummaryProvider()
         self.call_resolver = CallResolver()
         self.memory_model = MemoryModel()
@@ -453,6 +460,7 @@ class ProgramSliceGraphBuilder:
 
         program_graph = ProgramSliceGraph(functions=functions, slice_graph=composed)
         self._record_direct_calls(program_graph, programs)
+        self._compose_transitive_sink_summaries(program_graph, programs, summaries)
         self._record_call_in_edges(program_graph, programs)
         self._inject_summary_edges(program_graph, programs, summaries)
         self._inject_external_summary_edges(program_graph, programs)
@@ -568,6 +576,10 @@ class ProgramSliceGraphBuilder:
                 }
                 for input_storage, outputs_by_address in summary.observed_to_memory.items()
             },
+            "observed_memory_to_sink": {
+                key: sorted(node.stable_id() for node in nodes)
+                for key, nodes in summary.observed_memory_to_sink.items()
+            },
         }
 
     def _summary_from_json(self, data: dict, node_lookup: dict[str, ValueId]) -> AutoFunctionSummary:
@@ -606,6 +618,10 @@ class ProgramSliceGraphBuilder:
             }
             for input_storage, outputs_by_address in (data.get("observed_to_memory") or {}).items()
         }
+        summary.observed_memory_to_sink = {
+            key: {node_lookup[node_id] for node_id in node_ids}
+            for key, node_ids in (data.get("observed_memory_to_sink") or {}).items()
+        }
         return summary
 
     def _record_direct_calls(self, program_graph: ProgramSliceGraph, programs: list[LowPcodeProgram]) -> None:
@@ -623,6 +639,49 @@ class ProgramSliceGraphBuilder:
                     "confidence": resolved.confidence,
                 }
                 program_graph.call_graph.add_edge(caller, resolved.name, kind="direct_call")
+
+    def _compose_transitive_sink_summaries(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+        summaries: dict[str, AutoFunctionSummary],
+    ) -> None:
+        changed = True
+        while changed:
+            changed = False
+            for program in programs:
+                caller_graph = program_graph.functions[program.function_name]
+                caller_summary = summaries.get(program.function_name)
+                if caller_summary is None:
+                    continue
+                for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                    resolved = self.call_resolver.resolve(instr)
+                    if not resolved.name:
+                        continue
+                    callee_summary = summaries.get(resolved.name)
+                    if callee_summary is None or not callee_summary.observed_memory_to_sink:
+                        continue
+                    callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                    for callee_address_storage, sink_nodes in sorted(callee_summary.observed_memory_to_sink.items()):
+                        input_node = self._caller_summary_input_node(caller_graph, callsite_key, callee_address_storage)
+                        if input_node is None:
+                            continue
+                        input_storages = self.auto_summary_provider._observed_storages_reaching(
+                            caller_graph.slice_graph,
+                            input_node,
+                            caller_graph,
+                        )
+                        observed_storage = caller_graph.slice_graph.nodes[input_node].get("observed_storage")
+                        if observed_storage:
+                            input_storages.add(observed_storage)
+                        for input_storage in input_storages:
+                            if not (input_storage.startswith("reg:") or input_storage.startswith("mem:")):
+                                continue
+                            target_nodes = caller_summary.observed_memory_to_sink.setdefault(input_storage, set())
+                            before = len(target_nodes)
+                            target_nodes.update(sink_nodes)
+                            if len(target_nodes) != before:
+                                changed = True
 
     def _record_call_in_edges(self, program_graph: ProgramSliceGraph, programs: list[LowPcodeProgram]) -> None:
         for program in programs:
@@ -859,6 +918,36 @@ class ProgramSliceGraphBuilder:
                                 observed_address=address_storage,
                                 observed_output=output_storage,
                                 opcode="SUMMARY_OBSERVED_MEMORY_READ",
+                            )
+
+                for address_storage, sink_nodes in sorted(summary.observed_memory_to_sink.items()):
+                    address_node = self._caller_summary_input_node(caller_graph, callsite_key, address_storage)
+                    if address_node is None:
+                        continue
+                    for memory_node in self._caller_memory_input_nodes_for_observed_pointer_any_size(
+                        caller_graph,
+                        address_node,
+                        address_storage,
+                        callsite_key,
+                    ):
+                        for sink_node in sink_nodes:
+                            program_graph.slice_graph.add_edge(
+                                memory_node,
+                                sink_node,
+                                kind="call_out_mem",
+                                opcode="SUMMARY_OBSERVED_MEMORY_TO_REACHABLE_SINK",
+                                summary_kind="summary_memory",
+                                callee=resolved.name,
+                                observed_address=address_storage,
+                            )
+                            self._record_summary_call_out_boundary(
+                                program_graph,
+                                caller_graph,
+                                resolved.name,
+                                callsite_key,
+                                "call_out_mem",
+                                observed_address=address_storage,
+                                opcode="SUMMARY_OBSERVED_MEMORY_TO_REACHABLE_SINK",
                             )
 
                 for input_storage, outputs_by_address in sorted(summary.observed_to_memory.items()):
@@ -1506,6 +1595,30 @@ class ProgramSliceGraphBuilder:
             f"mem:summary:field:{size}",
             callsite_key,
         )
+
+    def _caller_memory_input_nodes_for_observed_pointer_any_size(
+        self,
+        caller_graph: FunctionGraph,
+        address_node: ValueId,
+        address_storage: str,
+        callsite_key: str,
+    ) -> list[ValueId]:
+        nodes: list[ValueId] = []
+        for size in (1, 2, 4, 8, caller_graph.architecture.pointer_size, None):
+            output_storage = f"mem:summary:field:{size or '*'}"
+            for node in self._memory_nodes_for_observed_pointer(caller_graph, address_node, output_storage, callsite_key):
+                if node not in nodes:
+                    nodes.append(node)
+            if address_storage.startswith("mem:"):
+                for node in self._memory_nodes_for_loaded_observed_pointer(
+                    caller_graph,
+                    callsite_key,
+                    address_storage,
+                    output_storage,
+                ):
+                    if node not in nodes:
+                        nodes.append(node)
+        return nodes
 
     def _memory_key_from_expression(
         self,

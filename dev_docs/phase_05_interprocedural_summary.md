@@ -37,6 +37,7 @@ DFB152 callee use-before-def case PASS across all architecture sample roots.
 - [x] Add callee-entry observed storage nodes.
 - [x] Promote `call_in_reg` candidates with use-before-def evidence.
 - [x] Add field-sensitive observed-memory input summaries for pointer-to-field reads.
+- [x] Add transitive observed-memory-to-reachable-sink summaries for nested pointer passthrough.
 - [x] Add summary cache persistence.
 
 ## Current Policy
@@ -58,15 +59,19 @@ source boundary -> observed memory write, when callee low-pcode stores a source-
 observed memory read through observed pointer -> primary observed value storage
 observed storage -> double-dereferenced observed memory write, when low-pcode shows pointer-loaded address flow
 observed storage -> caller memory after call, when callee low-pcode writes through an observed pointer and caller post-call memory evidence exists
+observed pointer memory -> reachable callee sink, when direct-call summary composition proves nested pointer passthrough
 ```
 
 This is enough for DFB026-style flows where one callee writes source-derived
 data into global storage and another callee reads that global storage into an
 observed post-call storage. The observed-storage summaries cover direct
 identity/nested-call flows and pointer-output writes across x86, x86_64,
-AArch64, and ARMv7 sample roots. They do not
-introduce argument, return, out-param, or calling convention semantics into core
-graph topology; summary edges are still modeled as observed storage transitions.
+AArch64, and ARMv7 sample roots. Nested pointer passthrough summaries compose
+callee sink effects bottom-up through direct-call evidence, then bind the
+top-level caller's actual field memory through pointer expressions observed at
+the callsite. They do not introduce argument, return, out-param, or calling
+convention semantics into core graph topology; summary edges are still modeled
+as observed storage transitions.
 
 Ghidra metadata is used only as storage/address/symbol identity metadata:
 register aliases, special register filtering, address-space classification,
@@ -78,8 +83,7 @@ Current residuals:
 
 ```text
 Full testbed remains intentionally incomplete for recursion-global, indirect/callback,
-C++/exception, thread/runtime, deep-field nested pointer passthrough summaries,
-and trusted external import helper coverage.
+C++/exception, thread/runtime, and trusted external import helper coverage.
 ```
 
 ## Verification Log
@@ -109,3 +113,8 @@ and trusted external import helper coverage.
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_phase2_callout_full expected --cases` | PASS 370 / FAIL 118 | Full testbed, +36 PASS against `output/v8_phase5_completed_full2` |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_deep_struct_probe2 expected --cases case_DFB053 case_DFB055` | PASS 6 / FAIL 6 | DFB053 large struct return-buffer flow passes across all roots; DFB055 remains nested deep-field passthrough work |
 | 2026-06-21 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_large_struct_regression_gate expected --cases case_DFB050 case_DFB053 case_DFB056 case_DFB057 case_DFB058 case_DFB059` | PASS 36 | Large-struct return-buffer closure preserves existing interprocedural summary gate cases |
+| 2026-06-27 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_dfb055_nested_sink_probe2 expected --cases case_DFB055` | PASS 6 | Nested deep-field pointer passthrough reaches callee sink across x86/x64/AArch64/ARMv7 roots |
+| 2026-06-27 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_deep_struct_probe3 expected --cases case_DFB053 case_DFB055` | PASS 12 | Large-struct return-buffer and deep-field nested sink cases both pass across all roots |
+| 2026-06-27 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_after_dfb055_phase5_gate expected --cases case_DFB001 case_DFB002 case_DFB024 case_DFB025 case_DFB026 case_DFB027 case_DFB030 case_DFB031 case_DFB050 case_DFB056 case_DFB057 case_DFB058 case_DFB059 case_DFB152` | PASS 84 | Existing Phase 5 gate remains stable after transitive reachable-sink summary composition |
+| 2026-06-27 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_after_dfb055_risky_gate expected --cases case_DFB020 case_DFB021 case_DFB022 case_DFB023 case_DFB034 case_DFB035 case_DFB040 case_DFB041 case_DFB042 case_DFB043 case_DFB044 case_DFB045 case_DFB046 case_DFB047 case_DFB048 case_DFB049 case_DFB053 case_DFB055 case_DFB120 case_DFB121 case_DFB122 case_DFB123` | PASS 132 | Risky interprocedural, bitfield, byte-lane, and memory API cluster passes across all roots |
+| 2026-06-27 | `.venv/bin/python -B tools/pcode_slicegraph_v8_phase1.py samples/low_pcode output/v8_after_dfb055_full expected --cases` | PASS 403 / FAIL 85 | Full testbed, +33 PASS and 0 regressions against `output/v8_phase2_callout_full` |

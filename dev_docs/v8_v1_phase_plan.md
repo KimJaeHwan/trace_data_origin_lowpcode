@@ -81,10 +81,10 @@ Development order:
 7. Run residual clusters with trusted external summaries on/off.
 8. Add byte-range overlap memory modeling for compiler-lowered copy sequences
    such as DFB120/DFB121. [done]
-9. Continue residual clustering: nested deep-field pointer passthrough
-   summaries and trusted external import helpers. Bitfield, partial-overwrite
-   byte/bit precision, and large-struct return-buffer flows are covered by
-   focused all-root gates. [in progress]
+9. Continue residual clustering: trusted external import helpers. Bitfield,
+   partial-overwrite byte/bit precision, large-struct return-buffer flows, and
+   nested deep-field pointer passthrough are covered by focused all-root gates.
+   [in progress]
 ```
 
 `LibcSummaryProvider` is intentionally not a standalone phase item anymore.

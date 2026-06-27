@@ -169,6 +169,27 @@ in the phase-specific files.
   passthrough summary composition.
 - Verified `output/v8_large_struct_regression_gate`: PASS 36 across DFB050,
   DFB053, and DFB056-059 on all roots.
+- Added transitive observed-memory-to-reachable-sink summaries for nested
+  pointer passthrough. The composition propagates callee sink effects
+  bottom-up through direct-call evidence, then binds the top-level caller's
+  field memory through observed pointer expressions at the callsite.
+- Kept the implementation convention-free: no argument list, return slot,
+  parameter metadata, stack-frame declaration, or calling convention is used as
+  core semantics. Stack argument cases are handled as observed memory storage,
+  not as ABI parameters.
+- Bumped the persistent summary cache schema to v7 so cached summaries include
+  the new reachable-sink effects.
+- Verified DFB055 at `output/v8_dfb055_nested_sink_probe2`: PASS 6 across all
+  roots.
+- Verified deep-struct focused gate at `output/v8_deep_struct_probe3`: PASS 12
+  across DFB053/DFB055 on all roots.
+- Verified Phase 5 gate after nested sink composition at
+  `output/v8_after_dfb055_phase5_gate`: PASS 84.
+- Verified risky residual cluster at `output/v8_after_dfb055_risky_gate`: PASS
+  132.
+- Ran the full testbed at `output/v8_after_dfb055_full`: PASS 403 / FAIL 85,
+  improving by 33 PASS with 0 regressions against
+  `output/v8_phase2_callout_full`.
 
 ## Current Focus
 
@@ -179,9 +200,9 @@ Next engineering step:
 ```text
 Continue Phase 6 with residual clustering after Phase 2 call boundary closure.
 Memory API cases DFB120-123 and outparam/double-pointer cases DFB021-023 now
-pass across all roots. Bitfield, partial-overwrite byte/bit precision, and
-large-struct return-buffer flow now pass across focused all-root gates. The next
-target is DFB055-style nested deep-field pointer passthrough summary composition
-plus trusted external import helper coverage. Keep trusted external semantics
-outside the core graph model and record provenance on every summary edge.
+pass across all roots. Bitfield, partial-overwrite byte/bit precision,
+large-struct return-buffer flow, and DFB055-style nested deep-field pointer
+passthrough now pass across focused all-root gates. The next target is trusted
+external import helper coverage. Keep trusted external semantics outside the
+core graph model and record provenance on every summary edge.
 ```

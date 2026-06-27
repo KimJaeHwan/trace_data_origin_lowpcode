@@ -190,6 +190,23 @@ in the phase-specific files.
 - Ran the full testbed at `output/v8_after_dfb055_full`: PASS 403 / FAIL 85,
   improving by 33 PASS with 0 regressions against
   `output/v8_phase2_callout_full`.
+- Applied the UE testbed M1 false-positive fix from
+  `tdo_testbed_UE/docs/engine_fix_proposals.md`: pointer arithmetic over
+  observed general registers now produces field-sensitive
+  `unknown:register:<base>:offset:<n>` memory keys instead of collapsing through
+  reused unique temporaries. Stack/frame registers are excluded from this
+  fallback so unresolved stack effects do not create unsafe aliases.
+- Kept the change convention-free: it uses only observed low-pcode dataflow,
+  register storage identity, and constant offsets; it does not introduce
+  arguments, returns, parameters, stack-frame declarations, ABI roles, or
+  calling-convention semantics.
+- Verified UE release artifacts from `tdo_testbed_UE/dist/release_0.3.0`:
+  Development remains PASS 7 / FAIL 15 with no forbidden sources; DebugGame
+  remains PASS 2 / FAIL 20 but the previous TV2U008/TV2U009 forbidden
+  `dfb_source_B.ret` paths are removed and now degrade to false negatives.
+- Verified existing risky DFB gate at `output/v8_ue_pointer_regression_gate2`:
+  PASS 66 across bitfield, byte-lane, large-struct, DFB055 nested pointer, and
+  memory API cases on all sample roots.
 
 ## Current Focus
 

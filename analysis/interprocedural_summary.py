@@ -1641,6 +1641,10 @@ class ProgramSliceGraphBuilder:
                 offset=int(expression.get("offset") or 0),
                 size=size,
             )
+        if expression.get("kind") == "register_offset":
+            base = str(expression.get("base") or "unknown_register")
+            offset = int(expression.get("offset") or 0)
+            return self.memory_model.unknown_key(f"register:{base}:offset:{offset}", size)
         return None
 
     def _memory_size(self, storage: str) -> int | None:

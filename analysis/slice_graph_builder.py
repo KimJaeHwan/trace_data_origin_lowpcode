@@ -265,7 +265,7 @@ class SliceGraphBuilder:
         for source in inputs:
             if source is not None:
                 fg.slice_graph.add_edge(source, out_node, kind="data", opcode=opcode)
-        state.expressions[out_node] = self._expression_for(opcode, inputs, state, output)
+        state.expressions[out_node] = self._expression_for(fg, opcode, inputs, state, output)
 
     def _process_store(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -372,7 +372,7 @@ class SliceGraphBuilder:
         out_node = self._new_value(fg, state, output, instr, "INT_AND")
         mask_index = self._constant_input_index(inputs)
         value_index = 1 - mask_index if mask_index in (0, 1) else None
-        expr = self._expression_for("INT_AND", input_nodes, state, output)
+        expr = self._expression_for(fg, "INT_AND", input_nodes, state, output)
         bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
         bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
         narrowed: list[ValueId] = []
@@ -411,7 +411,7 @@ class SliceGraphBuilder:
 
         input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
         out_node = self._new_value(fg, state, output, instr, opcode)
-        expr = self._expression_for(opcode, input_nodes, state, output)
+        expr = self._expression_for(fg, opcode, input_nodes, state, output)
         bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
         bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
         if bit_sources:
@@ -1268,6 +1268,7 @@ class SliceGraphBuilder:
 
     def _expression_for(
         self,
+        fg: FunctionGraph,
         opcode: str,
         inputs: list[ValueId | None],
         state: BuildState,
@@ -1291,18 +1292,52 @@ class SliceGraphBuilder:
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
+            register_expr = next(
+                (
+                    expr
+                    for expr in exprs
+                    if expr and expr.get("kind") in {"register", "register_offset"}
+                ),
+                None,
+            )
+            if register_expr is None:
+                register_expr = next(
+                    (
+                        {"kind": "register", "key": node.key, "size_bits": output_bits}
+                        for node in inputs
+                        if self._can_use_register_offset_fallback(fg, node)
+                    ),
+                    None,
+                )
             const_exprs = [expr for expr in exprs if expr and expr.get("kind") == "const"]
             const_expr = const_exprs[0] if const_exprs else None
+            const_value = int(const_expr.get("value") or 0) if const_expr else None
+            if opcode in {"PTRSUB"} and const_value is not None:
+                const_value = -const_value
             if stack_expr and const_expr:
                 merged = dict(stack_expr)
-                merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
+                merged["offset"] = int(merged.get("offset") or 0) + int(const_value or 0)
                 if bit_expr is not None:
                     merged["bit_expr"] = bit_expr
                 merged["size_bits"] = output_bits
                 return merged
             if heap_expr and const_expr:
                 merged = dict(heap_expr)
-                merged["offset"] = int(merged.get("offset") or 0) + int(const_expr.get("value") or 0)
+                merged["offset"] = int(merged.get("offset") or 0) + int(const_value or 0)
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
+            if register_expr and const_value is not None:
+                if register_expr.get("kind") == "register_offset":
+                    merged = dict(register_expr)
+                    merged["offset"] = int(merged.get("offset") or 0) + const_value
+                else:
+                    merged = {
+                        "kind": "register_offset",
+                        "base": register_expr.get("key"),
+                        "offset": const_value,
+                    }
                 if bit_expr is not None:
                     merged["bit_expr"] = bit_expr
                 merged["size_bits"] = output_bits
@@ -1328,6 +1363,14 @@ class SliceGraphBuilder:
         if bit_expr is not None:
             expr["bit_expr"] = bit_expr
         return expr
+
+    def _can_use_register_offset_fallback(self, fg: FunctionGraph, node: ValueId | None) -> bool:
+        if node is None or node.space != "reg":
+            return False
+        canonical = node.key.split(":", 1)[0]
+        if canonical in fg.architecture.stack_pointer_regs | fg.architecture.frame_pointer_regs:
+            return False
+        return fg.architecture.is_general_register(canonical)
 
     def _constant_expression_for(self, opcode: str, exprs: list[dict | None], output_bits: int) -> dict | None:
         if not exprs or any(expr is None or expr.get("kind") != "const" for expr in exprs):
@@ -1459,6 +1502,10 @@ class SliceGraphBuilder:
             return self._heap_expression_key(expr, size)
         if expr and expr.get("kind") == "const":
             return self.memory_model.global_key(f"{int(expr.get('value') or 0):x}", size)
+        if expr and expr.get("kind") == "register_offset":
+            base = str(expr.get("base") or "unknown_register")
+            offset = int(expr.get("offset") or 0)
+            return self.memory_model.unknown_key(f"register:{base}:offset:{offset}", size)
         if addr_varnode.get("is_register"):
             base_expr = self._base_expression(fg, addr_varnode)
             if base_expr.get("kind") == "stack":
@@ -1536,7 +1583,11 @@ class SliceGraphBuilder:
         return None
 
     def _is_program_memory_key(self, mem_key: str) -> bool:
-        return mem_key.startswith("global:") or mem_key.startswith("unknown:unique:")
+        return (
+            mem_key.startswith("global:")
+            or mem_key.startswith("unknown:unique:")
+            or mem_key.startswith("unknown:register:")
+        )
 
     def _should_materialize_observed_memory(self, mem_key: str) -> bool:
         return self._is_program_memory_key(mem_key) or ":stack:" in mem_key

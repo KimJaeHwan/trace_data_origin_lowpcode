@@ -1957,7 +1957,8 @@ class SliceGraphBuilder:
 
     def _is_call_instruction(self, instr: dict) -> bool:
         mnemonic = (instr.get("mnemonic") or "").upper()
-        return bool(instr.get("call_targets")) or mnemonic in {"CALL", "BL"}
+        flow_type = (instr.get("flow_type") or "").upper()
+        return bool(instr.get("call_targets")) or "CALL" in flow_type or mnemonic in {"CALL", "BL", "BLR", "BLX"}
 
     def _is_address_copy(self, pcode: dict) -> bool:
         inputs = pcode.get("inputs", [])

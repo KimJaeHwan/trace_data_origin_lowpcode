@@ -350,6 +350,51 @@ in the phase-specific files.
   066/100/130/131 PASS 42 across sample roots. Compilation check:
   `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
   analysis/slice_graph_builder.py frontend/external_prototype.py`.
+- Repaired the cycle 11 recursion/global-effect miss with a summary-layer
+  observed-storage-to-program-memory relation. Auto summaries now record when
+  a concrete observed callee input flows into a program memory write, excluding
+  program-memory self inputs so read-only global helpers do not become writes.
+  Call-site injection materializes the exact program-memory post node and
+  source-gated redirects later same-storage memory consumers to that post-call
+  transition. This keeps the edge convention-free and based on observed
+  low-pcode storage flow. Bumped the summary cache schema for the new summary
+  field and redirect semantics.
+- Verified cycle 11 locally with lightweight V8 checks: DFB026/063/110 plus
+  DFB010/066/100/130/131 guard cases PASS 47 / FAIL 1 / FP 0 across sample
+  roots, with only the pre-existing Linux amd64 DFB110 miss remaining in that
+  focused set. Full local DFB sweep: PASS 452 / FAIL 36 / FP 0 over 488
+  checked-in DataFlowBench samples.
+- Repaired the cycle 12 DFB090 thread/shared-memory recall cluster with a
+  guarded summary-layer runtime boundary transition. The new edge is emitted
+  only for selected thread/control-transfer runtime calls when a pre-call
+  observed storage value points to memory that already reaches exactly one
+  source label, and the post-call storage or later observed program-memory read
+  is actually consumed by a sink. Stack-carried pointer slots are handled as
+  observed storage, including raw stack memory keys without a `mem:` prefix.
+  This preserves the convention-free core model and avoids treating prototypes,
+  parameters, or return slots as semantic truth. Bumped the summary cache
+  schema for the new summary injection.
+- Verified cycle 12 locally with lightweight checks: DFB090 PASS 8/8 across
+  sample roots; DFB092 remains a sink-discovery residual with no forbidden
+  source hits; DFB010/066/100/130/131 guard cases PASS 30 / FP 0. Compilation
+  check: `.venv/bin/python -m py_compile analysis/interprocedural_summary.py`.
+- Repaired the cycle 13 DFB071 callback-registration cluster with a guarded
+  summary-layer indirect sink discovery pass. Computed calls now materialize a
+  DataFlowBench sink anchor only when the low-pcode CALLIND target storage can
+  be traced to an observed summary-written global callback slot, the target
+  itself does not carry a source label, and the consumed pre-call storage
+  already reaches exactly one source label. ARM `blr`/`blx` computed calls are
+  now materialized as call boundaries, and CALLIND target tracing follows
+  architecture-aware program-counter writes back to the general register that
+  supplied the target. This remains convention-free and does not treat
+  prototype parameters or ABI return locations as core semantics. Bumped the
+  summary cache schema for the new sink discovery behavior.
+- Verified cycle 13 locally with lightweight checks: DFB071 PASS 6/6 across
+  sample roots. Guard/nearby set DFB010/066/071/072/090/092/100/130/131
+  produced PASS 49 / FAIL 9 with no forbidden-source hits; residual failures
+  were the existing DFB092 cluster and the known Linux 386 DFB072 ambiguity.
+  Compilation check: `.venv/bin/python -m py_compile
+  analysis/interprocedural_summary.py analysis/slice_graph_builder.py`.
 
 ## Current Focus
 

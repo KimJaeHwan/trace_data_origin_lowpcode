@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "functions": [
+    {
+      "id": "dfbench_import_identity",
+      "match": {
+        "names": ["dfb_import_identity"]
+      },
+      "effect": "storage_passthrough",
+      "roles": {},
+      "trust": "trusted_external_name_only"
+    },
+    {
+      "id": "dfbench_import_write_out",
+      "match": {
+        "names": ["dfb_import_write_out"]
+      },
+      "effect": "storage_to_pointer_memory",
+      "roles": {},
+      "trust": "trusted_external_name_only"
+    }
+  ]
+}

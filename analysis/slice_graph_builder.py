@@ -87,7 +87,7 @@ class DataFlowBenchBoundaryBinder:
     def source_label(self, name: str) -> str:
         return f"{name}.ret"
 
-    def choose_sink_target(self, function_graph: FunctionGraph, state: BuildState) -> ValueId | None:
+    def choose_sink_target(self, function_graph: FunctionGraph, state: BuildState, instr: dict) -> ValueId | None:
         if (
             function_graph.architecture.name == "x86"
             and state.recent_store is not None
@@ -95,6 +95,13 @@ class DataFlowBenchBoundaryBinder:
             and ":stack:" in state.recent_store_text
         ):
             return state.recent_store
+        for storage_key in self._prototype_sink_storage_hints(function_graph, instr):
+            node = self._current_node_for_storage_hint(function_graph, state, storage_key)
+            if node is None:
+                continue
+            attrs = function_graph.slice_graph.nodes.get(node, {})
+            if attrs.get("kind") != "call_post_storage":
+                return node
         arch = function_graph.architecture.name
         candidates = {
             "x86_64": ["RCX:0:32", "RCX:0:64", "RDI:0:32", "RDI:0:64", "RAX:0:32", "RAX:0:64"],
@@ -103,6 +110,7 @@ class DataFlowBenchBoundaryBinder:
             "x86": ["EAX:0:32"],
         }.get(arch, [])
         callpost_fallback = None
+        observed_candidates = []
         for key in candidates:
             node = state.current.get(f"reg:{key}")
             if node is None:
@@ -111,7 +119,16 @@ class DataFlowBenchBoundaryBinder:
             if attrs.get("kind") == "call_post_storage":
                 callpost_fallback = callpost_fallback or node
                 continue
-            return node
+            observed_candidates.append(node)
+        source_reaching = [
+            node
+            for node in observed_candidates
+            if self._reaches_source_boundary(function_graph, node)
+        ]
+        if source_reaching:
+            return self._prefer_computed_source_reaching(function_graph, source_reaching)
+        if observed_candidates:
+            return observed_candidates[0]
         if callpost_fallback is not None:
             return callpost_fallback
         observed = []
@@ -126,8 +143,116 @@ class DataFlowBenchBoundaryBinder:
                 continue
             observed.append(node)
         if observed:
+            source_reaching = [
+                node
+                for node in observed
+                if self._reaches_source_boundary(function_graph, node)
+            ]
+            if source_reaching:
+                return self._prefer_computed_source_reaching(function_graph, source_reaching)
             return max(observed, key=lambda node: node.version or 0)
         return None
+
+    def _current_node_for_storage_hint(
+        self,
+        function_graph: FunctionGraph,
+        state: BuildState,
+        storage_key: str,
+    ) -> ValueId | None:
+        exact = state.current.get(storage_key)
+        if exact is not None:
+            return exact
+        parts = storage_key.split(":")
+        if len(parts) < 4 or parts[0] != "reg":
+            return None
+        canonical = parts[1]
+        same_canonical = [
+            node
+            for key, node in state.current.items()
+            if key.startswith(f"reg:{canonical}:")
+            and function_graph.slice_graph.nodes.get(node, {}).get("kind") != "call_post_storage"
+        ]
+        if not same_canonical:
+            return None
+        return max(same_canonical, key=lambda node: node.version or 0)
+
+    def _prototype_sink_storage_hints(self, function_graph: FunctionGraph, instr: dict) -> list[str]:
+        hints: list[str] = []
+        for target in instr.get("call_targets", []):
+            if not target.get("resolved"):
+                continue
+            prototype = target.get("external_prototype") or {}
+            parameters = sorted(
+                prototype.get("parameters") or [],
+                key=lambda item: item.get("ordinal") if item.get("ordinal") is not None else 9999,
+            )
+            if not parameters:
+                continue
+            storage_key = self._prototype_storage_key(function_graph, parameters[0].get("storage"))
+            if storage_key:
+                hints.append(storage_key)
+                break
+        return hints
+
+    def _prototype_storage_key(self, function_graph: FunctionGraph, storage: str | None) -> str | None:
+        if not storage or ":" not in storage or storage.startswith("Stack["):
+            return None
+        name, size_text = storage.rsplit(":", 1)
+        try:
+            size_bytes = int(size_text)
+        except ValueError:
+            return None
+        reg = self._register_storage_for_prototype_name(function_graph, name, size_bytes)
+        if not function_graph.architecture.is_general_register(reg.canonical):
+            return None
+        return f"reg:{reg.key()}"
+
+    def _register_storage_for_prototype_name(
+        self,
+        function_graph: FunctionGraph,
+        name: str,
+        size_bytes: int,
+    ):
+        display = name.upper() if function_graph.architecture.name.startswith("x86") else name
+        for (offset, alias_size), alias in function_graph.architecture.register_aliases.items():
+            if alias.display == display and alias_size == size_bytes and alias.size_bits == size_bytes * 8:
+                return function_graph.architecture.canonicalize_register(
+                    offset,
+                    size_bytes,
+                    name,
+                )
+        return function_graph.architecture.canonicalize_register(-1, size_bytes, name)
+
+    def _reaches_source_boundary(self, function_graph: FunctionGraph, target: ValueId) -> bool:
+        graph = function_graph.slice_graph
+        seen: set[ValueId] = set()
+        stack = [target]
+        while stack and len(seen) < 256:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            attrs = graph.nodes.get(node, {})
+            if attrs.get("kind") == "source_boundary" and attrs.get("source_label"):
+                return True
+            for pred in graph.predecessors(node):
+                if graph.edges[pred, node].get("kind") in {"data", "memory"}:
+                    stack.append(pred)
+        return False
+
+    def _prefer_computed_source_reaching(
+        self,
+        function_graph: FunctionGraph,
+        candidates: list[ValueId],
+    ) -> ValueId:
+        computed = [
+            node
+            for node in candidates
+            if function_graph.slice_graph.nodes.get(node, {}).get("kind") != "source_boundary"
+        ]
+        if computed:
+            return computed[0]
+        return candidates[0]
 
     def _primary_target(self, instr: dict) -> str | None:
         for target in instr.get("call_targets", []):
@@ -226,11 +351,77 @@ class SliceGraphBuilder:
                             condition_kind="branch_condition",
                         )
                 bucket[key] = phi_node
-                merged.expressions[phi_node] = {"kind": "value"}
+                merged.expressions[phi_node] = self._merge_phi_expression(values, predecessor_states)
         merged.recent_store = None
         merged.recent_store_text = None
         merged.control_values = []
         return merged
+
+    def _merge_phi_expression(self, values: list[ValueId], predecessor_states: list[BuildState]) -> dict:
+        exprs = []
+        for value in values:
+            expr = next(
+                (pred_state.expressions.get(value) for pred_state in predecessor_states if value in pred_state.expressions),
+                None,
+            )
+            if expr is None:
+                return {"kind": "value"}
+            exprs.append(expr)
+        if not exprs:
+            return {"kind": "value"}
+
+        first = exprs[0]
+        if all(expr.get("kind") == "const" and expr.get("value") == first.get("value") for expr in exprs):
+            return dict(first)
+        if all(expr.get("kind") == "heap_ptr" and self._same_heap_expr(expr, first) for expr in exprs):
+            return dict(first)
+        if all(expr.get("kind") == "register" and expr.get("key") == first.get("key") for expr in exprs):
+            return dict(first)
+
+        stack_alternatives = self._stack_alternatives(exprs)
+        if stack_alternatives is not None:
+            base, offsets, size_bits = stack_alternatives
+            if len(offsets) == 1:
+                return {"kind": "stack", "base": base, "offset": offsets[0], "size_bits": size_bits}
+            return {"kind": "stack_set", "base": base, "offsets": offsets, "size_bits": size_bits}
+
+        return {"kind": "value"}
+
+    def _same_heap_expr(self, left: dict, right: dict) -> bool:
+        return left.get("allocsite") == right.get("allocsite") and int(left.get("offset") or 0) == int(
+            right.get("offset") or 0
+        )
+
+    def _stack_alternatives(self, exprs: list[dict]) -> tuple[str, list[int], int] | None:
+        base = None
+        offsets: list[int] = []
+        size_bits = 0
+        for expr in exprs:
+            kind = expr.get("kind")
+            if kind == "stack":
+                expr_base = str(expr.get("base") or "")
+                expr_offsets = [self._normalize_stack_offset(int(expr.get("offset") or 0))]
+            elif kind == "stack_set":
+                expr_base = str(expr.get("base") or "")
+                expr_offsets = [
+                    self._normalize_stack_offset(int(offset))
+                    for offset in (expr.get("offsets") or [])
+                ]
+            else:
+                return None
+            if not expr_base:
+                return None
+            if base is None:
+                base = expr_base
+            elif base != expr_base:
+                return None
+            for offset in expr_offsets:
+                if offset not in offsets:
+                    offsets.append(offset)
+            size_bits = max(size_bits, int(expr.get("size_bits") or 0))
+        if base is None or not offsets or len(offsets) > 8:
+            return None
+        return base, sorted(offsets), size_bits
 
     def _process_pcode(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         opcode = pcode.get("opcode")
@@ -293,18 +484,31 @@ class SliceGraphBuilder:
             return
         addr_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
         out_node = self._new_value(fg, state, output, instr, "LOAD")
-        mem_key = self._memory_key_for(fg, state, addr_node, inputs[1], output.get("size"))
-        mem_key = self._data_ref_memory_key(instr, "read", output.get("size")) or mem_key
-        memory_nodes = self._memory_input_nodes_for_load(state, mem_key)
-        exact_node = state.memory.get(mem_key)
-        if memory_nodes and exact_node is None and self._memory_range_for_key(mem_key) is not None:
+        data_ref_key = self._data_ref_memory_key(instr, "read", output.get("size"))
+        mem_keys = [data_ref_key] if data_ref_key else self._memory_keys_for(fg, state, addr_node, inputs[1], output.get("size"))
+        mem_key = mem_keys[0]
+        memory_nodes = self._memory_input_nodes_for_load_many(state, mem_keys)
+        exact_node = next((state.memory.get(candidate_key) for candidate_key in mem_keys if state.memory.get(candidate_key)), None)
+        if (
+            len(mem_keys) == 1
+            and memory_nodes
+            and exact_node is None
+            and self._memory_range_for_key(mem_key) is not None
+        ):
+            load_range = self._memory_range_for_key(mem_key)
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "LOAD_RANGE")
             fg.slice_graph.nodes[mem_node]["kind"] = "memory_range"
             fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
             if addr_node is not None:
                 fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             for source_node in memory_nodes:
-                fg.slice_graph.add_edge(source_node, mem_node, kind="memory", opcode="LOAD_OVERLAP")
+                narrowed_sources = (
+                    self._narrow_memory_node_to_range(fg, source_node, load_range)
+                    if load_range is not None
+                    else []
+                )
+                for narrowed_source in narrowed_sources or [source_node]:
+                    fg.slice_graph.add_edge(narrowed_source, mem_node, kind="memory", opcode="LOAD_OVERLAP")
             state.memory[mem_key] = mem_node
             state.expressions[mem_node] = {"kind": "value"}
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
@@ -958,6 +1162,51 @@ class SliceGraphBuilder:
             return [memory_node]
         return []
 
+    def _narrow_memory_node_to_range(
+        self,
+        fg: FunctionGraph,
+        memory_node: ValueId,
+        wanted: MemoryRange,
+    ) -> list[ValueId]:
+        memory_range = self._memory_range_for_storage(fg.slice_graph.nodes[memory_node].get("storage") or "")
+        if memory_range is None or not memory_range.overlaps(wanted):
+            return []
+        if memory_range == wanted:
+            return [memory_node]
+        if (
+            fg.slice_graph.nodes[memory_node].get("opcode") == "STORE_VAL"
+            and memory_range.size < wanted.size
+        ):
+            return [memory_node]
+
+        selected: list[ValueId] = []
+        for pred in fg.slice_graph.predecessors(memory_node):
+            edge_kind = fg.slice_graph.edges[pred, memory_node].get("kind")
+            if not self._is_memory_dependency_kind(edge_kind):
+                continue
+            pred_range = self._memory_range_for_storage(fg.slice_graph.nodes[pred].get("storage") or "")
+            if pred_range is not None:
+                narrowed = self._narrow_memory_node_to_range(fg, pred, wanted)
+                for source in narrowed or ([pred] if pred_range.overlaps(wanted) else []):
+                    if source not in selected:
+                        selected.append(source)
+                continue
+
+            overlap_start = max(memory_range.start, wanted.start)
+            overlap_end = min(memory_range.end, wanted.end)
+            if overlap_start >= overlap_end:
+                continue
+            narrowed_values = self._narrowed_sources_for_byte_range(
+                fg,
+                pred,
+                overlap_start - memory_range.start,
+                overlap_end - overlap_start,
+            )
+            for source in narrowed_values:
+                if source not in selected:
+                    selected.append(source)
+        return selected
+
     def _load_range_for_memory_predecessors(self, fg: FunctionGraph, load_node: ValueId) -> MemoryRange | None:
         exact_ranges: list[MemoryRange] = []
         ranges: list[MemoryRange] = []
@@ -1090,7 +1339,7 @@ class SliceGraphBuilder:
             state.current[key] = source_node
 
     def _bind_sink(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
-        target = self.boundary_binder.choose_sink_target(fg, state)
+        target = self.boundary_binder.choose_sink_target(fg, state, instr)
         anchor_key = f"{instr.get('address')}:{name}:observed_storage0"
         sink_node = self._new_synthetic_value(fg, state, "sink", anchor_key, instr, "SINK_OBSERVED_STORAGE")
         fg.slice_graph.nodes[sink_node]["kind"] = "sink_boundary"
@@ -1161,7 +1410,14 @@ class SliceGraphBuilder:
             fg.call_post_storage_index[post_key] = post_node
             current_node = state.current.get(observed.storage_key)
             current_expr = state.expressions.get(current_node) if current_node is not None else None
-            preserve_current = current_expr and current_expr.get("kind") in {"stack", "heap_ptr", "const"}
+            preserve_current = current_expr and current_expr.get("kind") in {
+                "stack",
+                "stack_set",
+                "heap_ptr",
+                "const",
+                "register",
+                "register_offset",
+            }
             if observed.storage_key in primary_post_storages or not preserve_current:
                 state.current[observed.storage_key] = post_node
 
@@ -1314,9 +1570,23 @@ class SliceGraphBuilder:
             const_value = int(const_expr.get("value") or 0) if const_expr else None
             if opcode in {"PTRSUB"} and const_value is not None:
                 const_value = -const_value
-            if stack_expr and const_expr:
+            if stack_expr and const_expr and stack_expr.get("kind") == "stack":
                 merged = dict(stack_expr)
-                merged["offset"] = int(merged.get("offset") or 0) + int(const_value or 0)
+                merged["offset"] = self._normalize_stack_offset(
+                    int(merged.get("offset") or 0) + self._stack_offset_const_value(const_expr, const_value or 0)
+                )
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
+            if stack_expr and const_expr and stack_expr.get("kind") == "stack_set":
+                delta = self._stack_offset_const_value(const_expr, const_value or 0)
+                merged = dict(stack_expr)
+                offsets = [
+                    self._normalize_stack_offset(int(offset) + delta)
+                    for offset in (stack_expr.get("offsets") or [])
+                ]
+                merged["offsets"] = sorted(set(offsets))
                 if bit_expr is not None:
                     merged["bit_expr"] = bit_expr
                 merged["size_bits"] = output_bits
@@ -1354,7 +1624,21 @@ class SliceGraphBuilder:
             left, right = exprs[0], exprs[1]
             if left and left.get("kind") == "stack" and right and right.get("kind") == "const":
                 merged = dict(left)
-                merged["offset"] = int(merged.get("offset") or 0) - int(right.get("value") or 0)
+                merged["offset"] = self._normalize_stack_offset(
+                    int(merged.get("offset") or 0) - self._stack_offset_const_value(right, int(right.get("value") or 0))
+                )
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
+            if left and left.get("kind") == "stack_set" and right and right.get("kind") == "const":
+                delta = self._stack_offset_const_value(right, int(right.get("value") or 0))
+                merged = dict(left)
+                offsets = [
+                    self._normalize_stack_offset(int(offset) - delta)
+                    for offset in (left.get("offsets") or [])
+                ]
+                merged["offsets"] = sorted(set(offsets))
                 if bit_expr is not None:
                     merged["bit_expr"] = bit_expr
                 merged["size_bits"] = output_bits
@@ -1485,6 +1769,40 @@ class SliceGraphBuilder:
             return {"kind": "register", "key": reg.key(), "size_bits": int(varnode.get("size") or 0) * 8}
         return {"kind": "value", "size_bits": int(varnode.get("size") or 0) * 8}
 
+    def _stack_offset_const_value(self, expr: dict, value: int) -> int:
+        return self._normalize_stack_offset(value)
+
+    def _normalize_stack_offset(self, value: int) -> int:
+        if 0x80000000 <= value <= 0xFFFFFFFF:
+            return value - 0x100000000
+        return value
+
+    def _memory_keys_for(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        addr_node: ValueId | None,
+        addr_varnode: dict,
+        size: int | None,
+    ) -> list[str]:
+        expr = state.expressions.get(addr_node) if addr_node is not None else None
+        if expr and expr.get("kind") == "stack_set":
+            base = expr.get("base") or "STACK"
+            keys = [
+                self.memory_model.stack_key(fg.function_name, fg.context_id, base, int(offset), size)
+                for offset in (expr.get("offsets") or [])
+            ]
+            return keys or [self._memory_key_for(fg, state, addr_node, addr_varnode, size)]
+        return [self._memory_key_for(fg, state, addr_node, addr_varnode, size)]
+
+    def _memory_input_nodes_for_load_many(self, state: BuildState, mem_keys: list[str]) -> list[ValueId]:
+        nodes: list[ValueId] = []
+        for mem_key in mem_keys:
+            for node in self._memory_input_nodes_for_load(state, mem_key):
+                if node not in nodes:
+                    nodes.append(node)
+        return nodes
+
     def _memory_key_for(
         self,
         fg: FunctionGraph,
@@ -1502,10 +1820,15 @@ class SliceGraphBuilder:
             return self._heap_expression_key(expr, size)
         if expr and expr.get("kind") == "const":
             return self.memory_model.global_key(f"{int(expr.get('value') or 0):x}", size)
+        if expr and expr.get("kind") == "register":
+            return self.memory_model.unknown_key(f"register:{expr.get('key') or 'unknown_register'}", size)
         if expr and expr.get("kind") == "register_offset":
             base = str(expr.get("base") or "unknown_register")
             offset = int(expr.get("offset") or 0)
             return self.memory_model.unknown_key(f"register:{base}:offset:{offset}", size)
+        observed_identity = self._observed_pointer_identity_for_address(fg, addr_node)
+        if observed_identity is not None:
+            return self.memory_model.unknown_key(f"register:{observed_identity}", size)
         if addr_varnode.get("is_register"):
             base_expr = self._base_expression(fg, addr_varnode)
             if base_expr.get("kind") == "stack":
@@ -1515,6 +1838,35 @@ class SliceGraphBuilder:
         if addr_varnode.get("is_address"):
             return self.memory_model.global_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
         return self.memory_model.unknown_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
+
+    def _observed_pointer_identity_for_address(
+        self,
+        fg: FunctionGraph,
+        addr_node: ValueId | None,
+    ) -> str | None:
+        if addr_node is None:
+            return None
+        found: list[str] = []
+        seen: set[ValueId] = set()
+        stack = [addr_node]
+        while stack and len(seen) < 64:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            attrs = fg.slice_graph.nodes[node]
+            opcode = attrs.get("opcode")
+            storage = attrs.get("storage") or ""
+            observed_storage = attrs.get("observed_storage") or storage
+            if opcode in {"OBSERVED_INPUT", "OBSERVED_MEMORY"} and observed_storage:
+                if observed_storage.startswith("reg:") or observed_storage.startswith("mem:"):
+                    if observed_storage not in found:
+                        found.append(observed_storage)
+                continue
+            for pred in fg.slice_graph.predecessors(node):
+                if fg.slice_graph.edges[pred, node].get("kind") in {"data", "memory"}:
+                    stack.append(pred)
+        return found[0] if len(found) == 1 else None
 
     def _memory_range_for_key(self, mem_key: str) -> MemoryRange | None:
         if ":stack:" in mem_key:

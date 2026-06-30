@@ -68,9 +68,8 @@ def load_external_prototypes(data: dict) -> dict[str, ExternalPrototype]:
         if prototype is not None:
             prototypes[str(entry)] = prototype
 
-    if prototypes:
-        return prototypes
-    prototypes.update(_load_call_target_external_prototypes(data))
+    for entry, prototype in _load_call_target_external_prototypes(data).items():
+        prototypes.setdefault(entry, prototype)
     if prototypes:
         return prototypes
     return _load_legacy_external_prototypes(indices)

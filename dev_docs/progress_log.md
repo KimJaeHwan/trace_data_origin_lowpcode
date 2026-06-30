@@ -207,6 +207,149 @@ in the phase-specific files.
 - Verified existing risky DFB gate at `output/v8_ue_pointer_regression_gate2`:
   PASS 66 across bitfield, byte-lane, large-struct, DFB055 nested pointer, and
   memory API cases on all sample roots.
+- Added curated trusted external helper summaries for source-carrying storage
+  passthrough and source-to-pointed-memory writes. The loader now merges
+  embedded call-target external prototypes with indexed prototype metadata so
+  helper imports and thunk-backed helpers are visible to the external summary
+  resolver. The resulting graph edges stay in the summary layer with external
+  provenance and bind only observed source-carrying pre-call storage to observed
+  post storage or pointed memory; no core argument, return, parameter, ABI, or
+  calling-convention semantics were added.
+- Verified trusted helper coverage at `/tmp/lowpcode_external_helpers_all4`:
+  DFB130/DFB131 PASS 12 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7
+  sample roots.
+- Rechecked PE x64 smoke at `/tmp/lowpcode_smoke_after3`: PASS 11 across
+  DFB001/002, DFB050, DFB056-059, and DFB120-123.
+- Refined observed pointer-memory identity so reused scratch address registers
+  no longer collapse distinct pointer targets. Auto summaries now record
+  observed-memory-to-observed-memory storage transitions and materialize
+  post-call memory values for summary writes, redirecting only post-call memory
+  consumers. This keeps pointer swaps/copies convention-free and avoids
+  transitive same-call chaining through freshly written summary outputs.
+- Verified DFB066 all-root focused gate at
+  `/tmp/lowpcode_cycle3_dfb066_allroots_after3`: PASS 6 across PE x86/x64,
+  Linux x86/x64, AArch64, and ARMv7 sample roots.
+- Rechecked pointer/memory summary smoke at `/tmp/lowpcode_cycle3_memory_smoke`:
+  DFB021/022/023/055/120/121/122/123/130/131 PASS 60 across the sample roots.
+- Repaired the cycle 4 ARM64 DFB100 regression without weakening the call
+  boundary model. PHI expressions now preserve small same-base stack-address
+  alternatives, loads can bind to existing stack memory across those
+  alternatives, and 32-bit signed stack offsets are normalized for address
+  recovery. The change keeps observed storage transitions in the low-pcode
+  graph as source of truth and does not add argument, return, parameter, ABI, or
+  calling-convention semantics. Bumped the summary cache schema to force stale
+  summaries to rebuild.
+- Verified the repair at `/tmp/lowpcode_cycle4_dfb100_066_after`: DFB100 and
+  DFB066 PASS 12 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7 sample
+  roots.
+- Rechecked the focused stack/summary smoke at
+  `/tmp/lowpcode_cycle4_stack_phi_smoke`: DFB100/DFB066/DFB130/DFB131/DFB151
+  PASS 30 across the sample roots.
+- Refined the DataFlowBench sink boundary adapter so fixed candidate ordering
+  does not outrank observed source-reaching low-pcode dataflow. When multiple
+  possible sink storage values exist, the adapter now prefers candidates that
+  already reach a source boundary through data/memory edges, preserving the
+  existing ordering only as a tie-breaker. This repaired the Linux x64
+  DFB010/DFB012/DFB016 branch/switch/memory PHI misses without binding every
+  synthetic source-call post register and without adding argument, return,
+  parameter, ABI, or calling-convention semantics.
+- Verified the focused repair at `/tmp/lowpcode_after_sink_source_pref_dfb010`:
+  Linux x64 DFB010/DFB012/DFB016 PASS.
+- Rechecked guards at `/tmp/lowpcode_after_sink_source_pref_guard`:
+  DFB100/DFB066/DFB130/DFB131 PASS 24 across PE x86/x64, Linux x86/x64,
+  AArch64, and ARMv7 sample roots.
+- Rechecked source/sink PHI smoke at
+  `/tmp/lowpcode_after_sink_source_pref_smoke`: DFB001/002/004/005/006/007/010/
+  012/016 PASS 54 across the sample roots.
+- Rechecked the known armv7 DFB065 false-positive shape at
+  `/tmp/lowpcode_after_sink_source_pref_dfb065`; it remains the pre-existing
+  `dfb_source_C.ret` recursive-summary false positive and was not newly
+  introduced by sink selection.
+- Repaired the cycle 6 sink-selection false-positive shape without broadening
+  summary propagation. DataFlowBench sink binding now uses explicit
+  prototype-provided storage only as an adapter-level hint when that storage
+  maps to an observed low-pcode value already present in the current state,
+  including same-canonical subregister widening such as `EDI` to `RDI`. This
+  prevents a live unrelated source register from outranking the actual sink
+  storage in fused tail-call cases while keeping core graph semantics
+  convention-free.
+- Verified the repair against the listed TV2 false-positive cluster by direct
+  backward-slice source collection: TV2C001/011/012/013/017/018/020 no longer
+  report forbidden `dfb_source_B.ret` on the checked P0/P1 x64 samples.
+- Rechecked focused guards: `/tmp/lowpcode_cycle6_sink_hint_dfb100_066_2`
+  keeps DFB100/DFB066 PASS 12 across all sample roots,
+  `/tmp/lowpcode_cycle6_sink_hint_phi_guard` keeps DFB010/DFB012/DFB016 PASS
+  18 across all sample roots, and
+  `/tmp/lowpcode_cycle6_sink_hint_helper_guard` keeps DFB130/DFB131 PASS 12
+  across all sample roots.
+- Rechecked basic source/sink smoke at
+  `/tmp/lowpcode_cycle6_sink_hint_basic_smoke`: DFB001/002/004/005/006/007
+  PASS 36 across all sample roots.
+- After narrowing the prototype hint to the first declared sink storage,
+  rechecked `/tmp/lowpcode_cycle6_sink_hint_quick_final`: DFB010/066/100/130/
+  131 PASS 30 across all sample roots.
+- Repaired cycle 7 false-positive shapes without adding ABI argument/return
+  semantics. Recursive auto summaries no longer treat ARMv7 synthetic
+  `CALL_POST_REG` candidates as observed callee inputs, which removes the
+  DFB065 `dfb_source_C.ret` leak while leaving explicit low-pcode source
+  transitions intact. The graph builder now preserves register-derived address
+  expressions across non-primary candidate call-post boundaries, prefers a
+  computed source-reaching sink value over a stale raw source boundary alias,
+  and narrows loads from wider memory objects to the requested byte window when
+  prior producers prove the subrange. This fixes the prioritized UE
+  TV2U008/TV2U009 and P0 TV2R003/TV2R012 false positives without broad
+  over-approximation. Bumped the summary cache schema for the changed summary
+  and graph semantics.
+- Verified cycle 7 repairs with `/tmp/lowpcode_cycle7_after_dfb065_final`
+  (armv7 DFB065 PASS), `/tmp/lowpcode_cycle7_after_guards_final`
+  (DFB066/DFB100/DFB130/DFB131 PASS 24 across sample roots), and
+  `/tmp/lowpcode_cycle7_after_phi_final` (DFB010/DFB012/DFB016 PASS 18 across
+  sample roots). Direct UE case probes show TV2U008/TV2U009 PASS in Development
+  and P0, and TV2R003/TV2R012 PASS in P0; Development TV2R003/TV2R012 remain
+  missing-only in the focused probe.
+- Repaired the cycle 8 Development TV2R003/TV2R012 missing-only shape by adding
+  a narrow direct-internal observed-storage preservation edge in the summary
+  layer. The edge connects exact pre-call storage to exact post-call storage
+  only for non-primary general registers, only when the internal callee's
+  low-pcode has no concrete overlapping write, only when the synthetic post
+  storage is consumed by real post-call p-code, and only when the pre-call value
+  already reaches an observed source boundary. This keeps the model as observed
+  storage transitions and does not introduce argument, return, parameter, ABI,
+  or calling-convention semantics.
+- Repaired the cycle 8 Linux AArch64 DFB034/DFB035 false-positive shape by
+  keeping the latest overlapping byte store as the producer for a later wider
+  range load. This prevents range-load narrowing from rewiring a bitfield
+  read-modify-write back to the older byte producer before the later bit
+  extraction can select the correct source lane. Bumped the summary cache schema
+  for the changed graph/summary semantics.
+- Verified focused cycle 8 checks: direct TV2R003/TV2R012 scoped probes now
+  collect `dfb_source_A.ret`; Linux AArch64 DFB034/DFB035 PASS at
+  `/tmp/lowpcode_cycle8_dfb034_035_guard2_88239`; ARMv7 DFB065 PASS at
+  `/tmp/lowpcode_cycle8_dfb065_armv7_88298`; DFB066/DFB100/DFB130/DFB131 PASS
+  24 at `/tmp/lowpcode_cycle8_preserve_guards_88049`; DFB010/DFB012/DFB016
+  PASS 18 at `/tmp/lowpcode_cycle8_phi_guard_88051`; TV2U008/TV2U009 scoped
+  Development and DebugGame probes still collect `dfb_source_A.ret`; DFB034/
+  DFB035/DFB046/DFB048/DFB049/DFB120/DFB121/DFB122/DFB123 PASS 54 at
+  `/tmp/lowpcode_cycle8_memory_lane_guard_88299`.
+- Repaired several cycle 9 unresolved/missing-summary call-boundary misses with
+  a guarded summary-layer passthrough. The edge is emitted only when normal
+  summaries and trusted external effects left a consumed primary post-call
+  storage unconnected, the pre-call observed storage already reaches exactly
+  one source label, and present callees do not introduce their own source-to-
+  output/global source summary. Unresolved/no-summary boundaries prefer
+  source-carrying registers over stack snapshots to avoid unrelated live stack
+  alternatives, while present callees require all source-carrying pre-storage to
+  agree on one source. Direct sink consumption of the post-call storage is now a
+  valid observed use. This keeps the edge in the summary layer and does not add
+  argument, return, parameter, ABI, or calling-convention semantics. Bumped the
+  summary cache schema for the changed summary injection.
+- Verified the cycle 9 boundary repair at `/tmp/lowpcode_cycle9_final_focus`:
+  DFB051/052/056/061/065/066/072/074/075/101/151/152 PASS 71 with only the
+  existing Linux 386 DFB072 stack-selector ambiguity still failing. Rechecked
+  FP-sensitive guards at `/tmp/lowpcode_cycle9_guard_final`: DFB034/035/065/
+  066/100/130/131 PASS 42 across sample roots. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py frontend/external_prototype.py`.
 
 ## Current Focus
 
@@ -219,7 +362,10 @@ Continue Phase 6 with residual clustering after Phase 2 call boundary closure.
 Memory API cases DFB120-123 and outparam/double-pointer cases DFB021-023 now
 pass across all roots. Bitfield, partial-overwrite byte/bit precision,
 large-struct return-buffer flow, and DFB055-style nested deep-field pointer
-passthrough now pass across focused all-root gates. The next target is trusted
-external import helper coverage. Keep trusted external semantics outside the
-core graph model and record provenance on every summary edge.
+passthrough now pass across focused all-root gates. Trusted external import
+helpers DFB130/DFB131 now pass across the sample roots. Continue residual
+clustering on callback/indirect, recursion/global, thread/runtime,
+setjmp/longjmp, C++ exception, obfuscated state-machine, and remaining
+unresolved call-boundary cases while keeping trusted external semantics outside
+the core graph model and recording provenance on every summary edge.
 ```

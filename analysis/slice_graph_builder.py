@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from analysis.boundary_provider import BoundaryProvider, DataFlowBenchBoundaryBinder, NoBoundaryProvider
 from analysis.call_boundary_mapper import CallBoundaryMapper, CallContext
 from analysis.call_resolver import CallResolver
 from analysis.cfg_builder import CFGBuilder
@@ -9,6 +10,16 @@ from analysis.memory_model import MemoryModel
 from core.graph import FunctionGraph
 from core.value_id import ValueId
 from frontend.low_pcode_loader import LowPcodeProgram
+
+
+__all__ = [
+    "BuildState",
+    "DataFlowBenchBoundaryBinder",
+    "MemoryRange",
+    "SliceGraphBuilder",
+    "parse_int",
+    "parse_signed",
+]
 
 
 def parse_int(value) -> int | None:
@@ -71,199 +82,15 @@ class MemoryRange:
         return self.identity == other.identity and self.start < other.end and other.start < self.end
 
 
-class DataFlowBenchBoundaryBinder:
-    def is_source_call(self, instr: dict) -> str | None:
-        target = self._primary_target(instr)
-        if target and target.startswith("dfb_source_"):
-            return target
-        return None
-
-    def is_sink_call(self, instr: dict) -> str | None:
-        target = self._primary_target(instr)
-        if target and target.startswith("dfb_sink_"):
-            return target
-        return None
-
-    def source_label(self, name: str) -> str:
-        return f"{name}.ret"
-
-    def choose_sink_target(self, function_graph: FunctionGraph, state: BuildState, instr: dict) -> ValueId | None:
-        if (
-            function_graph.architecture.name == "x86"
-            and state.recent_store is not None
-            and state.recent_store_text
-            and ":stack:" in state.recent_store_text
-        ):
-            return state.recent_store
-        for storage_key in self._prototype_sink_storage_hints(function_graph, instr):
-            node = self._current_node_for_storage_hint(function_graph, state, storage_key)
-            if node is None:
-                continue
-            attrs = function_graph.slice_graph.nodes.get(node, {})
-            if attrs.get("kind") != "call_post_storage":
-                return node
-        arch = function_graph.architecture.name
-        candidates = {
-            "x86_64": ["RCX:0:32", "RCX:0:64", "RDI:0:32", "RDI:0:64", "RAX:0:32", "RAX:0:64"],
-            "aarch64": ["x0:0:64", "x0:0:32"],
-            "armv7": ["r0:0:32"],
-            "x86": ["EAX:0:32"],
-        }.get(arch, [])
-        callpost_fallback = None
-        observed_candidates = []
-        for key in candidates:
-            node = state.current.get(f"reg:{key}")
-            if node is None:
-                continue
-            attrs = function_graph.slice_graph.nodes.get(node, {})
-            if attrs.get("kind") == "call_post_storage":
-                callpost_fallback = callpost_fallback or node
-                continue
-            observed_candidates.append(node)
-        source_reaching = [
-            node
-            for node in observed_candidates
-            if self._reaches_source_boundary(function_graph, node)
-        ]
-        if source_reaching:
-            return self._prefer_computed_source_reaching(function_graph, source_reaching)
-        if observed_candidates:
-            return observed_candidates[0]
-        if callpost_fallback is not None:
-            return callpost_fallback
-        observed = []
-        for key, node in state.current.items():
-            if not key.startswith("reg:"):
-                continue
-            canonical = key.split(":", 2)[1]
-            if not function_graph.architecture.is_general_register(canonical):
-                continue
-            attrs = function_graph.slice_graph.nodes.get(node, {})
-            if attrs.get("kind") == "call_post_storage":
-                continue
-            observed.append(node)
-        if observed:
-            source_reaching = [
-                node
-                for node in observed
-                if self._reaches_source_boundary(function_graph, node)
-            ]
-            if source_reaching:
-                return self._prefer_computed_source_reaching(function_graph, source_reaching)
-            return max(observed, key=lambda node: node.version or 0)
-        return None
-
-    def _current_node_for_storage_hint(
-        self,
-        function_graph: FunctionGraph,
-        state: BuildState,
-        storage_key: str,
-    ) -> ValueId | None:
-        exact = state.current.get(storage_key)
-        if exact is not None:
-            return exact
-        parts = storage_key.split(":")
-        if len(parts) < 4 or parts[0] != "reg":
-            return None
-        canonical = parts[1]
-        same_canonical = [
-            node
-            for key, node in state.current.items()
-            if key.startswith(f"reg:{canonical}:")
-            and function_graph.slice_graph.nodes.get(node, {}).get("kind") != "call_post_storage"
-        ]
-        if not same_canonical:
-            return None
-        return max(same_canonical, key=lambda node: node.version or 0)
-
-    def _prototype_sink_storage_hints(self, function_graph: FunctionGraph, instr: dict) -> list[str]:
-        hints: list[str] = []
-        for target in instr.get("call_targets", []):
-            if not target.get("resolved"):
-                continue
-            prototype = target.get("external_prototype") or {}
-            parameters = sorted(
-                prototype.get("parameters") or [],
-                key=lambda item: item.get("ordinal") if item.get("ordinal") is not None else 9999,
-            )
-            if not parameters:
-                continue
-            storage_key = self._prototype_storage_key(function_graph, parameters[0].get("storage"))
-            if storage_key:
-                hints.append(storage_key)
-                break
-        return hints
-
-    def _prototype_storage_key(self, function_graph: FunctionGraph, storage: str | None) -> str | None:
-        if not storage or ":" not in storage or storage.startswith("Stack["):
-            return None
-        name, size_text = storage.rsplit(":", 1)
-        try:
-            size_bytes = int(size_text)
-        except ValueError:
-            return None
-        reg = self._register_storage_for_prototype_name(function_graph, name, size_bytes)
-        if not function_graph.architecture.is_general_register(reg.canonical):
-            return None
-        return f"reg:{reg.key()}"
-
-    def _register_storage_for_prototype_name(
-        self,
-        function_graph: FunctionGraph,
-        name: str,
-        size_bytes: int,
-    ):
-        display = name.upper() if function_graph.architecture.name.startswith("x86") else name
-        for (offset, alias_size), alias in function_graph.architecture.register_aliases.items():
-            if alias.display == display and alias_size == size_bytes and alias.size_bits == size_bytes * 8:
-                return function_graph.architecture.canonicalize_register(
-                    offset,
-                    size_bytes,
-                    name,
-                )
-        return function_graph.architecture.canonicalize_register(-1, size_bytes, name)
-
-    def _reaches_source_boundary(self, function_graph: FunctionGraph, target: ValueId) -> bool:
-        graph = function_graph.slice_graph
-        seen: set[ValueId] = set()
-        stack = [target]
-        while stack and len(seen) < 256:
-            node = stack.pop()
-            if node in seen:
-                continue
-            seen.add(node)
-            attrs = graph.nodes.get(node, {})
-            if attrs.get("kind") == "source_boundary" and attrs.get("source_label"):
-                return True
-            for pred in graph.predecessors(node):
-                if graph.edges[pred, node].get("kind") in {"data", "memory"}:
-                    stack.append(pred)
-        return False
-
-    def _prefer_computed_source_reaching(
-        self,
-        function_graph: FunctionGraph,
-        candidates: list[ValueId],
-    ) -> ValueId:
-        computed = [
-            node
-            for node in candidates
-            if function_graph.slice_graph.nodes.get(node, {}).get("kind") != "source_boundary"
-        ]
-        if computed:
-            return computed[0]
-        return candidates[0]
-
-    def _primary_target(self, instr: dict) -> str | None:
-        for target in instr.get("call_targets", []):
-            if target.get("resolved") and target.get("function_name"):
-                return target.get("function_name")
-        return None
-
-
 class SliceGraphBuilder:
-    def __init__(self, boundary_binder: DataFlowBenchBoundaryBinder | None = None):
-        self.boundary_binder = boundary_binder or DataFlowBenchBoundaryBinder()
+    def __init__(
+        self,
+        boundary_provider: BoundaryProvider | None = None,
+        boundary_binder: BoundaryProvider | None = None,
+    ):
+        if boundary_provider is not None and boundary_binder is not None:
+            raise ValueError("Pass either boundary_provider or boundary_binder, not both.")
+        self.boundary_provider = boundary_provider or boundary_binder or NoBoundaryProvider()
         self.call_resolver = CallResolver()
         self.call_boundary_mapper = CallBoundaryMapper()
         self.memory_model = MemoryModel()
@@ -276,18 +103,37 @@ class SliceGraphBuilder:
         )
         function_graph.cfg = CFGBuilder().build(program.instructions)
         state = BuildState()
-        addr_to_instr = {instr["address"]: instr for instr in program.instructions}
         block_out_states: dict[str, BuildState] = {}
 
-        for block_start in [instr["address"] for instr in program.instructions]:
-            instr = addr_to_instr[block_start]
+        self._process_instruction_range(function_graph, state, program.instructions, block_out_states)
+
+        for start_index in self._loop_revisit_start_indexes(program.instructions, function_graph):
+            state = BuildState()
+            self._process_instruction_range(
+                function_graph,
+                state,
+                program.instructions[start_index:],
+                block_out_states,
+            )
+
+        return function_graph
+
+    def _process_instruction_range(
+        self,
+        function_graph: FunctionGraph,
+        state: BuildState,
+        instructions: list[dict],
+        block_out_states: dict[str, BuildState],
+    ) -> None:
+        for instr in instructions:
+            block_start = instr["address"]
             predecessors = list(function_graph.cfg.predecessors(block_start)) if function_graph.cfg.has_node(block_start) else []
             if predecessors:
                 ready_states = [block_out_states[pred] for pred in predecessors if pred in block_out_states]
                 if ready_states:
                     state = self._merge_states(function_graph, state, ready_states, instr)
 
-            sink_name = self.boundary_binder.is_sink_call(instr)
+            sink_name = self.boundary_provider.is_sink_call(instr)
             if sink_name:
                 self._bind_sink(function_graph, state, instr, sink_name)
 
@@ -297,13 +143,24 @@ class SliceGraphBuilder:
             if self._is_call_instruction(instr):
                 self._materialize_call_boundary(function_graph, state, instr)
 
-            source_name = self.boundary_binder.is_source_call(instr)
+            source_name = self.boundary_provider.is_source_call(instr)
             if source_name:
                 self._bind_source(function_graph, state, instr, source_name)
 
             block_out_states[block_start] = state.copy()
 
-        return function_graph
+    def _loop_revisit_start_indexes(self, instructions: list[dict], function_graph: FunctionGraph) -> list[int]:
+        address_to_index = {instr["address"]: index for index, instr in enumerate(instructions)}
+        starts: list[int] = []
+        for pred, succ in function_graph.cfg.edges:
+            pred_addr = parse_int(pred) or 0
+            succ_addr = parse_int(succ) or 0
+            if pred_addr <= succ_addr:
+                continue
+            index = address_to_index.get(succ)
+            if index is not None and index not in starts:
+                starts.append(index)
+        return sorted(starts)[:2]
 
     def _merge_states(
         self,
@@ -339,8 +196,9 @@ class SliceGraphBuilder:
                 phi_node = self._new_synthetic_value(fg, merged, space, storage_key, instr, "PHI")
                 fg.slice_graph.nodes[phi_node]["kind"] = "phi"
                 fg.slice_graph.nodes[phi_node]["merge_count"] = len(values)
+                edge_kind = "memory" if bucket_name == "memory" else "data"
                 for value in values:
-                    fg.slice_graph.add_edge(value, phi_node, kind="data", opcode="PHI")
+                    fg.slice_graph.add_edge(value, phi_node, kind=edge_kind, opcode="PHI")
                 for pred_state in predecessor_states:
                     for control_value in pred_state.control_values:
                         fg.slice_graph.add_edge(
@@ -1328,7 +1186,7 @@ class SliceGraphBuilder:
         return False
 
     def _bind_source(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
-        label = self.boundary_binder.source_label(name)
+        label = self.boundary_provider.source_label(name)
         source_node = self._new_synthetic_value(fg, state, "boundary", label, instr, "SOURCE_BOUNDARY_VALUE")
         fg.slice_graph.nodes[source_node]["kind"] = "source_boundary"
         fg.slice_graph.nodes[source_node]["source_label"] = label
@@ -1339,7 +1197,7 @@ class SliceGraphBuilder:
             state.current[key] = source_node
 
     def _bind_sink(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
-        target = self.boundary_binder.choose_sink_target(fg, state, instr)
+        target = self.boundary_provider.choose_sink_target(fg, state, instr)
         anchor_key = f"{instr.get('address')}:{name}:observed_storage0"
         sink_node = self._new_synthetic_value(fg, state, "sink", anchor_key, instr, "SINK_OBSERVED_STORAGE")
         fg.slice_graph.nodes[sink_node]["kind"] = "sink_boundary"

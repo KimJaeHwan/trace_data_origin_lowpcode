@@ -7,6 +7,7 @@ from pathlib import Path
 
 import networkx as nx
 
+from analysis.boundary_provider import BoundaryProvider, DataFlowBenchBoundaryProvider
 from analysis.call_boundary_mapper import CallBoundaryMapper
 from analysis.call_resolver import CallResolver
 from analysis.external_summary import ExternalSummaryResolver, ResolvedExternalSummary
@@ -19,7 +20,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 19
+SUMMARY_CACHE_SCHEMA_VERSION = 23
 
 
 @dataclass
@@ -400,9 +401,10 @@ def merge_function_summary(target: AutoFunctionSummary, source: AutoFunctionSumm
 
 
 class ProgramSliceGraphBuilder:
-    def __init__(self):
+    def __init__(self, boundary_provider: BoundaryProvider | None = None):
         self.loader = LowPcodeLoader()
-        self.function_builder = SliceGraphBuilder()
+        self.boundary_provider = boundary_provider or DataFlowBenchBoundaryProvider()
+        self.function_builder = SliceGraphBuilder(boundary_provider=self.boundary_provider)
         self.auto_summary_provider = MinimalAutoFunctionSummaryProvider()
         self.summary_provider = CompositeSummaryProvider([self.auto_summary_provider])
         self.external_summary_provider = ExternalSummaryProvider()
@@ -473,8 +475,13 @@ class ProgramSliceGraphBuilder:
         self._inject_summary_edges(program_graph, programs, summaries)
         self._inject_observed_indirect_sink_edges(program_graph, programs)
         self._inject_observed_storage_preservation_edges(program_graph, programs)
+        self._inject_source_boundary_storage_preservation_edges(program_graph, programs)
+        self._inject_observed_pointer_write_passthrough_edges(program_graph, programs)
         self._inject_unresolved_boundary_passthrough_edges(program_graph, programs, summaries)
         self._inject_observed_pointer_passthrough_edges(program_graph, programs)
+        self._inject_observed_runtime_register_restore_edges(program_graph, programs)
+        self._inject_observed_thread_callback_sink_edges(program_graph, programs)
+        self._inject_observed_runtime_escape_sink_edges(program_graph, programs)
         self._inject_external_summary_edges(program_graph, programs)
         self._record_sccs(program_graph)
         self._cache[cache_key] = program_graph
@@ -499,8 +506,23 @@ class ProgramSliceGraphBuilder:
                     "metadata_hash": identity,
                 }
             )
-        encoded = json.dumps(entries, sort_keys=True).encode("utf-8")
+        encoded = json.dumps(
+            {
+                "boundary_provider": self._boundary_provider_cache_key(),
+                "entries": entries,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+    def _boundary_provider_cache_key(self) -> str:
+        explicit_key = getattr(self.boundary_provider, "cache_key", None)
+        if callable(explicit_key):
+            return str(explicit_key())
+        if explicit_key:
+            return str(explicit_key)
+        provider_type = self.boundary_provider.__class__
+        return f"{provider_type.__module__}.{provider_type.__qualname__}"
 
     def _load_summary_cache(
         self,
@@ -536,6 +558,7 @@ class ProgramSliceGraphBuilder:
             payload = {
                 "schema_version": SUMMARY_CACHE_SCHEMA_VERSION,
                 "fingerprint": fingerprint,
+                "boundary_provider": self._boundary_provider_cache_key(),
                 "summaries": {
                     name: self._summary_to_json(summary)
                     for name, summary in sorted(summaries.items())
@@ -818,6 +841,225 @@ class ProgramSliceGraphBuilder:
                         opcode="SUMMARY_OBSERVED_STORAGE_PRESERVED",
                     )
 
+    def _inject_source_boundary_storage_preservation_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            primary_storages = set(self.call_boundary_mapper.primary_value_storage_keys(caller_graph.architecture))
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                source_name = self.boundary_provider.is_source_call(instr)
+                if not source_name:
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                pre_prefix = f"{callsite_key}:pre:"
+                for pre_key, pre_node in sorted(caller_graph.call_pre_storage_index.items()):
+                    if not pre_key.startswith(pre_prefix):
+                        continue
+                    storage = caller_graph.slice_graph.nodes[pre_node].get("observed_storage") or ""
+                    if not self._can_preserve_observed_register_storage(caller_graph, storage, primary_storages):
+                        continue
+                    labels = self._source_labels_reaching_node(caller_graph, pre_node)
+                    if len(labels) != 1:
+                        continue
+                    for post_node in self._post_register_nodes_overlapping_storage(
+                        caller_graph,
+                        callsite_key,
+                        storage,
+                        primary_storages,
+                    ):
+                        if self._has_data_predecessor(caller_graph, post_node):
+                            continue
+                        if not (
+                            self._post_call_storage_has_real_consumer(caller_graph, post_node, callsite_key)
+                            or self._post_call_storage_feeds_sink(caller_graph, post_node)
+                        ):
+                            continue
+                        output_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+                        program_graph.slice_graph.add_edge(
+                            pre_node,
+                            post_node,
+                            kind="call_out_reg",
+                            opcode="SUMMARY_SOURCE_BOUNDARY_OBSERVED_STORAGE_PRESERVED",
+                            summary_kind="summary_data",
+                            callee=source_name,
+                            observed_input=storage,
+                            observed_output=output_storage,
+                            confidence="single_source_same_register_range_across_source_boundary",
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            source_name,
+                            callsite_key,
+                            "call_out_reg",
+                            observed_input=storage,
+                            observed_output=output_storage,
+                            opcode="SUMMARY_SOURCE_BOUNDARY_OBSERVED_STORAGE_PRESERVED",
+                        )
+
+    def _post_register_nodes_overlapping_storage(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        input_storage: str,
+        primary_storages: set[str],
+    ) -> list[ValueId]:
+        wanted = self._register_storage_range(input_storage)
+        if wanted is None:
+            return []
+        wanted_canonical, wanted_start, wanted_end = wanted
+        nodes: list[ValueId] = []
+        prefix = f"{callsite_key}:post:"
+        for key, post_node in sorted(caller_graph.call_post_storage_index.items()):
+            if not key.startswith(prefix):
+                continue
+            output_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+            if not self._can_preserve_observed_register_storage(caller_graph, output_storage, primary_storages):
+                continue
+            candidate = self._register_storage_range(output_storage)
+            if candidate is None:
+                continue
+            canonical, start, end = candidate
+            if canonical == wanted_canonical and start < wanted_end and wanted_start < end:
+                nodes.append(post_node)
+        return nodes
+
+    def _inject_observed_pointer_write_passthrough_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        programs_by_name = {program.function_name: program for program in programs}
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            external_summaries = self.external_summary_provider.resolve_program_callsites(program)
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                if not resolved.name or self._is_provider_boundary_call(instr):
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                if callsite_key in external_summaries:
+                    continue
+                if not self._is_observed_thunk_like_program(programs_by_name.get(resolved.name)):
+                    continue
+                source_nodes = self._source_carrying_pre_nodes(
+                    caller_graph,
+                    callsite_key,
+                    prefer_registers=False,
+                )
+                if not source_nodes:
+                    continue
+                source_labels = set().union(
+                    *(self._source_labels_reaching_node(caller_graph, node) for node in source_nodes)
+                )
+                if len(source_labels) != 1:
+                    continue
+                size = self._single_positive_constant_pre_register(caller_graph, callsite_key)
+                if size is None:
+                    continue
+                callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+                for pointer_node in self._concrete_pointer_pre_nodes(caller_graph, callsite_key):
+                    pointer_range = self._memory_range_for_pointer_expression(caller_graph, pointer_node, size)
+                    if pointer_range is None:
+                        continue
+                    pointer_storage = caller_graph.slice_graph.nodes[pointer_node].get("observed_storage") or ""
+                    for memory_node, _ in self._post_call_memory_nodes_in_range(caller_graph, pointer_range, callsite_addr):
+                        if not self._node_reaches_sink_boundary(caller_graph, memory_node):
+                            continue
+                        if self._has_data_predecessor(caller_graph, memory_node):
+                            continue
+                        if self._source_labels_reaching_node(caller_graph, memory_node):
+                            continue
+                        output_storage = caller_graph.slice_graph.nodes[memory_node].get("storage") or ""
+                        for source_node in source_nodes:
+                            input_storage = caller_graph.slice_graph.nodes[source_node].get("observed_storage") or ""
+                            program_graph.slice_graph.add_edge(
+                                source_node,
+                                memory_node,
+                                kind="call_out_mem",
+                                opcode="SUMMARY_OBSERVED_POINTER_WRITE_PASSTHROUGH",
+                                summary_kind="summary_memory",
+                                callee=resolved.name,
+                                observed_input=input_storage,
+                                observed_address=pointer_storage,
+                                observed_output=output_storage,
+                                confidence="single_source_thunk_boundary_to_sink_reaching_pointer_memory",
+                            )
+                            self._record_summary_call_out_boundary(
+                                program_graph,
+                                caller_graph,
+                                resolved.name,
+                                callsite_key,
+                                "call_out_mem",
+                                observed_input=input_storage,
+                                observed_address=pointer_storage,
+                                observed_output=output_storage,
+                                opcode="SUMMARY_OBSERVED_POINTER_WRITE_PASSTHROUGH",
+                            )
+
+    def _is_observed_thunk_like_program(self, program: LowPcodeProgram | None) -> bool:
+        if program is None or not program.instructions:
+            return False
+        opcodes = {
+            pcode.get("opcode")
+            for instr in program.instructions
+            for pcode in (instr.get("low_pcode") or [])
+        }
+        return bool(opcodes) and opcodes <= {"BRANCH", "BRANCHIND"}
+
+    def _single_positive_constant_pre_register(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+    ) -> int | None:
+        values: set[int] = set()
+        prefix = f"{callsite_key}:pre:"
+        for key, node in caller_graph.call_pre_storage_index.items():
+            if not key.startswith(prefix):
+                continue
+            attrs = caller_graph.slice_graph.nodes[node]
+            observed_storage = attrs.get("observed_storage") or ""
+            if not observed_storage.startswith("reg:"):
+                continue
+            expression = attrs.get("expression") or {}
+            if expression.get("kind") != "const":
+                continue
+            value = expression.get("unsigned_value")
+            if value is None:
+                value = expression.get("value")
+            if value is None:
+                continue
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                continue
+            if 0 < parsed <= 1_000_000:
+                values.add(parsed)
+        return next(iter(values)) if len(values) == 1 else None
+
+    def _concrete_pointer_pre_nodes(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+    ) -> list[ValueId]:
+        nodes: list[ValueId] = []
+        prefix = f"{callsite_key}:pre:"
+        for key, node in sorted(caller_graph.call_pre_storage_index.items()):
+            if not key.startswith(prefix):
+                continue
+            expression = caller_graph.slice_graph.nodes[node].get("expression") or {}
+            if expression.get("kind") not in {"stack", "heap_ptr", "register_offset"}:
+                continue
+            if self._source_labels_reaching_node(caller_graph, node):
+                continue
+            nodes.append(node)
+        return nodes
+
+
     def _inject_unresolved_boundary_passthrough_edges(
         self,
         program_graph: ProgramSliceGraph,
@@ -840,8 +1082,9 @@ class ProgramSliceGraphBuilder:
                     external_summaries,
                 ):
                     continue
-                input_nodes = self._source_carrying_pre_nodes(
+                input_nodes = self._source_carrying_pre_nodes_for_passthrough(
                     caller_graph,
+                    instr,
                     callsite_key,
                     prefer_registers=not (resolved.name and resolved.name in program_graph.functions),
                 )
@@ -880,6 +1123,45 @@ class ProgramSliceGraphBuilder:
                             opcode="SUMMARY_UNRESOLVED_BOUNDARY_PASSTHROUGH",
                         )
 
+    def _source_carrying_pre_nodes_for_passthrough(
+        self,
+        caller_graph: FunctionGraph,
+        instr: dict,
+        callsite_key: str,
+        *,
+        prefer_registers: bool,
+    ) -> list[ValueId]:
+        input_nodes = self._source_carrying_pre_nodes(
+            caller_graph,
+            callsite_key,
+            prefer_registers=prefer_registers,
+        )
+        if not input_nodes or not self._is_computed_call_instruction(instr):
+            return input_nodes
+        latest_addr = None
+        latest_labels: set[str] = set()
+        labels_by_node: dict[ValueId, dict[str, int]] = {}
+        for node in input_nodes:
+            label_addrs = self._source_label_addrs_reaching_node(caller_graph, node)
+            if not label_addrs:
+                continue
+            labels_by_node[node] = label_addrs
+            node_latest = max(label_addrs.values())
+            if latest_addr is None or node_latest > latest_addr:
+                latest_addr = node_latest
+                latest_labels = {label for label, addr in label_addrs.items() if addr == node_latest}
+            elif node_latest == latest_addr:
+                latest_labels.update(label for label, addr in label_addrs.items() if addr == node_latest)
+        if latest_addr is None or len(latest_labels) != 1:
+            return input_nodes
+        latest_label = next(iter(latest_labels))
+        narrowed = [
+            node
+            for node in input_nodes
+            if labels_by_node.get(node, {}).get(latest_label) == latest_addr
+        ]
+        return narrowed or input_nodes
+
     def _can_apply_unresolved_boundary_passthrough(
         self,
         program_graph: ProgramSliceGraph,
@@ -891,7 +1173,7 @@ class ProgramSliceGraphBuilder:
     ) -> bool:
         if callsite_key in external_summaries:
             return False
-        if resolved_name and (resolved_name.startswith("dfb_source_") or resolved_name.startswith("dfb_sink_")):
+        if self._is_provider_boundary_call(instr):
             return False
         if resolved_name in program_graph.functions:
             summary = summaries.get(resolved_name)
@@ -915,6 +1197,9 @@ class ProgramSliceGraphBuilder:
         if prototype or matched_target.get("is_external"):
             return not (prototype.get("parameters") or [])
         return True
+
+    def _is_provider_boundary_call(self, instr: dict) -> bool:
+        return bool(self.boundary_provider.is_source_call(instr) or self.boundary_provider.is_sink_call(instr))
 
     def _source_carrying_pre_nodes(
         self,
@@ -978,8 +1263,11 @@ class ProgramSliceGraphBuilder:
         return any(graph.edges[pred, node].get("kind") in DATA_SLICE_EDGES for pred in graph.predecessors(node))
 
     def _source_labels_reaching_node(self, caller_graph: FunctionGraph, node: ValueId) -> set[str]:
+        return set(self._source_label_addrs_reaching_node(caller_graph, node))
+
+    def _source_label_addrs_reaching_node(self, caller_graph: FunctionGraph, node: ValueId) -> dict[str, int]:
         graph = caller_graph.slice_graph
-        labels: set[str] = set()
+        labels: dict[str, int] = {}
         seen: set[ValueId] = set()
         stack = [node]
         while stack:
@@ -989,8 +1277,10 @@ class ProgramSliceGraphBuilder:
             seen.add(current)
             attrs = graph.nodes[current]
             if attrs.get("kind") == "source_boundary" and attrs.get("source_label"):
-                labels.add(str(attrs["source_label"]))
-            labels.update(self._source_labels_in_expression(caller_graph, attrs.get("expression") or {}))
+                label = str(attrs["source_label"])
+                labels[label] = max(labels.get(label, 0), parse_int(attrs.get("addr")) or 0)
+            for label in self._source_labels_in_expression(caller_graph, attrs.get("expression") or {}):
+                labels.setdefault(label, 0)
             for pred in graph.predecessors(current):
                 if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES:
                     stack.append(pred)
@@ -1156,6 +1446,194 @@ class ProgramSliceGraphBuilder:
                                     observed_output=global_storage,
                                     opcode="SUMMARY_THREAD_OBSERVED_GLOBAL_READ",
                                 )
+
+    def _inject_observed_thread_callback_sink_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            if caller_graph.sink_index:
+                continue
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                if not self._is_thread_start_call(resolved.name):
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                source_inputs = self._source_carrying_pointer_pre_nodes(caller_graph, callsite_key)
+                if not source_inputs:
+                    continue
+                labels = set().union(*(labels for _, labels, _ in source_inputs))
+                if len(labels) != 1:
+                    continue
+                has_observed_code_pointer = self._callsite_has_observed_code_pointer(program, caller_graph, callsite_key)
+                confidence = (
+                    "single_source_thread_context_to_callback_boundary"
+                    if has_observed_code_pointer
+                    else "single_source_thread_context_to_runtime_boundary"
+                )
+                sink_node = self._observed_thread_callback_sink_node(
+                    program_graph,
+                    caller_graph,
+                    callsite_key,
+                    instr,
+                    resolved.name or resolved.address or "thread_start",
+                    confidence,
+                )
+                for input_node, _, memory_nodes in source_inputs:
+                    input_storage = caller_graph.slice_graph.nodes[input_node].get("observed_storage") or ""
+                    for memory_node in memory_nodes:
+                        program_graph.slice_graph.add_edge(
+                            memory_node,
+                            sink_node,
+                            kind="data",
+                            opcode="SINK_OBSERVED_THREAD_CALLBACK",
+                            observed_input=input_storage,
+                            confidence=confidence,
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name or resolved.address or "thread_start",
+                            callsite_key,
+                            "data",
+                            observed_input=input_storage,
+                            opcode="SINK_OBSERVED_THREAD_CALLBACK",
+                        )
+
+    def _inject_observed_runtime_register_restore_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                if not self._is_pointer_passthrough_runtime_call(resolved.name):
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                input_nodes = self._source_carrying_pre_nodes(
+                    caller_graph,
+                    callsite_key,
+                    prefer_registers=False,
+                )
+                if not input_nodes:
+                    continue
+                source_labels = set().union(
+                    *(self._source_labels_reaching_node(caller_graph, node) for node in input_nodes)
+                )
+                if len(source_labels) != 1:
+                    continue
+                for post_node in self._sink_reaching_post_register_nodes(caller_graph, callsite_key):
+                    if self._has_data_predecessor(caller_graph, post_node):
+                        continue
+                    output_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+                    for input_node in input_nodes:
+                        input_storage = caller_graph.slice_graph.nodes[input_node].get("observed_storage") or ""
+                        program_graph.slice_graph.add_edge(
+                            input_node,
+                            post_node,
+                            kind="call_out_reg",
+                            opcode="SUMMARY_RUNTIME_OBSERVED_REGISTER_RESTORE",
+                            summary_kind="summary_data",
+                            callee=resolved.name or resolved.address or "runtime",
+                            observed_input=input_storage,
+                            observed_output=output_storage,
+                            confidence="single_source_observed_runtime_boundary_to_sink_reaching_post_storage",
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name or resolved.address or "runtime",
+                            callsite_key,
+                            "call_out_reg",
+                            observed_input=input_storage,
+                            observed_output=output_storage,
+                            opcode="SUMMARY_RUNTIME_OBSERVED_REGISTER_RESTORE",
+                        )
+
+    def _sink_reaching_post_register_nodes(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+    ) -> list[ValueId]:
+        nodes: list[ValueId] = []
+        prefix = f"{callsite_key}:post:"
+        for key, post_node in sorted(caller_graph.call_post_storage_index.items()):
+            if not key.startswith(prefix):
+                continue
+            observed_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+            if not observed_storage.startswith("reg:"):
+                continue
+            if not self._is_general_register_storage(caller_graph, observed_storage):
+                continue
+            if self._node_reaches_sink_boundary(caller_graph, post_node):
+                nodes.append(post_node)
+        return nodes
+
+    def _is_thread_start_call(self, name: str | None) -> bool:
+        if not name:
+            return False
+        return name.lower() in {"pthread_create", "createthread"}
+
+    def _callsite_has_observed_code_pointer(
+        self,
+        program: LowPcodeProgram,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+    ) -> bool:
+        prefix = f"{callsite_key}:pre:"
+        for key, node in caller_graph.call_pre_storage_index.items():
+            if not key.startswith(prefix):
+                continue
+            expression = caller_graph.slice_graph.nodes[node].get("expression") or {}
+            if expression.get("kind") != "const":
+                continue
+            value = expression.get("unsigned_value")
+            if value is None:
+                value = expression.get("value")
+            if value is None:
+                continue
+            if self._program_has_function_entry(program, int(value)):
+                return True
+        return False
+
+    def _program_has_function_entry(self, program: LowPcodeProgram, address: int) -> bool:
+        wanted = f"{address:x}".lstrip("0") or "0"
+        function_entries = ((program.data.get("indices") or {}).get("functions_by_entry") or {})
+        for entry in function_entries:
+            if str(entry).lower().lstrip("0") == wanted:
+                return True
+        return False
+
+    def _observed_thread_callback_sink_node(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        instr: dict,
+        runtime_name: str,
+        confidence: str,
+    ) -> ValueId:
+        anchor_key = f"{callsite_key}:observed_thread_callback"
+        node = ValueId(caller_graph.function_name, caller_graph.context_id, "sink", anchor_key)
+        if not caller_graph.slice_graph.has_node(node):
+            caller_graph.slice_graph.add_node(
+                node,
+                kind="sink_boundary",
+                display=f"sink:{anchor_key}",
+                addr=instr.get("address"),
+                opcode="SINK_OBSERVED_THREAD_CALLBACK",
+                storage=f"sink:{anchor_key}",
+                sink_name=runtime_name,
+                confidence=confidence,
+            )
+            caller_graph.sink_index[anchor_key] = node
+        if not program_graph.slice_graph.has_node(node):
+            program_graph.slice_graph.add_node(node, **caller_graph.slice_graph.nodes[node])
+        return node
 
     def _is_pointer_passthrough_runtime_call(self, name: str | None) -> bool:
         if not name:
@@ -1371,6 +1849,164 @@ class ProgramSliceGraphBuilder:
                         observed_target=target_storage,
                         opcode="SINK_OBSERVED_INDIRECT_STORAGE",
                     )
+
+    def _inject_observed_runtime_escape_sink_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        runtime_escape_functions = {
+            program.function_name
+            for program in programs
+            if any(
+                self._is_runtime_escape_call(self.call_resolver.resolve(instr).name, instr)
+                for instr in program.instructions
+            )
+        }
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                direct_runtime_escape = self._is_runtime_escape_call(resolved.name, instr)
+                if not direct_runtime_escape and resolved.name not in runtime_escape_functions:
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                input_nodes: list[ValueId] = []
+                if direct_runtime_escape or resolved.name in runtime_escape_functions:
+                    input_nodes.extend(
+                        self._source_carrying_pre_nodes(
+                            caller_graph,
+                            callsite_key,
+                            prefer_registers=not direct_runtime_escape,
+                        )
+                    )
+                input_nodes.extend(
+                    self._source_carrying_runtime_escape_post_nodes(
+                        program_graph,
+                        caller_graph,
+                        callsite_key,
+                    )
+                )
+                input_nodes = list(dict.fromkeys(input_nodes))
+                if not input_nodes:
+                    continue
+                source_labels = set().union(
+                    *(self._program_source_labels_reaching_node(program_graph, node) for node in input_nodes)
+                )
+                if len(source_labels) != 1:
+                    continue
+                sink_node = self._observed_runtime_escape_sink_node(
+                    program_graph,
+                    caller_graph,
+                    callsite_key,
+                    instr,
+                    resolved.name or resolved.address or "runtime_escape",
+                )
+                for input_node in input_nodes:
+                    input_attrs = program_graph.slice_graph.nodes[input_node]
+                    input_storage = input_attrs.get("observed_storage") or input_attrs.get("storage") or ""
+                    program_graph.slice_graph.add_edge(
+                        input_node,
+                        sink_node,
+                        kind="data",
+                        opcode="SINK_OBSERVED_RUNTIME_ESCAPE",
+                        observed_input=input_storage,
+                        confidence="source_carrying_pre_to_terminal_runtime_escape",
+                    )
+                    self._record_summary_call_out_boundary(
+                        program_graph,
+                        caller_graph,
+                        resolved.name or resolved.address or "runtime_escape",
+                        callsite_key,
+                        "data",
+                        observed_input=input_storage,
+                        opcode="SINK_OBSERVED_RUNTIME_ESCAPE",
+                    )
+
+    def _source_carrying_runtime_escape_post_nodes(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+    ) -> list[ValueId]:
+        prefix = f"{callsite_key}:post:"
+        nodes: list[ValueId] = []
+        for key, post_node in sorted(caller_graph.call_post_storage_index.items()):
+            if not key.startswith(prefix):
+                continue
+            attrs = caller_graph.slice_graph.nodes[post_node]
+            storage = attrs.get("storage") or ""
+            observed_storage = attrs.get("observed_storage") or ""
+            if observed_storage.startswith("reg:") and not self._is_general_register_storage(
+                caller_graph,
+                observed_storage,
+            ):
+                continue
+            if not (
+                storage.startswith("mem:global:")
+                or storage.startswith("mem:unknown:unique:")
+                or observed_storage.startswith("reg:")
+            ):
+                continue
+            if self._program_source_labels_reaching_node(program_graph, post_node):
+                nodes.append(post_node)
+        return nodes
+
+    def _program_source_labels_reaching_node(self, program_graph: ProgramSliceGraph, node: ValueId) -> set[str]:
+        graph = program_graph.slice_graph
+        labels: set[str] = set()
+        seen: set[ValueId] = set()
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current in seen or not graph.has_node(current):
+                continue
+            seen.add(current)
+            attrs = graph.nodes[current]
+            if attrs.get("kind") == "source_boundary" and attrs.get("source_label"):
+                labels.add(str(attrs["source_label"]))
+            for pred in graph.predecessors(current):
+                if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES:
+                    stack.append(pred)
+        return labels
+
+    def _is_runtime_escape_call(self, name: str | None, instr: dict) -> bool:
+        normalized = (name or "").lower().lstrip("_")
+        if normalized in {"cxa_throw"}:
+            return True
+        for target in instr.get("call_targets") or []:
+            prototype = target.get("external_prototype") or {}
+            flags = prototype.get("flags") or {}
+            proto_name = str(prototype.get("normalized_name") or prototype.get("name") or "").lower().lstrip("_")
+            if flags.get("has_no_return") and proto_name in {"cxa_throw"}:
+                return True
+        return False
+
+    def _observed_runtime_escape_sink_node(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        instr: dict,
+        runtime_name: str,
+    ) -> ValueId:
+        anchor_key = f"{callsite_key}:observed_runtime_escape"
+        node = ValueId(caller_graph.function_name, caller_graph.context_id, "sink", anchor_key)
+        if not caller_graph.slice_graph.has_node(node):
+            caller_graph.slice_graph.add_node(
+                node,
+                kind="sink_boundary",
+                display=f"sink:{anchor_key}",
+                addr=instr.get("address"),
+                opcode="SINK_OBSERVED_RUNTIME_ESCAPE",
+                storage=f"sink:{anchor_key}",
+                sink_name=runtime_name,
+                confidence="source_carrying_pre_to_terminal_runtime_escape",
+            )
+            caller_graph.sink_index[anchor_key] = node
+        if not program_graph.slice_graph.has_node(node):
+            program_graph.slice_graph.add_node(node, **caller_graph.slice_graph.nodes[node])
+        return node
 
     def _is_computed_call_instruction(self, instr: dict) -> bool:
         flow_type = str(instr.get("flow_type") or "").upper()
@@ -1963,6 +2599,208 @@ class ProgramSliceGraphBuilder:
                     cache_key=summary.cache_key,
                 )
                 self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "call_out_mem")
+        self._inject_external_memory_copy_ranges(
+            program_graph,
+            caller_graph,
+            callsite_key,
+            summary,
+            read_address,
+            write_address,
+        )
+
+    def _inject_external_memory_copy_ranges(
+        self,
+        program_graph: ProgramSliceGraph,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+        read_address: ValueId | None,
+        write_address: ValueId | None,
+    ) -> None:
+        copy_size = self._external_copy_size(caller_graph, callsite_key, summary)
+        if copy_size is None:
+            return
+        read_range = self._memory_range_for_pointer_expression(caller_graph, read_address, copy_size)
+        write_range = self._memory_range_for_pointer_expression(caller_graph, write_address, copy_size)
+        if read_range is None or write_range is None:
+            return
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        source_nodes = self._source_memory_nodes_in_range(caller_graph, read_range, callsite_addr)
+        if not source_nodes:
+            return
+        for dest_node, dest_range in self._post_call_memory_nodes_in_range(caller_graph, write_range, callsite_addr):
+            relative = dest_range[1] - write_range[1]
+            wanted = (read_range[0], read_range[1] + relative, read_range[1] + relative + (dest_range[2] - dest_range[1]))
+            for source_node, source_range in source_nodes:
+                if source_range != wanted:
+                    continue
+                program_graph.slice_graph.add_edge(
+                    source_node,
+                    dest_node,
+                    kind="call_out_mem",
+                    opcode="EXTERNAL_MEMORY_COPY_RANGE",
+                    summary_kind="summary_memory",
+                    callee=summary.prototype.normalized_name,
+                    provider="external",
+                    effect=summary.effect.effect,
+                    trust=summary.trust_level,
+                    provenance=summary.provenance,
+                    cache_key=summary.cache_key,
+                    confidence="observed_offset_preserving_memory_copy",
+                )
+                self._record_external_boundary(program_graph, caller_graph, callsite_key, summary, "call_out_mem")
+
+    def _external_copy_size(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        summary: ResolvedExternalSummary,
+    ) -> int | None:
+        size_param = self._external_role_parameter(summary, "size")
+        size_node = self._external_role_input_node(caller_graph, callsite_key, size_param)
+        if size_node is None:
+            return None
+        expression = caller_graph.slice_graph.nodes[size_node].get("expression") or {}
+        value = expression.get("unsigned_value")
+        if value is None:
+            value = expression.get("value")
+        if value is None:
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0 or parsed > 1_000_000:
+            return None
+        return parsed
+
+    def _memory_range_for_pointer_expression(
+        self,
+        caller_graph: FunctionGraph,
+        address_node: ValueId | None,
+        size: int,
+    ) -> tuple[str, int, int] | None:
+        if address_node is None:
+            return None
+        expression = caller_graph.slice_graph.nodes[address_node].get("expression")
+        if not expression:
+            return None
+        memory_key = self._memory_key_from_expression(caller_graph, expression, f"mem:summary:field:{size}")
+        if memory_key is None:
+            return None
+        return self._memory_range_for_key(memory_key)
+
+    def _source_memory_nodes_in_range(
+        self,
+        caller_graph: FunctionGraph,
+        memory_range: tuple[str, int, int],
+        callsite_addr: int,
+    ) -> list[tuple[ValueId, tuple[str, int, int]]]:
+        nodes: list[tuple[ValueId, tuple[str, int, int]]] = []
+        for node, attrs in caller_graph.slice_graph.nodes(data=True):
+            storage = attrs.get("storage") or ""
+            if not storage.startswith("mem:"):
+                continue
+            node_range = self._memory_range_for_storage(storage)
+            if node_range is None or not self._range_contains(memory_range, node_range):
+                continue
+            node_addr = parse_int(attrs.get("addr")) or 0
+            if node_addr > callsite_addr:
+                continue
+            if not self._source_labels_reaching_node(caller_graph, node):
+                continue
+            nodes.append((node, node_range))
+        return nodes
+
+    def _post_call_memory_nodes_in_range(
+        self,
+        caller_graph: FunctionGraph,
+        memory_range: tuple[str, int, int],
+        callsite_addr: int,
+    ) -> list[tuple[ValueId, tuple[str, int, int]]]:
+        nodes: list[tuple[ValueId, tuple[str, int, int]]] = []
+        for node, attrs in caller_graph.slice_graph.nodes(data=True):
+            storage = attrs.get("storage") or ""
+            if not storage.startswith("mem:"):
+                continue
+            node_range = self._memory_range_for_storage(storage)
+            if node_range is None or not self._range_contains(memory_range, node_range):
+                continue
+            node_addr = parse_int(attrs.get("addr")) or 0
+            if node_addr <= callsite_addr:
+                continue
+            if attrs.get("kind") not in {"observed_memory", "memory_range"}:
+                continue
+            nodes.append((node, node_range))
+        return nodes
+
+    def _memory_range_for_storage(self, storage: str) -> tuple[str, int, int] | None:
+        return self._memory_range_for_key(storage.removeprefix("mem:") if storage.startswith("mem:") else storage)
+
+    def _memory_range_for_key(self, memory_key: str) -> tuple[str, int, int] | None:
+        if ":stack:" in memory_key:
+            prefix, rest = memory_key.split(":stack:", 1)
+            parts = rest.rsplit(":", 2)
+            if len(parts) != 3:
+                return None
+            base, offset_text, size_text = parts
+            size = self._memory_size_token(size_text)
+            if size is None:
+                return None
+            try:
+                offset = int(offset_text)
+            except ValueError:
+                return None
+            return f"{prefix}:stack:{base}", offset, offset + size
+        if memory_key.startswith("heap:allocsite:") and ":offset:" in memory_key:
+            prefix, rest = memory_key.split(":offset:", 1)
+            parts = rest.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._memory_size_token(parts[1])
+            if size is None:
+                return None
+            try:
+                offset = int(parts[0])
+            except ValueError:
+                return None
+            return prefix, offset, offset + size
+        if memory_key.startswith("unknown:register:") and ":offset:" in memory_key:
+            prefix, rest = memory_key.split(":offset:", 1)
+            parts = rest.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._memory_size_token(parts[1])
+            if size is None:
+                return None
+            try:
+                offset = int(parts[0])
+            except ValueError:
+                return None
+            return prefix, offset, offset + size
+        if memory_key.startswith(("global:", "unknown:unique:", "unknown:register:")):
+            parts = memory_key.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._memory_size_token(parts[1])
+            if size is None:
+                return None
+            return parts[0], 0, size
+        return None
+
+    def _memory_size_token(self, size_text: str) -> int | None:
+        if size_text == "*":
+            return None
+        try:
+            size = int(size_text)
+        except ValueError:
+            return None
+        if size <= 0:
+            return None
+        return size
+
+    def _range_contains(self, outer: tuple[str, int, int], inner: tuple[str, int, int]) -> bool:
+        return outer[0] == inner[0] and outer[1] <= inner[1] and inner[2] <= outer[2]
 
     def _inject_external_memory_fill(
         self,

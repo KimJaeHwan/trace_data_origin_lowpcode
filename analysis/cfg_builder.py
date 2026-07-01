@@ -52,7 +52,7 @@ class CFGBuilder:
             if fallthrough in addr_to_instr:
                 successors.append(fallthrough)
             return successors
-        if flow_type == "UNCONDITIONAL_JUMP" or mnemonic in {"JMP", "B"}:
+        if flow_type in {"UNCONDITIONAL_JUMP", "COMPUTED_JUMP"} or mnemonic in {"JMP", "B", "BRANCHIND"}:
             return targets
         if mnemonic in {"RET", "RETURN"} or flow_type == "TERMINATOR":
             return []

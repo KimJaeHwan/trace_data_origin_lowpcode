@@ -395,6 +395,80 @@ in the phase-specific files.
   were the existing DFB092 cluster and the known Linux 386 DFB072 ambiguity.
   Compilation check: `.venv/bin/python -m py_compile
   analysis/interprocedural_summary.py analysis/slice_graph_builder.py`.
+- Repaired the cycle 15 obfuscated state-machine cluster for observed
+  computed-jump control flow and loop-carried storage. CFG construction now
+  treats low-pcode `COMPUTED_JUMP` / `BRANCHIND` flow targets as real
+  successors, and slice construction performs a bounded revisit from observed
+  CFG backedge targets so PHI/storage edges can see loop-carried writes without
+  adding a broad fixed-point over-approximation. This recovers DFB201 on PE
+  x64, PE x86, Linux amd64, Linux arm64, and Linux armv7; Linux 386 remains a
+  separate PIC/global-table residual.
+- Added a guarded summary-layer runtime-escape sink for C++ throw helpers.
+  When low-pcode shows a callee contains a terminal `__cxa_throw`-style escape,
+  source-carrying observed pre-call storage and observed post-call storage are
+  connected to a synthetic escape sink only if the reaching source label set is
+  exactly one. This keeps the core model arg/ret-free and uses metadata only as
+  a no-return/name hint mapped back onto observed low-pcode storage.
+- Verified cycle 15 locally with lightweight checks: DFB111 PASS 6/6 across
+  sample roots; DFB010/066/071/072/090/100/130/131/201 guard set PASS 54 /
+  FAIL 2 with no forbidden-source hits, where the failures are the known Linux
+  386 DFB072 ambiguity and the Linux 386 DFB201 PIC/global-table residual.
+  Compilation check: `.venv/bin/python -m py_compile
+  analysis/interprocedural_summary.py analysis/slice_graph_builder.py
+  analysis/cfg_builder.py`.
+- Repaired the cycle 16 DFB092 pthread table-dispatch recall cluster with a
+  guarded summary-layer thread-callback sink. A synthetic sink is materialized
+  only for observed thread-start calls when the root has no ordinary sink and
+  the observed pointed context memory reaches exactly one source label. A
+  low-pcode constant matching a function entry in the same dump metadata is
+  recorded as an optional confidence hint when available. This keeps the
+  transition convention-free and avoids pulling in adjacent source-carrying
+  stack/table entries.
+- Repaired the cycle 18 residual DataFlowBench recall cluster with three
+  guarded observed-storage mechanisms. X86 sink binding can now fall back to a
+  source-reaching observed memory value when register candidates are source
+  empty and all current source-bearing memory candidates agree on the same
+  source-label set; unresolved computed-call passthrough narrows stale
+  source-carrying pre-storage by the latest concrete source-boundary address
+  before bridging to consumed post storage; and setjmp/longjmp-style runtime
+  calls can restore a single source-bearing observed pre-storage into
+  sink-reaching post registers. These remain summary/boundary-layer repairs and
+  do not introduce arg/ret or ABI semantics into the core graph.
+- Verified cycle 18 locally with lightweight checks: DFB072 and DFB201 PASS on
+  linux_386; DFB110 PASS on linux_amd64; protected guard cases
+  DFB010/066/071/090/092/100/130/131 stayed PASS for the sample roots checked.
+  Focused UE x64/P1_x64 smoke probes did not add new source labels to the
+  selected TV2C cases. A broad all-sample local gate was attempted but did not
+  complete in this sandbox, so the outer harness remains the authoritative
+  full 09/10 regression.
+- Repaired the cycle 19 C++/UE struct-copy and thunk-write recall cluster with
+  guarded summary-layer observed transitions. External memory-copy summaries
+  now add offset-preserving range edges only when the callsite has concrete
+  observed source/destination pointer expressions, a concrete copy size, and an
+  exact same-size source memory node that already reaches a source label; later
+  explicit stores are not treated as copy destinations. Source-boundary calls
+  can preserve a single-source non-primary observed register into an overlapping
+  consumed post-call register view, and thunk-like computed-jump helpers can
+  write a single-source observed pre-call value into sink-reaching pointed
+  memory when the pointer range and size are observed at the callsite. These
+  remain convention-free storage transitions and skip calls with trusted
+  external summaries or non-thunk bodies. Bumped the summary cache schema for
+  the changed summary-layer behavior.
+- Verified cycle 19 locally with lightweight checks: selected C++ x64/P1_x64
+  TV2C001/011/012/013/018/020 now PASS in a validator-style probe, TV2C005 and
+  TV2C006 retained their forbidden-source guards, and TV2C017 remains a known
+  control-source miss. DFB guard smokes passed on linux_386 for
+  DFB010/066/071/072/090/092/100/130/131/201 and on linux_amd64 for
+  DFB010/066/071/090/092/100/110/130/131. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/cfg_builder.py`.
+- Split test-oracle source/sink matching out of the core slice builder behind
+  `analysis.boundary_provider.BoundaryProvider`. `SliceGraphBuilder` now
+  defaults to `NoBoundaryProvider`, while `ProgramSliceGraphBuilder` injects the
+  DataFlowBench provider for current regression harness compatibility. Summary
+  cache fingerprints now include the active boundary provider key so pure
+  no-boundary analysis, DataFlowBench/TV2 validation, and future PDB/UE boundary
+  providers cannot reuse each other's source/sink summaries.
 
 ## Current Focus
 

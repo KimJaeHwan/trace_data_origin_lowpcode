@@ -50,8 +50,40 @@ class LowPcodeLoader:
         json_path = Path(path)
         with json_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
+        self._annotate_flow_target_names(data)
         arch_name = arch_preset or self._infer_architecture(json_path, data)
         return LowPcodeProgram(json_path, data, ArchitectureSpec.from_metadata(arch_name, data.get("program") or {}))
+
+    def _annotate_flow_target_names(self, data: dict) -> None:
+        indices = data.get("indices") or {}
+        symbols_by_address = indices.get("symbols_by_address") or {}
+        functions_by_entry = indices.get("functions_by_entry") or {}
+
+        names_by_address: dict[str, list[str]] = {}
+        for address, symbols in symbols_by_address.items():
+            for symbol in symbols or []:
+                name = symbol.get("name")
+                if name and name not in names_by_address.setdefault(str(address), []):
+                    names_by_address[str(address)].append(str(name))
+        for address, function in functions_by_entry.items():
+            name = function.get("name")
+            if name and name not in names_by_address.setdefault(str(address), []):
+                names_by_address[str(address)].append(str(name))
+
+        for instr in data.get("instructions", []):
+            names: list[str] = []
+            targets = list(instr.get("flow_targets") or [])
+            for ref in instr.get("refs_from") or []:
+                if ref.get("is_flow") or ref.get("is_jump"):
+                    target = ref.get("to")
+                    if target:
+                        targets.append(str(target))
+            for target in targets:
+                for name in names_by_address.get(str(target), []):
+                    if name not in names:
+                        names.append(name)
+            if names:
+                instr["flow_target_names"] = names
 
     def _infer_architecture(self, path: Path, data: dict | None = None) -> str:
         program = (data or {}).get("program") or {}

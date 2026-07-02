@@ -348,10 +348,34 @@ class SliceGraphBuilder:
             return
 
         out_node = self._new_value(fg, state, output, instr, opcode)
+        zero_expr = self._zero_idiom_expression(opcode, inputs, output)
+        if zero_expr is not None:
+            state.expressions[out_node] = zero_expr
+            return
         for source in inputs:
             if source is not None:
                 fg.slice_graph.add_edge(source, out_node, kind="data", opcode=opcode)
         state.expressions[out_node] = self._expression_for(fg, opcode, inputs, state, output)
+
+    def _zero_idiom_expression(
+        self,
+        opcode: str | None,
+        inputs: list[ValueId | None],
+        output: dict,
+    ) -> dict | None:
+        if opcode not in {"INT_XOR", "INT_SUB"} or len(inputs) < 2:
+            return None
+        left, right = inputs[0], inputs[1]
+        if left is None or left != right:
+            return None
+        output_bits = int(output.get("size") or 0) * 8
+        return {
+            "kind": "const",
+            "value": 0,
+            "unsigned_value": 0,
+            "size_bits": output_bits,
+            "bit_expr": {"op": "const", "value": 0, "size": output_bits},
+        }
 
     def _process_store(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])

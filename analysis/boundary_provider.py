@@ -266,7 +266,18 @@ class DataFlowBenchBoundaryProvider:
         for target in instr.get("call_targets", []):
             if target.get("resolved") and target.get("function_name"):
                 return target.get("function_name")
+        if self._is_terminal_marker_jump(instr):
+            for name in instr.get("flow_target_names") or []:
+                if isinstance(name, str) and (name.startswith("dfb_source_") or name.startswith("dfb_sink_")):
+                    return name
         return None
+
+    def _is_terminal_marker_jump(self, instr: dict) -> bool:
+        if instr.get("fallthrough"):
+            return False
+        flow_type = str(instr.get("flow_type") or "").upper()
+        mnemonic = str(instr.get("mnemonic") or "").upper()
+        return "JUMP" in flow_type or mnemonic in {"B", "BR", "BX", "JMP"}
 
 
 DataFlowBenchBoundaryBinder = DataFlowBenchBoundaryProvider

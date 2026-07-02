@@ -3,6 +3,29 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-03
+
+- Repaired part of the rebuilt cpp_like low-pcode regression without changing
+  expected files, manifests, generated samples, or oracle data.
+- Added loader-level flow-target name annotations and kept DataFlowBench marker
+  interpretation inside `BoundaryProvider`.
+- Fixed x86 external stack-slot binding for call summaries by deriving caller
+  stack slots from the observed call-adjacent stack layout when a return slot is
+  materialized in low p-code. This lets `memcpy`/large-copy summaries bind
+  distinct destination/source/size storage in rebuilt P0/P1 x86 samples.
+- Added p-code zero-idiom handling for `INT_XOR x, x` and `INT_SUB x, x` so
+  self-canceling operations kill stale data origins instead of propagating a
+  false source through PHI merges.
+- Rejected the previous prototype-pointer write fallback because it introduced
+  false positives in 09/UE and crossed too far into prototype-derived argument
+  semantics.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query report tools`.
+- Verified `python3 -m harness.orchestrator --suite 09,10 --mode local-samples
+  --run-id manual_fp_repair_check --no-cache --no-ledger`:
+  09_tdo_testbed PASS 488 / FAIL 0 / FP 0; 10_tdo_testbed_UE PASS 120 /
+  FAIL 12 / FP 0. Remaining 10 failures are missing-only rebuilt cpp_like
+  residuals, primarily P1 armv7 and call_out_mem mutation cases.
+
 ## 2026-06-20
 
 - Read the V8 / New V1 integrated design document.

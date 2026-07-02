@@ -20,7 +20,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 35
+SUMMARY_CACHE_SCHEMA_VERSION = 36
 
 
 @dataclass
@@ -4563,6 +4563,14 @@ class ProgramSliceGraphBuilder:
             if offset is None:
                 continue
             candidates.append((self._predecessor_rank(caller_graph, node), offset, node))
+        exact = self._caller_stack_slot_by_observed_layout(
+            caller_graph,
+            callsite_key,
+            slot_index,
+            candidates,
+        )
+        if exact is not None:
+            return exact
         if slot_index >= len(candidates):
             return None
         recent_window_size = slot_index + 2
@@ -4574,6 +4582,38 @@ class ProgramSliceGraphBuilder:
         if slot_index >= len(recent):
             return None
         return recent[slot_index][2]
+
+    def _caller_stack_slot_by_observed_layout(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        slot_index: int,
+        candidates: list[tuple[tuple[int, int], int, ValueId]],
+    ) -> ValueId | None:
+        if not candidates:
+            return None
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        pointer_size = caller_graph.architecture.pointer_size
+        callsite_candidates = [
+            item
+            for item in candidates
+            if item[0][0] == callsite_addr
+        ]
+        if callsite_candidates:
+            return_offset = min(offset for _, offset, _ in callsite_candidates)
+        else:
+            latest_rank = max(rank for rank, _, _ in candidates)
+            latest = [item for item in candidates if item[0] == latest_rank]
+            return_offset = min(offset for _, offset, _ in latest)
+        wanted_offset = return_offset + ((slot_index + 1) * pointer_size)
+        exact = [
+            (rank, node)
+            for rank, offset, node in candidates
+            if offset == wanted_offset
+        ]
+        if not exact:
+            return None
+        return max(exact, key=lambda item: item[0])[1]
 
     def _caller_summary_memory_output_nodes(
         self,

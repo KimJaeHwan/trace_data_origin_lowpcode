@@ -190,6 +190,43 @@ class SliceGraphBuilder:
                 if not values:
                     continue
                 if len(values) == 1:
+                    present_count = sum(
+                        1
+                        for pred_state in predecessor_states
+                        if getattr(pred_state, bucket_name).get(key) is not None
+                    )
+                    control_values = [
+                        control_value
+                        for pred_state in predecessor_states
+                        for control_value in pred_state.control_values
+                    ]
+                    if bucket_name == "memory" and present_count < len(predecessor_states) and control_values:
+                        space, storage_key = key.split(":", 1)
+                        phi_node = self._new_synthetic_value(fg, merged, space, storage_key, instr, "PHI")
+                        fg.slice_graph.nodes[phi_node]["kind"] = "phi"
+                        fg.slice_graph.nodes[phi_node]["merge_count"] = len(values)
+                        fg.slice_graph.nodes[phi_node]["partial_predecessor_merge"] = True
+                        fg.slice_graph.add_edge(values[0], phi_node, kind="memory", opcode="PHI")
+                        for control_value in control_values:
+                            fg.slice_graph.add_edge(
+                                control_value,
+                                phi_node,
+                                kind="control",
+                                opcode="PHI_CONTROL",
+                                condition_kind="branch_condition",
+                            )
+                        bucket[key] = phi_node
+                        merged.expressions[phi_node] = dict(
+                            next(
+                                (
+                                    pred_state.expressions.get(values[0])
+                                    for pred_state in predecessor_states
+                                    if values[0] in pred_state.expressions
+                                ),
+                                {"kind": "value"},
+                            )
+                        )
+                        continue
                     bucket[key] = values[0]
                     continue
                 space, storage_key = key.split(":", 1)
@@ -1207,6 +1244,14 @@ class SliceGraphBuilder:
             fg.slice_graph.add_edge(target, sink_node, kind="data", opcode="SINK_OBSERVED_STORAGE")
         else:
             fg.warnings.append(f"sink_without_observed_storage:{instr.get('address')}:{name}")
+        for control_value in state.control_values:
+            fg.slice_graph.add_edge(
+                control_value,
+                sink_node,
+                kind="control",
+                opcode="SINK_CONTROL_DEPENDENCY",
+                condition_kind="branch_condition",
+            )
 
     def _source_observed_storage_keys(self, fg: FunctionGraph) -> list[str]:
         return self.call_boundary_mapper.primary_value_storage_keys(fg.architecture)
@@ -1406,6 +1451,11 @@ class SliceGraphBuilder:
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
+            expr_pairs = [
+                (node, state.expressions.get(node))
+                for node in inputs
+                if node is not None and state.expressions.get(node) is not None
+            ]
             register_expr = next(
                 (
                     expr
@@ -1414,16 +1464,19 @@ class SliceGraphBuilder:
                 ),
                 None,
             )
+            register_fallback_node = None
             if register_expr is None:
-                register_expr = next(
-                    (
-                        {"kind": "register", "key": node.key, "size_bits": output_bits}
-                        for node in inputs
-                        if self._can_use_register_offset_fallback(fg, node)
-                    ),
-                    None,
-                )
-            const_exprs = [expr for expr in exprs if expr and expr.get("kind") == "const"]
+                for node in inputs:
+                    if not self._can_use_register_offset_fallback(fg, node):
+                        continue
+                    register_fallback_node = node
+                    register_expr = {"kind": "register", "key": node.key, "node": node, "size_bits": output_bits}
+                    break
+            const_exprs = [
+                expr
+                for node, expr in expr_pairs
+                if expr and expr.get("kind") == "const" and node != register_fallback_node
+            ]
             const_expr = const_exprs[0] if const_exprs else None
             const_value = int(const_expr.get("value") or 0) if const_expr else None
             if opcode in {"PTRSUB"} and const_value is not None:
@@ -1464,6 +1517,7 @@ class SliceGraphBuilder:
                     merged = {
                         "kind": "register_offset",
                         "base": register_expr.get("key"),
+                        "base_node": register_expr.get("node") or register_expr.get("base_node"),
                         "offset": const_value,
                     }
                 if bit_expr is not None:
@@ -1677,11 +1731,19 @@ class SliceGraphBuilder:
         if expr and expr.get("kind") == "heap_ptr":
             return self._heap_expression_key(expr, size)
         if expr and expr.get("kind") == "const":
+            register_identity = self._zero_const_address_register_identity(fg, addr_node, expr)
+            if register_identity is not None:
+                return self.memory_model.unknown_key(f"register:{register_identity}", size)
             return self.memory_model.global_key(f"{int(expr.get('value') or 0):x}", size)
         if expr and expr.get("kind") == "register":
-            return self.memory_model.unknown_key(f"register:{expr.get('key') or 'unknown_register'}", size)
+            identity = self._loaded_pointer_identity_for_expression(fg, expr)
+            return self.memory_model.unknown_key(
+                f"register:{identity or expr.get('key') or 'unknown_register'}",
+                size,
+            )
         if expr and expr.get("kind") == "register_offset":
-            base = str(expr.get("base") or "unknown_register")
+            identity = self._loaded_pointer_identity_for_expression(fg, expr)
+            base = str(identity or expr.get("base") or "unknown_register")
             offset = int(expr.get("offset") or 0)
             return self.memory_model.unknown_key(f"register:{base}:offset:{offset}", size)
         observed_identity = self._observed_pointer_identity_for_address(fg, addr_node)
@@ -1696,6 +1758,67 @@ class SliceGraphBuilder:
         if addr_varnode.get("is_address"):
             return self.memory_model.global_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
         return self.memory_model.unknown_key(addr_varnode.get("address") or addr_varnode.get("offset"), size)
+
+    def _zero_const_address_register_identity(
+        self,
+        fg: FunctionGraph,
+        addr_node: ValueId | None,
+        expr: dict,
+    ) -> str | None:
+        if addr_node is None:
+            return None
+        try:
+            value = int(expr.get("value") or 0)
+        except (TypeError, ValueError):
+            return None
+        if value != 0:
+            return None
+        found: list[str] = []
+        seen: set[ValueId] = set()
+        stack = [addr_node]
+        while stack and len(seen) < 32:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            attrs = fg.slice_graph.nodes[node]
+            storage = attrs.get("storage") or ""
+            if storage.startswith("reg:"):
+                register_key = storage.removeprefix("reg:")
+                canonical = register_key.split(":", 1)[0]
+                if fg.architecture.is_general_register(canonical) and canonical not in (
+                    fg.architecture.stack_pointer_regs | fg.architecture.frame_pointer_regs
+                ):
+                    if register_key not in found:
+                        found.append(register_key)
+                    continue
+            for pred in fg.slice_graph.predecessors(node):
+                if fg.slice_graph.edges[pred, node].get("kind") == "data":
+                    stack.append(pred)
+        return found[0] if len(found) == 1 else None
+
+    def _loaded_pointer_identity_for_expression(self, fg: FunctionGraph, expr: dict) -> str | None:
+        node = expr.get("node") or expr.get("base_node")
+        if not isinstance(node, ValueId):
+            return None
+        found: list[str] = []
+        seen: set[ValueId] = set()
+        stack = [node]
+        while stack and len(seen) < 96:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            attrs = fg.slice_graph.nodes[current]
+            storage = attrs.get("storage") or ""
+            if attrs.get("opcode") == "OBSERVED_MEMORY" and storage.startswith("mem:"):
+                if storage not in found:
+                    found.append(storage)
+                continue
+            for pred in fg.slice_graph.predecessors(current):
+                if fg.slice_graph.edges[pred, current].get("kind") in {"data", "memory"}:
+                    stack.append(pred)
+        return found[0] if len(found) == 1 else None
 
     def _observed_pointer_identity_for_address(
         self,
@@ -1727,6 +1850,29 @@ class SliceGraphBuilder:
         return found[0] if len(found) == 1 else None
 
     def _memory_range_for_key(self, mem_key: str) -> MemoryRange | None:
+        if mem_key.startswith("unknown:register:") and ":offset:" in mem_key:
+            prefix, rest = mem_key.rsplit(":offset:", 1)
+            parts = rest.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._parse_memory_size(parts[1])
+            if size is None:
+                return None
+            try:
+                offset = int(parts[0])
+            except ValueError:
+                return None
+            return MemoryRange(identity=prefix, start=offset, size=size)
+
+        if mem_key.startswith(("unknown:unique:", "unknown:register:")):
+            parts = mem_key.rsplit(":", 1)
+            if len(parts) != 2:
+                return None
+            size = self._parse_memory_size(parts[1])
+            if size is None:
+                return None
+            return MemoryRange(identity=parts[0], start=0, size=size)
+
         if ":stack:" in mem_key:
             prefix, rest = mem_key.split(":stack:", 1)
             parts = rest.rsplit(":", 2)

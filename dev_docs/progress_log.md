@@ -469,6 +469,239 @@ in the phase-specific files.
   cache fingerprints now include the active boundary provider key so pure
   no-boundary analysis, DataFlowBench/TV2 validation, and future PDB/UE boundary
   providers cannot reuse each other's source/sink summaries.
+- Repaired cycle 21 recall misses with two convention-free graph refinements.
+  Memory-key recovery now prefers a single observed general-register address
+  identity over a stale zero constant, and intra-procedural range matching now
+  understands `unknown:register:*:offset:*` memory keys. This reconnects
+  register-relative UE container element stores to later loads without treating
+  the register as an ABI role. Control slicing also records branch dependence
+  for memory values present on only some predecessors and for branch-reached
+  sink boundaries, covering both ordinary diamond joins and optimized tail-call
+  sink branches. Bumped the summary cache schema for the changed graph/summary
+  inputs.
+- Verified cycle 21 locally with lightweight checks: all available cpp-like
+  x64/P1_x64 TV2C cases PASS 22/22, including TV2C017 with
+  `dfb_source_A.ret` as data and `dfb_source_C.ret` as control while keeping
+  `dfb_source_B.ret` out of data. Focused UE probes now pass TV2R001,
+  TV2R002, and TV2U005; TV2R005 remains a recall miss. DFB guard run
+  DFB010/066/071/090/100 passed across the sampled roots. Compilation check:
+  `.venv/bin/python -m py_compile analysis/slice_graph_builder.py
+  analysis/interprocedural_summary.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired part of the cycle 22 UE recall cluster with guarded summary-layer
+  observed transitions. Consecutive source-boundary calls now preserve
+  single-source non-primary storage through a later call-pre consumer, allowing
+  chained marker boundaries to expose the original observed source without
+  adding ABI roles. Non-varargs thunk calls can also connect a single-source
+  observed input to a later sink-reaching observed memory read only when the
+  same call has a non-source pointer input whose recovered memory range matches
+  the read address provenance. The thunk guard avoids normal container helper
+  bodies and varargs assertion thunks.
+- Verified cycle 22 locally with lightweight checks: scoped UE validation over
+  66 cycle-22 case-scope targets improved to PASS 52 / FAIL 14 with no
+  forbidden-source findings, including development TV2R005 and TV2U010 now
+  reaching `dfb_source_A.ret`; DebugGame TV2R002 stayed free of the wrong
+  `dfb_source_A.ret` edge. DFB smoke
+  DFB001/002/050/056/057/058/059/120/121/152 passed across the available sample
+  roots. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py`.
+- Repaired part of the cycle 23 UE container/value-flow cluster with
+  observed-pointer provenance and narrowed prior-memory overlap recovery. When
+  a pointer register is loaded from an observed memory slot, register-relative
+  memory keys now retain that loaded-pointer provenance instead of using only
+  the temporary register name. The memory range parsers also treat
+  `unknown:register:*` identities before stack identities, so provenance strings
+  that contain `:stack:` are not misparsed as concrete stack slots. A late
+  composed-graph bridge can connect sink-reaching observed memory loads to the
+  latest prior same-identity source-reaching write, narrowing the prior write to
+  the load byte range. For data-dependent element stores, the bridge has a
+  guarded adjacent-slot fallback only when the store address itself reaches a
+  source label and the stored value has a single source label.
+- Verified cycle 23 locally with lightweight checks: the 14 reported FAIL
+  case-scope targets improved to PASS 4 / FAIL 10 with no forbidden-source
+  findings. Newly passing targets were Development TV2R007/TV2R008 and
+  DebugGame TV2R001/TV2R002. C++ guards TV2C005/TV2C006/TV2C017 stayed PASS,
+  including C017's data/control split and no forbidden data source. DFB smoke
+  DFB010/050/056 passed on the available `tracing_Data_Origin` root; local
+  DFB120/121 buffer files in that root still fail and were not treated as
+  representative of the closed 09 harness baseline. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired part of the cycle 24 UE recall cluster without adding convention
+  roles. Summary memory-output recovery now composes a callee's observed
+  pointer-relative memory offset with the caller's concrete pointer expression,
+  so source writes such as `reg:x8 + 96` can land on the caller's actual stack
+  return-buffer slot. Register-offset expression recovery also excludes the
+  fallback register's current value from the immediate-offset operands, keeping
+  `register + constant` addresses from collapsing to a zero offset when the
+  register currently holds a constant-like value. Bumped the summary cache
+  schema for the changed graph/summary inputs.
+- Verified the 10 cycle-24 reported UE FAIL scopes locally after the repair:
+  PASS 2 / FAIL 8 with no forbidden-source findings. The newly passing targets
+  are Development and DebugGame TV2U004 return-buffer; the remaining failures
+  are container/value-flow alias transfers requiring deeper observed pointer
+  identity bridging.
+- Repaired part of the cycle 25 UE container/value-flow cluster with a guarded
+  dynamic pointer-store bridge. The prior observed-memory overlap pass now
+  recognizes source-reaching stores through `base + scaled/indexed` pointer
+  expressions when the later sink-reaching observed load has the same recovered
+  pointer identity. For packed stores, the bridge narrows through the stored
+  value bytes before accepting the edge, so an 8-byte container element carrying
+  adjacent 4-byte sources can connect only the requested subfield. This keeps
+  the transition based on observed address/value flow and avoids ABI roles or
+  broad pointer-memory aliasing. Bumped the summary cache schema for the changed
+  graph/summary behavior.
+- Verified cycle 25 locally with lightweight checks: the 10 reported UE FAIL
+  scopes improved to PASS 2 / FAIL 8 with no forbidden-source findings. Newly
+  passing targets are Development TV2R001 and TV2R002, with TV2R001 selecting
+  `dfb_source_A.ret` from the low half of the packed store and TV2R002 selecting
+  `dfb_source_B.ret` at the second element offset. C++ guards
+  TV2C005/TV2C006/TV2C017 passed on x64 and P1_x64, including TV2C017's
+  data/control split and no forbidden-source hits. DFB smoke
+  DFB010/050/056 passed across 18 available sample roots. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 27 fused call-chain recall miss without reapplying the
+  rejected cycle 26 memory-identity change. Observed storage preservation now
+  accepts same-canonical overlapping register ranges when a source-reaching
+  pre-call storage is consumed only by a later call-pre node, and the proven edge
+  is written into both the per-function graph and the composed program graph so
+  subsequent call sites in the same fused chain can use it. The guard still
+  requires a concrete callee low-pcode body with no overlapping write and does
+  not introduce argument, return, or ABI semantics. A trial of the cycle 26
+  loaded-pointer identity recovery reproduced regressions in Development
+  TV2R002/TV2R007/TV2R008 and was reverted.
+- Verified cycle 27 locally with focused checks: Development TV2R007 and
+  TV2R008 now PASS with `dfb_source_A.ret`; Development TV2R001/TV2R002 and
+  DebugGame TV2R001/TV2R002 remain PASS; remaining UE memory/provenance misses
+  stay missing-only with no forbidden-source hits. Non-UE guard cases
+  DFB010/050/056 on PE_x64, PE_x86, and linux_386 plus TV2C005/TV2C006/TV2C017
+  on P0/P1 x64 all PASS. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 28 Development TV2R011 large-element recall miss with a
+  guarded same-base register-memory bridge. The prior observed-memory overlap
+  pass can now connect a source-reaching store through one register-derived
+  address to a later sink-reaching load through another register-derived address
+  only when both address expressions load the same pointer storage and their
+  byte ranges overlap. The bridge reuses existing byte-lane narrowing before
+  accepting the edge, so packed 16-byte element stores expose only the requested
+  4-byte source field. This remains based on observed storage/address flow and
+  does not add argument, return, or ABI roles. Bumped the summary cache schema
+  for the changed graph behavior.
+- Verified cycle 28 locally with focused checks: all 44 available UE case-scope
+  target files now report PASS 37 / FAIL 7, improving Development TV2R011 to
+  PASS with `dfb_source_A.ret` and leaving the remaining failures missing-only
+  with no forbidden-source findings. Operator regression guards Development
+  TV2R001/TV2R002/TV2R007/TV2R008 and DebugGame TV2R001/TV2R002 all remain
+  PASS. DFB smoke DFB010/050/056 passed across the available sample roots.
+  Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired part of the cycle 29 DebugGame object/component chain recall cluster
+  with a guarded same-field register-memory bridge. The prior observed-memory
+  overlap pass can now connect a source-reaching store through one transient
+  register-derived address to a later sink-reaching load through another
+  transient register only when the byte offset and width are identical, the
+  store address itself reaches exactly the same single source label as the
+  stored value, and prior same-field source labels are unambiguous. This keeps
+  the edge based on observed address/value flow and avoids argument, return, or
+  ABI roles. Bumped the summary cache schema for the changed graph behavior.
+- Verified cycle 29 locally with focused checks: all 44 available UE case-scope
+  targets now report PASS 39 / FAIL 5 with no forbidden-source findings.
+  Newly passing targets are DebugGame TV2R007 and TV2R008. Operator regression
+  guards Development and DebugGame TV2R001/TV2R002/TV2R007/TV2R008 all remain
+  PASS. DFB smoke DFB010/050/056 passed across 18 available sample-root cases.
+  Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 30 DebugGame nested-container recall miss by making
+  register-derived memory range parsing use the last `:offset:` component.
+  Nested pointer identities such as
+  `unknown:register:mem:...:offset:0:8:offset:0:4` now retain the inner pointer
+  identity and expose the final byte range to the existing guarded prior-memory
+  overlap bridge. This is a parser/range precision fix only; it does not add
+  ABI roles, source/sink naming assumptions, or broad aliasing. Bumped the
+  summary cache schema for the changed range behavior.
+- Verified cycle 30 locally with focused checks: all 44 available UE
+  case-scope targets now report PASS 40 / FAIL 4 with no forbidden-source
+  findings. Newly passing target is DebugGame TV2R010 nested container; the
+  remaining failures are Development TV2R009 and DebugGame TV2R005/TV2R009/
+  TV2R011, all missing-only. C++ guards TV2C005/TV2C006/TV2C017 passed on
+  P0/P1 x64, including TV2C017's data/control split. DFB smoke
+  DFB010/050/056 passed across 18 available sample-root cases. Compilation
+  check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 31 DebugGame TV2R011 large-element recall miss with a
+  byte-offset-preserving external-copy fallback. When a trusted memory-copy
+  summary has a concrete read range and size but the write pointer is a computed
+  value that cannot be expressed as a direct memory range, the summary layer can
+  connect source bytes to later sink-reaching observed-memory loads only if the
+  load offset lies inside the copy, the matching read-side byte range reaches
+  exactly one source label, and the write pointer and load address share an
+  observed memory-range origin. This keeps the edge tied to low-pcode value and
+  address provenance rather than ABI roles or broad aliasing. Bumped the summary
+  cache schema for the changed external-copy behavior.
+- Verified cycle 31 locally with focused checks: all 24 available UE TV2R
+  case-scope targets now report PASS 21 / FAIL 3 with no forbidden-source
+  findings. Newly passing target is DebugGame TV2R011; remaining misses are
+  DebugGame TV2R005, DebugGame TV2R009, and Development TV2R009. C++ guards
+  TV2C005/TV2C006/TV2C017 passed on x64 and P1_x64, including TV2C017's
+  data/control split. DFB smoke DFB010/050/056 passed across 18 available
+  sample-root cases. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 32 DebugGame container-result recall misses with a guarded
+  prior-call context bridge. When a sink-reaching memory load is addressed by a
+  later call's observed post-register result, the composed graph can now connect
+  a previous call on the same observed pointer context to that load only if the
+  context is a real general-register pre-node consumed by the callee body and
+  the previous call contributes exactly one source label either through a scalar
+  observed input or through a pointed field at the requested byte range. This
+  covers FString buffer lookup and TMap value lookup without treating live
+  frame/link register snapshots or stale pointer registers as object identity.
+  Bumped the summary cache schema for the changed graph behavior.
+- Verified cycle 32 locally with focused checks: all 44 available UE case-scope
+  targets now report PASS 43 / FAIL 1 with no forbidden data or control source
+  findings. Newly passing targets are DebugGame TV2R005 and DebugGame TV2R009;
+  the remaining UE recall miss is Development TV2R009. DFB smoke
+  DFB010/050/056 passed across 18 available sample-root cases, and C++ guards
+  TV2C005/TV2C006/TV2C017 passed on x64 and P1_x64. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Repaired the cycle 33 Development TV2R009 TMap value recall miss with a
+  loaded-pointer-origin prior-call bridge. When a sink-reaching observed-memory
+  load is computed from nested loaded pointer origins rather than a call-post
+  register, the composed graph can now match those concrete origin ranges
+  against an earlier call's consumed pointer context. The source side is limited
+  to fields recovered through consumed pointer snapshots, so incidental
+  temporary-register snapshots and source-marker scalar calls do not become
+  broad aliases. Bumped the summary cache schema for the changed graph behavior.
+- Verified cycle 33 locally with focused checks: all 44 available UE case-scope
+  targets now report PASS 44 / FAIL 0 with no forbidden data or control source
+  findings. DFB smoke DFB010/050/056 passed across 18 available sample-root
+  cases. C++ guards TV2C005/TV2C006/TV2C017 passed on x64 and P1_x64, including
+  TV2C017's data/control split. Compilation check:
+  `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py analysis/boundary_provider.py
+  query/backward_slice.py`.
+- Reviewed cycle 34 pre-regression output after the current UE recall repairs:
+  checked-in 09_tdo_testbed cases remain PASS 488 / FAIL 0 / FP 0, available
+  10_tdo_testbed_UE x64/P1_x64 and local UE cases remain PASS 66 / FAIL 0 /
+  FP 0, and the remaining six ERROR entries are `NO_SAMPLES` for cpp-like
+  x86/ARM sample directories that are absent from the testbed artifact tree.
+  No engine traceback, diagnose dump, missing-source delta, or forbidden-source
+  finding is present in the cycle 34 report. Rechecked local guards with
+  py_compile and DFB010/050/056 across 18 sample-root cases.
 
 ## Current Focus
 

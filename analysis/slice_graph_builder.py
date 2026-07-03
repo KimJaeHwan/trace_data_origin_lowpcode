@@ -406,7 +406,7 @@ class SliceGraphBuilder:
         data_ref_key = self._data_ref_memory_key(instr, "read", output.get("size"))
         mem_keys = [data_ref_key] if data_ref_key else self._memory_keys_for(fg, state, addr_node, inputs[1], output.get("size"))
         mem_key = mem_keys[0]
-        memory_nodes = self._memory_input_nodes_for_load_many(state, mem_keys)
+        memory_nodes = self._memory_input_nodes_for_load_many(fg, state, mem_keys)
         exact_node = next((state.memory.get(candidate_key) for candidate_key in mem_keys if state.memory.get(candidate_key)), None)
         if (
             len(mem_keys) == 1
@@ -421,12 +421,42 @@ class SliceGraphBuilder:
             if addr_node is not None:
                 fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             for source_node in memory_nodes:
+                source_range = self._memory_range_for_storage(
+                    fg.slice_graph.nodes[source_node].get("storage") or ""
+                )
                 narrowed_sources = (
                     self._narrow_memory_node_to_range(fg, source_node, load_range)
                     if load_range is not None
                     else []
                 )
-                for narrowed_source in narrowed_sources or [source_node]:
+                if narrowed_sources:
+                    selected_sources = narrowed_sources
+                else:
+                    can_use_whole_source = True
+                    if (
+                        source_range is not None
+                        and load_range is not None
+                        and source_range.identity.startswith("unknown:register:")
+                        and source_range.identity == load_range.identity
+                        and source_range.start == load_range.start
+                        and source_range.size > load_range.size
+                        and fg.slice_graph.nodes[source_node].get("opcode") == "STORE_VAL"
+                    ):
+                        can_use_whole_source = self._store_address_is_zero_offset_to_identity(
+                            fg,
+                            source_node,
+                            source_range.identity,
+                        )
+                    selected_sources = (
+                        [source_node]
+                        if can_use_whole_source
+                        and (
+                            source_range is None
+                            or (load_range is not None and source_range.overlaps(load_range))
+                        )
+                        else []
+                    )
+                for narrowed_source in selected_sources:
                     fg.slice_graph.add_edge(narrowed_source, mem_node, kind="memory", opcode="LOAD_OVERLAP")
             state.memory[mem_key] = mem_node
             state.expressions[mem_node] = {"kind": "value"}
@@ -593,7 +623,7 @@ class SliceGraphBuilder:
     ) -> ValueId:
         mem_key = self._memory_key_for(fg, state, None, addr_varnode, addr_varnode.get("size"))
         mem_key = self._data_ref_memory_key(instr, "read", addr_varnode.get("size")) or mem_key
-        memory_nodes = self._memory_input_nodes_for_load(state, mem_key)
+        memory_nodes = self._memory_input_nodes_for_load(fg, state, mem_key)
         if memory_nodes:
             return memory_nodes[0]
         mem_node = state.memory.get(mem_key)
@@ -605,7 +635,7 @@ class SliceGraphBuilder:
             state.expressions[mem_node] = {"kind": "value"}
         return mem_node
 
-    def _memory_input_nodes_for_load(self, state: BuildState, mem_key: str) -> list[ValueId]:
+    def _memory_input_nodes_for_load(self, fg: FunctionGraph, state: BuildState, mem_key: str) -> list[ValueId]:
         exact_node = state.memory.get(mem_key)
         exact = self._memory_range_for_key(mem_key)
         if exact is None:
@@ -616,6 +646,8 @@ class SliceGraphBuilder:
         for candidate_key, candidate_node in reversed(list(state.memory.items())):
             candidate = self._memory_range_for_key(candidate_key)
             if candidate is None or not candidate.overlaps(exact):
+                continue
+            if not self._candidate_memory_node_can_cover_load(fg, candidate_node, candidate, exact):
                 continue
             overlap_start = max(candidate.start, exact.start)
             overlap_end = min(candidate.end, exact.end)
@@ -630,6 +662,28 @@ class SliceGraphBuilder:
         if not selected and exact_node is not None:
             return [exact_node]
         return selected
+
+    def _candidate_memory_node_can_cover_load(
+        self,
+        fg: FunctionGraph,
+        candidate_node: ValueId,
+        candidate: MemoryRange,
+        wanted: MemoryRange,
+    ) -> bool:
+        if (
+            candidate.identity.startswith("unknown:register:")
+            and candidate.identity == wanted.identity
+            and candidate.start == wanted.start
+            and candidate.size > wanted.size
+            and fg.slice_graph.nodes[candidate_node].get("opcode") == "STORE_VAL"
+        ):
+            return self._store_address_has_offset_to_identity(
+                fg,
+                candidate_node,
+                candidate.identity,
+                candidate.start,
+            )
+        return True
 
     def _subtract_covered_ranges(
         self,
@@ -1093,6 +1147,20 @@ class SliceGraphBuilder:
         if memory_range == wanted:
             return [memory_node]
         if (
+            memory_range.identity.startswith("unknown:register:")
+            and memory_range.identity == wanted.identity
+            and memory_range.start == wanted.start
+            and memory_range.size > wanted.size
+            and fg.slice_graph.nodes[memory_node].get("opcode") == "STORE_VAL"
+            and not self._store_address_has_offset_to_identity(
+                fg,
+                memory_node,
+                memory_range.identity,
+                memory_range.start,
+            )
+        ):
+            return []
+        if (
             fg.slice_graph.nodes[memory_node].get("opcode") == "STORE_VAL"
             and memory_range.size < wanted.size
         ):
@@ -1125,6 +1193,263 @@ class SliceGraphBuilder:
                 if source not in selected:
                     selected.append(source)
         return selected
+
+    def _store_address_is_zero_offset_to_identity(
+        self,
+        fg: FunctionGraph,
+        memory_node: ValueId,
+        identity: str,
+    ) -> bool:
+        return self._store_address_has_offset_to_identity(fg, memory_node, identity, 0)
+
+    def _store_address_has_offset_to_identity(
+        self,
+        fg: FunctionGraph,
+        memory_node: ValueId,
+        identity: str,
+        offset: int,
+    ) -> bool:
+        return any(
+            self._address_value_has_offset_to_identity(fg, pred, identity, offset)
+            for pred in fg.slice_graph.predecessors(memory_node)
+            if fg.slice_graph.edges[pred, memory_node].get("kind") == "address"
+        )
+
+    def _address_value_is_zero_offset_to_identity(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        identity: str,
+        seen: set[ValueId] | None = None,
+    ) -> bool:
+        return self._address_value_has_offset_to_identity(fg, node, identity, 0, seen)
+
+    def _address_value_has_offset_to_identity(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        identity: str,
+        offset: int,
+        seen: set[ValueId] | None = None,
+    ) -> bool:
+        seen = seen or set()
+        if node in seen or len(seen) > 128:
+            return False
+        seen.add(node)
+        graph = fg.slice_graph
+        attrs = graph.nodes[node]
+        if self._node_matches_unknown_memory_identity(fg, node, identity):
+            return offset == 0
+        opcode = attrs.get("opcode")
+        data_preds = [
+            pred
+            for pred in graph.predecessors(node)
+            if graph.edges[pred, node].get("kind") in {"data", "memory"}
+        ]
+        if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
+            return any(
+                self._address_value_has_offset_to_identity(fg, pred, identity, offset, seen)
+                for pred in data_preds
+            )
+        if opcode == "STORE_VAL":
+            return any(
+                self._address_value_has_offset_to_identity(fg, pred, identity, offset, seen)
+                for pred in graph.predecessors(node)
+                if graph.edges[pred, node].get("kind") == "memory"
+                and graph.edges[pred, node].get("opcode") == "STORE"
+            )
+        if opcode in {"PHI", "MULTIEQUAL"}:
+            return bool(data_preds) and all(
+                self._address_value_has_offset_to_identity(fg, pred, identity, offset, set(seen))
+                for pred in data_preds
+            )
+        if opcode in {"INT_ADD", "PTRADD"}:
+            for base in data_preds:
+                offsets = [pred for pred in data_preds if pred != base]
+                offset_values = self._constant_offset_values(fg, offsets)
+                for offset_value in offset_values:
+                    if self._address_value_has_offset_to_identity(
+                        fg,
+                        base,
+                        identity,
+                        offset - offset_value,
+                        set(seen),
+                    ):
+                        return True
+        return False
+
+    def _node_matches_unknown_memory_identity(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        identity: str,
+    ) -> bool:
+        if not identity.startswith("unknown:register:"):
+            return False
+        storage = fg.slice_graph.nodes[node].get("storage") or ""
+        identity_storage = identity.removeprefix("unknown:register:")
+        if storage == identity_storage:
+            return True
+        if storage.startswith("reg:") and identity_storage == storage.removeprefix("reg:"):
+            canonical = storage.split(":")[1] if len(storage.split(":")) > 1 else ""
+            return (
+                fg.architecture.is_general_register(canonical)
+                and canonical not in fg.architecture.stack_pointer_regs
+                and canonical not in fg.architecture.frame_pointer_regs
+            )
+        return False
+
+    def _constant_value_reaching_node(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        seen: set[ValueId] | None = None,
+    ) -> int | None:
+        seen = seen or set()
+        if node in seen or len(seen) > 128:
+            return None
+        seen.add(node)
+        graph = fg.slice_graph
+        attrs = graph.nodes[node]
+        if attrs.get("kind") == "constant":
+            return parse_int(attrs.get("storage"))
+        opcode = attrs.get("opcode")
+        data_preds = [
+            pred
+            for pred in graph.predecessors(node)
+            if graph.edges[pred, node].get("kind") in {"data", "memory"}
+        ]
+        if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
+            values = [
+                value
+                for pred in data_preds
+                for value in [self._constant_value_reaching_node(fg, pred, seen)]
+                if value is not None
+            ]
+            return values[0] if len(values) == 1 else None
+        if opcode == "STORE_VAL":
+            values = [
+                self._constant_value_reaching_node(fg, pred, set(seen))
+                for pred in graph.predecessors(node)
+                if graph.edges[pred, node].get("kind") == "memory"
+                and graph.edges[pred, node].get("opcode") == "STORE"
+            ]
+            return values[0] if len(values) == 1 else None
+        if opcode in {"PHI", "MULTIEQUAL"}:
+            values = [self._constant_value_reaching_node(fg, pred, set(seen)) for pred in data_preds]
+            return values[0] if values and all(value == values[0] for value in values) else None
+        if opcode == "INT_ADD":
+            values = [self._constant_value_reaching_node(fg, pred, set(seen)) for pred in data_preds]
+            return sum(values) if values and all(value is not None for value in values) else None
+        if opcode == "INT_MULT":
+            values = [self._constant_value_reaching_node(fg, pred, set(seen)) for pred in data_preds]
+            if not values or any(value is None for value in values):
+                return None
+            result = 1
+            for value in values:
+                result *= int(value)
+            return result
+        if opcode == "INT_LEFT" and len(data_preds) >= 2:
+            left = self._constant_value_reaching_node(fg, data_preds[0], set(seen))
+            right = self._constant_value_reaching_node(fg, data_preds[1], set(seen))
+            if left is not None and right is not None and 0 <= right <= 63:
+                return left << right
+        return None
+
+    def _constant_offset_is_zero_only(self, fg: FunctionGraph, node: ValueId) -> bool:
+        value = self._constant_value_reaching_node(fg, node)
+        if value is not None:
+            return value == 0
+        values = self._constant_values_reaching_node(fg, node)
+        return values == {0}
+
+    def _constant_offsets_match(self, fg: FunctionGraph, nodes: list[ValueId], offset: int) -> bool:
+        return self._constant_offset_values(fg, nodes) == {offset}
+
+    def _constant_offset_values(self, fg: FunctionGraph, nodes: list[ValueId]) -> set[int]:
+        values = {0}
+        for node in nodes:
+            value = self._constant_value_reaching_node(fg, node)
+            node_values = {value} if value is not None else self._constant_values_reaching_node(fg, node)
+            if not node_values:
+                return set()
+            values = {left + right for left in values for right in node_values}
+            values = self._bounded_constant_set(values)
+            if not values:
+                return set()
+        return values
+
+    def _constant_values_reaching_node(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        seen: set[ValueId] | None = None,
+    ) -> set[int]:
+        seen = seen or set()
+        if node in seen or len(seen) > 160:
+            return set()
+        seen.add(node)
+        graph = fg.slice_graph
+        attrs = graph.nodes[node]
+        if attrs.get("kind") == "constant":
+            value = parse_int(attrs.get("storage"))
+            return {value} if value is not None else set()
+        opcode = attrs.get("opcode")
+        data_preds = [
+            pred
+            for pred in graph.predecessors(node)
+            if graph.edges[pred, node].get("kind") in {"data", "memory"}
+        ]
+        if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
+            values: set[int] = set()
+            for pred in data_preds:
+                values.update(self._constant_values_reaching_node(fg, pred, set(seen)))
+            return self._bounded_constant_set(values)
+        if opcode == "STORE_VAL":
+            values: set[int] = set()
+            for pred in graph.predecessors(node):
+                if (
+                    graph.edges[pred, node].get("kind") == "memory"
+                    and graph.edges[pred, node].get("opcode") == "STORE"
+                ):
+                    values.update(self._constant_values_reaching_node(fg, pred, set(seen)))
+            return self._bounded_constant_set(values)
+        if opcode in {"PHI", "MULTIEQUAL"}:
+            values: set[int] = set()
+            for pred in data_preds:
+                values.update(self._constant_values_reaching_node(fg, pred, set(seen)))
+            return self._bounded_constant_set(values)
+        if opcode in {"INT_ADD", "INT_MULT"}:
+            if not data_preds:
+                return set()
+            values = {0} if opcode == "INT_ADD" else {1}
+            for pred in data_preds:
+                pred_values = self._constant_values_reaching_node(fg, pred, set(seen))
+                if not pred_values:
+                    return set()
+                if opcode == "INT_ADD":
+                    values = {left + right for left in values for right in pred_values}
+                else:
+                    values = {left * right for left in values for right in pred_values}
+                values = self._bounded_constant_set(values)
+                if not values:
+                    return set()
+            return values
+        if opcode == "INT_LEFT" and len(data_preds) >= 2:
+            left_values = self._constant_values_reaching_node(fg, data_preds[0], set(seen))
+            right_values = self._constant_values_reaching_node(fg, data_preds[1], set(seen))
+            values = {
+                left << right
+                for left in left_values
+                for right in right_values
+                if 0 <= right <= 63
+            }
+            return self._bounded_constant_set(values)
+        return set()
+
+    def _bounded_constant_set(self, values: set[int]) -> set[int]:
+        bounded = {value for value in values if -1_000_000 <= value <= 1_000_000}
+        return bounded if len(bounded) <= 16 else set()
 
     def _load_range_for_memory_predecessors(self, fg: FunctionGraph, load_node: ValueId) -> MemoryRange | None:
         exact_ranges: list[MemoryRange] = []
@@ -1606,6 +1931,10 @@ class SliceGraphBuilder:
             result = int(values[0]) | int(values[1])
         elif opcode == "INT_XOR" and len(values) >= 2:
             result = int(values[0]) ^ int(values[1])
+        elif opcode == "INT_MULT" and len(values) >= 2:
+            result = 1
+            for value in values:
+                result *= int(value)
         elif opcode == "INT_LEFT" and len(values) >= 2:
             result = int(values[0]) << int(values[1])
         elif opcode in {"INT_RIGHT", "INT_SRIGHT"} and len(values) >= 2:
@@ -1731,10 +2060,10 @@ class SliceGraphBuilder:
             return keys or [self._memory_key_for(fg, state, addr_node, addr_varnode, size)]
         return [self._memory_key_for(fg, state, addr_node, addr_varnode, size)]
 
-    def _memory_input_nodes_for_load_many(self, state: BuildState, mem_keys: list[str]) -> list[ValueId]:
+    def _memory_input_nodes_for_load_many(self, fg: FunctionGraph, state: BuildState, mem_keys: list[str]) -> list[ValueId]:
         nodes: list[ValueId] = []
         for mem_key in mem_keys:
-            for node in self._memory_input_nodes_for_load(state, mem_key):
+            for node in self._memory_input_nodes_for_load(fg, state, mem_key):
                 if node not in nodes:
                     nodes.append(node)
         return nodes

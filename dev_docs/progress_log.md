@@ -725,6 +725,117 @@ in the phase-specific files.
   No engine traceback, diagnose dump, missing-source delta, or forbidden-source
   finding is present in the cycle 34 report. Rechecked local guards with
   py_compile and DFB010/050/056 across 18 sample-root cases.
+- Repaired the case-author frontier C502 fused/rebuilt helper-copy misses with
+  a guarded observed-thunk pointer-memory copy bridge. For resolved non-boundary
+  thunk-like calls without an external summary, the composed graph can now
+  connect a concrete source pointer's same-relative field to a later
+  sink-reaching destination memory range when both pointers are observed in
+  call-pre storage and the source side reaches exactly one source label. The
+  bridge is driven by low-pcode storage expressions and observed memory ranges,
+  not ABI argument or return conventions, and it also handles fused zero-init
+  plus later load-range targets. Bumped the summary cache schema for the changed
+  graph behavior.
+- Verified the frontier fix locally with focused checks: TV2C502 now reaches
+  `dfb_source_B.ret` on P0 x86/x64 and P1 x86/x64/aarch64 with no forbidden
+  labels. A sweep over the other reported C++ failures did not add forbidden
+  labels; the broad P1 armv7 misses remain empty-source residuals. UE R202 is
+  unchanged by this bridge (`SUMMARY_OBSERVED_THUNK_POINTER_MEMORY_COPY` adds no
+  edges there) and remains on the pre-existing prior-observed-memory overlap
+  false-positive path for a separate realloc/alias-kill refinement.
+- Refined the R202 pointer-derived memory overlap path with zero-offset address
+  proofs for dynamic stores. Prior observed-memory overlap and intra-procedural
+  load-range fallback now require a graph-backed proof that a wide
+  pointer-derived store addresses the base range before narrowing it into a
+  smaller sink-reaching range. This prevents later neighbor/indexed writes from
+  winning solely because they share the same abstract pointer identity after
+  realloc or copy-loop lowering. Bumped the summary cache schema for the changed
+  graph behavior.
+- Verified the R202 refinement locally: Development TV2R202 now passes with
+  only `dfb_source_A.ret`; DebugGame TV2R202 no longer reports forbidden
+  `dfb_source_C.ret` and is reduced to a missing-only residual. The focused
+  cycle 02 failure sweep shows no forbidden labels in the reported C++/UE
+  residuals. Local guards passed for DFB010/031/050/056/120/121 across the
+  available sample roots, and py_compile passed for the changed engine modules.
+- Refined pointer-derived load-range selection for rebuilt/fused TArray-style
+  stores. Dynamic wide stores over unknown-register memory now prove the
+  concrete range start, not just the base identity, before they can cover or be
+  narrowed into a smaller sink-reaching range. The proof handles nested
+  constant address terms such as `base + index * element_size + field_offset`
+  with bounded observed constant sets, including `INT_MULT`, and skips
+  unproven later stores so older proven stores can still satisfy the load. This
+  keeps the R202 neighbor/indexed kill from becoming a false positive while
+  recovering same-field reads for fused TArray element copies. Bumped the
+  summary cache schema for the changed graph behavior.
+- Verified locally against focused UE frontier cases from the cycle 03
+  pre-regression scopes: DebugGame TV2R001, TV2R201, and TV2R202 now pass with
+  no forbidden labels; Development TV2R011 now passes with no forbidden labels.
+  Development TV2R002 remains a separate miss on the `unknown:unique` to `x8`
+  allocation/data-pointer bridge and was left as a residual rather than
+  over-approximating aliases.
+- Repaired the cycle 04 rebuilt ARMv7 C++ fused-tail residuals with a
+  caller-local observed-storage bridge for terminal branches into shared
+  extracted tail blocks. When low-pcode shows a no-fallthrough branch into an
+  instruction range owned by another extracted function and that target block
+  already contains a real sink boundary, the composed graph now creates a
+  caller-local synthetic sink and connects only the same observed storage live
+  at the branch. Source-reaching condition registers immediately preceding the
+  branch are attached as control edges. This keeps the shared target sink from
+  accumulating incoming edges from every fused caller while preserving
+  convention-free observed storage semantics. Bumped the summary cache schema
+  for the changed composed-graph behavior.
+- Verified locally: the focused P1 ARMv7 C++ sweep over 13 available TV2C cases
+  now reports PASS 13 / FAIL 0 / FP 0, including TV2C001/002/004/005/006/011/
+  012/013/017/018/020/501/502. Read-only checks over P0 x86 and P1 x86 remain
+  at the existing TV2C018 missing-only residual with FP 0. The UE Development
+  R002 scope remains a missing-only residual on the `unknown:unique` to `x8`
+  data-pointer bridge and was not widened. Local guards passed for
+  DFB010/031/050/056/120/121 across the available sample roots, and
+  `py_compile` passed for the changed engine modules.
+- Repaired the cycle 05 rebuilt x86 C018 call-out memory mutation miss with a
+  guarded observed-thunk scalar-to-pointer-field bridge. For resolved
+  non-boundary thunk-like calls without an external summary, the composed graph
+  can now connect single-label scalar call-pre storage into a later
+  sink-reaching observed memory range only when a separate non-source call-pre
+  pointer expression proves that exact target object and field. This covers
+  stack-passed x86 helper mutations without introducing ABI argument or return
+  semantics, and the summary cache schema was bumped for the changed graph
+  behavior.
+- Verified locally against the cycle 05 excerpt: TV2C018 P0/P1 x86 now pass
+  with `dfb_source_A.ret`, TV2R201 Development passes with `dfb_source_C.ret`
+  after summary cache invalidation, and focused neighboring C++ x86 cases
+  TV2C001/005/502 still pass with no forbidden labels. TV2R002 Development
+  remains a missing-only residual because the needed store-to-load match would
+  require proving `[x8 + w0 * 8] == [x8 + 8]`; the current graph does not prove
+  that offset, so the engine does not widen the `unknown:unique` to `x8`
+  alias.
+- Refined internal-call observed register preservation for rebuilt UE helper
+  boundaries. A non-primary register write inside a resolved callee no longer
+  unconditionally blocks caller-side preservation when the callee graph itself
+  proves the latest overlapping register value reaches the same
+  callee-entry-observed storage through stack memory, such as a low-pcode
+  save/restore sequence. This keeps the behavior convention-free and
+  architecture-aware: the edge is still driven by observed storage and graph
+  reachability, not ABI callee-saved rules or signature metadata. Bumped the
+  summary cache schema for the changed composed-graph behavior. Local
+  `py_compile` passed for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; focused engine execution could not be run
+  in this shell because `networkx` is not installed and no cached wheel is
+  available.
+- Repaired the cycle 07 UE Development TV2R002 optimized TArray append/read
+  residual without widening core memory identity. The prior observed-memory
+  unknown-offset bridge now also accepts a prior `unknown:unique` dynamic store
+  when the store address graph contains the exact sink-reaching register
+  identity and the stored width ends at the target's fixed offset. Candidate
+  selection still requires a single data source and keeps the latest prior
+  candidate, so the B append reaches `Items[1].ItemId` while the A append does
+  not. Bumped the summary cache schema for the changed composed-graph behavior.
+- Verified locally with the repository venv: focused UE cycle 07 scopes
+  TV2R001/TV2R002/TV2R011/TV2R201/TV2R202 pass for both DebugGame and
+  Development with FP 0; PE_x64 DFB010/031/050/056/120/121 pass; and
+  `py_compile` passes for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`. A broader all-scope UE sweep and an
+  all-root DFB guard were stopped for runtime after producing no completed
+  summary; the bounded checks above completed cleanly.
 
 ## Current Focus
 

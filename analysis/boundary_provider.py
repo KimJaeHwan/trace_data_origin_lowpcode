@@ -46,7 +46,7 @@ class DataFlowBenchBoundaryProvider:
     adapter instead of becoming general backward-slice semantics.
     """
 
-    cache_key = "boundary:dataflowbench-v1"
+    cache_key = "boundary:dataflowbench-v2"
 
     def is_source_call(self, instr: dict) -> str | None:
         target = self._primary_target(instr)
@@ -199,7 +199,19 @@ class DataFlowBenchBoundaryProvider:
         return hints
 
     def _prototype_storage_key(self, function_graph: FunctionGraph, storage: str | None) -> str | None:
-        if not storage or ":" not in storage or storage.startswith("Stack["):
+        if not storage:
+            return None
+        if storage.startswith("Stack["):
+            try:
+                offset_text = storage.split("[", 1)[1].split("]", 1)[0]
+                size_text = storage.rsplit(":", 1)[1]
+                offset = int(offset_text, 0)
+                size_bytes = int(size_text)
+            except (IndexError, ValueError):
+                return None
+            stack_reg = sorted(function_graph.architecture.stack_pointer_regs)[0]
+            return f"mem:external:root:stack:{stack_reg}:{offset}:{size_bytes}"
+        if ":" not in storage:
             return None
         name, size_text = storage.rsplit(":", 1)
         try:

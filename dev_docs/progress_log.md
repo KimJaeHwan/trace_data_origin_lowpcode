@@ -837,6 +837,44 @@ in the phase-specific files.
   all-root DFB guard were stopped for runtime after producing no completed
   summary; the bounded checks above completed cleanly.
 
+## 2026-07-04
+
+- Tightened the latest-unique dynamic object bridge so it now defers when a
+  precise prior single-source memory-overlap candidate exists, preventing the
+  stronger rebuilt UE TArray neighbor-field case from replacing an observed
+  stack field source with a later unrelated unique object. Added a constrained
+  call-summary pointer-field snapshot fallback for optimized container
+  emplacement: when a summary write stores a pointer snapshot and a later
+  sibling observed field reaches a sink, the edge is emitted only from the
+  pointed field if that field has exactly one source label. This repaired the
+  current cycle_02 UE Development frontier failures TV2R009 and TV2R202 while
+  preserving TV2R301.
+- Verified with `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`, the focused TV2R009/TV2R202/TV2R301 reproductions, all 26
+  current `ue-local-development` scoped proposed cases from the cycle_02
+  pre-regression artifact, and the checked-in DFB001/DFB002 smoke over
+  `samples/low_pcode`.
+
+- Partially repaired the stronger proposed frontier failures from the rebuilt
+  09/10 regression without editing expected files, manifests, generated
+  low-pcode samples, or oracle data. A temporary DataFlowBench wrapper/callback
+  marker fallback was rejected because it named the proposed helper shape
+  directly; the committed direction keeps marker facts in the boundary adapter
+  and leaves the core to consume only observed storage and memory transitions.
+- Added constrained summary bridges for selected stack-slot to global-pointer
+  observed memory, latest single-source dynamic object fields, keyed nested
+  pointer values selected by matching observed key constructors, and summary
+  pointer-field snapshots. Tightened prior-call context matching to stable
+  heap/unique/global pointer contexts to avoid the TV2R302 wrong-key false
+  positive.
+- Bumped the summary cache schema for the new composed-graph behavior.
+- Verified with the repository venv and a cold summary cache:
+  `stronger_frontier_no_hardcode_regression` reports suite09 PASS 488 /
+  FAIL 0 / FP 0 and suite10 PASS 169 / FAIL 3 / FP 0 with proposed cases
+  included. TV2C602, TV2R301, and TV2R302 are repaired without forbidden
+  sources; the remaining residual is TV2C601 on P0 aarch64 and P1 x86/x64.
+  Also verified `compileall -q analysis core frontend query report tools`.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

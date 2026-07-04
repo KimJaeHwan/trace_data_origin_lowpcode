@@ -483,7 +483,7 @@ class ProgramSliceGraphBuilder:
         self._inject_latest_unique_memory_to_observed_field_edges(program_graph)
         self._inject_keyed_nested_pointer_source_edges(program_graph, programs)
         self._inject_observed_pointer_write_passthrough_edges(program_graph, programs)
-        self._inject_observed_thunk_scalar_pointer_field_edges(program_graph, programs)
+        self._inject_observed_thunk_scalar_pointer_field_edges(program_graph, programs, summaries)
         self._inject_observed_thunk_pointer_memory_copy_edges(program_graph, programs)
         self._inject_unresolved_boundary_passthrough_edges(program_graph, programs, summaries)
         self._inject_observed_pointer_passthrough_edges(program_graph, programs)
@@ -3428,6 +3428,7 @@ class ProgramSliceGraphBuilder:
         self,
         program_graph: ProgramSliceGraph,
         programs: list[LowPcodeProgram],
+        summaries: dict[str, AutoFunctionSummary],
     ) -> None:
         programs_by_name = {program.function_name: program for program in programs}
         for program in programs:
@@ -3439,6 +3440,9 @@ class ProgramSliceGraphBuilder:
                     continue
                 callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
                 if callsite_key in external_summaries:
+                    continue
+                summary = summaries.get(resolved.name)
+                if summary is None:
                     continue
                 if not (
                     self._is_observed_thunk_like_program(programs_by_name.get(resolved.name))
@@ -3483,6 +3487,14 @@ class ProgramSliceGraphBuilder:
                         pointer_storage = caller_graph.slice_graph.nodes[pointer_node].get("observed_storage") or ""
                         for source_node in selected_sources:
                             source_storage = caller_graph.slice_graph.nodes[source_node].get("observed_storage") or ""
+                            if not self._summary_supports_scalar_pointer_field_write(
+                                summary,
+                                source_storage,
+                                pointer_storage,
+                                relative,
+                                target_range.size,
+                            ):
+                                continue
                             program_graph.slice_graph.add_edge(
                                 source_node,
                                 target_node,
@@ -3494,7 +3506,7 @@ class ProgramSliceGraphBuilder:
                                 observed_input=source_storage,
                                 observed_output=target_storage,
                                 relative_offset=str(relative),
-                                confidence="single_label_scalar_pre_to_sink_reaching_pointer_field",
+                                confidence="callee_observed_scalar_store_to_matching_pointer_field",
                             )
                             self._record_summary_call_out_boundary(
                                 program_graph,
@@ -3505,8 +3517,41 @@ class ProgramSliceGraphBuilder:
                                 observed_address=pointer_storage,
                                 observed_input=source_storage,
                                 observed_output=target_storage,
+                                relative_offset=str(relative),
                                 opcode="SUMMARY_OBSERVED_THUNK_SCALAR_POINTER_FIELD",
                             )
+
+    def _summary_supports_scalar_pointer_field_write(
+        self,
+        summary: AutoFunctionSummary,
+        input_storage: str,
+        address_storage: str,
+        relative_offset: int,
+        size: int,
+    ) -> bool:
+        for summary_input, outputs_by_address in summary.observed_to_memory.items():
+            if not self._storage_keys_overlap(summary_input, input_storage):
+                continue
+            for summary_address, output_memories in outputs_by_address.items():
+                if not self._storage_keys_overlap(summary_address, address_storage):
+                    continue
+                for output_memory in output_memories:
+                    memory_range = self._memory_range_for_storage(output_memory)
+                    if memory_range is None:
+                        continue
+                    _, start, end = memory_range
+                    if start == relative_offset and end - start == size:
+                        return True
+        return False
+
+    def _storage_keys_overlap(self, left: str, right: str) -> bool:
+        if left == right:
+            return True
+        left_range = self._register_storage_range(left)
+        right_range = self._register_storage_range(right)
+        if left_range is None or right_range is None:
+            return False
+        return self._ranges_overlap(left_range, right_range)
 
     def _single_label_scalar_pre_nodes(
         self,
@@ -6555,6 +6600,7 @@ class ProgramSliceGraphBuilder:
             pointed_nodes = self._memory_nodes_for_observed_pointer(caller_graph, address_node, output_memory, callsite_key)
             if pointed_nodes:
                 return pointed_nodes
+            return []
         preferred_prefix = f"{callsite_key}:pre:mem:"
         memory_nodes: list[ValueId] = []
         for key, pre_node in caller_graph.call_pre_storage_index.items():

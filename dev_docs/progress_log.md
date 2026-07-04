@@ -893,6 +893,24 @@ in the phase-specific files.
   `tv2c601_full_nohardcode_regression` reports suite09 PASS 488 / FAIL 0 /
   FP 0 and suite10 PASS 172 / FAIL 0 / FP 0.
 
+- Accepted the first frontier-generated cpp-like fusion case, TV2C603, as a
+  proposed regression and used it to harden summary field precision rather than
+  adding case-specific handling. The interprocedural scalar pointer-field
+  fallback now requires callee summary evidence for the same observed scalar
+  input, pointer storage, field offset, and size before creating a
+  `SUMMARY_OBSERVED_THUNK_SCALAR_POINTER_FIELD` edge. Observed summary memory
+  writes with a concrete address storage no longer fall back to arbitrary latest
+  pre-call memory ranges when the pointed field cannot be matched, preventing
+  aggregate/vector clears from merging a neighbor field source into a sibling
+  sink field.
+- Verified with `.venv/bin/python -m compileall -q analysis`, targeted
+  `tv2c603_after_output_guard` over all tv2 tier0 P0/P1 architectures
+  (PASS 8 / FAIL 0 / FP 0), and full no-cache proposed regression
+  `tv2c603_full_09_10_after_output_guard`: suite09 PASS 488 / FAIL 0 / FP 0;
+  suite10 PASS 177 / FAIL 3 / FP 0. The remaining suite10 failures are
+  missing-recall residuals TV2C018 on x86/P1-x86 and TV2C502 on P1 aarch64,
+  not forbidden-source regressions.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

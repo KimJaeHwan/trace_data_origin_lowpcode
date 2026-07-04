@@ -936,6 +936,26 @@ in the phase-specific files.
   frontiers TV2C601 on P1 x86 and TV2C502 on P1 aarch64, with no forbidden
   sources.
 
+- Repaired the two remaining frontier residuals without case names, helper
+  names, ABI argument rules, or return-value conventions. Observed-memory loads
+  from direct positive stack slots now retain loaded-pointer address provenance
+  only when the load width matches the architecture pointer size, allowing
+  later pointer-field stores to summarize back to the observed input memory
+  they came from without broad `unknown:register` aliasing. The expression
+  builder also recognizes conservative stack `INT_OR` low-bit offset idioms,
+  covering compiler-lowered aligned stack field addresses such as `sp | 4`
+  without treating arbitrary bitwise operations as pointer arithmetic. The
+  prior-call context bridge now accepts concrete stack-local pointer contexts
+  when a later sink-reaching observed-memory load carries that exact loaded
+  origin, recovering local object/container value flow while staying based on
+  observed storage rather than ABI roles. Summary cache schema is now 50.
+- Verified with `.venv/bin/python -m compileall -q analysis core frontend
+  query report tools`, focused no-cache checks
+  `stackctx_tv2c502_p1_aarch64`, `stackctx_tv2c601_p1_x86`, and
+  `stackctx_tv2r009_ue_dev` (all PASS 1 / FAIL 0 / FP 0), and full no-cache
+  proposed regression `post_stack_context_full_09_10`: suite09 PASS 488 /
+  FAIL 0 / FP 0; suite10 PASS 188 / FAIL 0 / FP 0.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

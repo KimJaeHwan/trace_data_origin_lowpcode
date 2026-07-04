@@ -20,7 +20,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 48
+SUMMARY_CACHE_SCHEMA_VERSION = 50
 
 
 @dataclass
@@ -301,6 +301,9 @@ class MinimalAutoFunctionSummaryProvider:
                         for storage in self._observed_storages_reaching(graph, pred, function_graph):
                             found.add(f"deref:{storage}")
                     if edge_kind == "memory":
+                        pred_storage = graph.nodes[pred].get("storage") or ""
+                        if graph.nodes[pred].get("opcode") == "OBSERVED_MEMORY" and pred_storage.startswith("mem:"):
+                            found.add(f"deref:{pred_storage}")
                         for address_pred in graph.predecessors(pred):
                             if graph.edges[address_pred, pred].get("kind") != "address":
                                 continue
@@ -3267,7 +3270,7 @@ class ProgramSliceGraphBuilder:
         return f"{identity}:{start}:{end - start}"
 
     def _is_stable_pointer_context_key(self, context_key: str) -> bool:
-        return context_key.startswith(("heap:", "unknown:unique:", "global:"))
+        return context_key.startswith(("heap:", "unknown:unique:", "global:")) or ":stack:" in context_key
 
     def _inject_observed_pointer_write_passthrough_edges(
         self,

@@ -485,8 +485,9 @@ class SliceGraphBuilder:
                 fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             state.memory[mem_key] = mem_node
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
-            state.expressions[mem_node] = {"kind": "value"}
-            state.expressions[out_node] = {"kind": "value"}
+            observed_expr = self._observed_memory_load_expression(fg, mem_key, mem_node, output)
+            state.expressions[mem_node] = dict(observed_expr)
+            state.expressions[out_node] = dict(observed_expr)
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
             state.expressions[out_node] = {"kind": "value"}
@@ -1958,6 +1959,10 @@ class SliceGraphBuilder:
             if bit_expr is not None:
                 merged["bit_expr"] = bit_expr
             return merged
+        if opcode == "INT_OR" and len(exprs) >= 2:
+            merged = self._stack_or_offset_expression(exprs, output_bits, bit_expr)
+            if merged is not None:
+                return merged
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
             stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
@@ -2069,6 +2074,52 @@ class SliceGraphBuilder:
         if bit_expr is not None:
             expr["bit_expr"] = bit_expr
         return expr
+
+    def _stack_or_offset_expression(
+        self,
+        exprs: list[dict | None],
+        output_bits: int,
+        bit_expr: dict | None,
+    ) -> dict | None:
+        const_expr = next((expr for expr in exprs if expr and expr.get("kind") == "const"), None)
+        if const_expr is None:
+            return None
+        const_value = int(const_expr.get("value") or 0)
+        if const_value <= 0 or const_value > 0xFFF:
+            return None
+
+        stack_expr = next(
+            (
+                expr
+                for expr in exprs
+                if expr and expr.get("kind") in {"stack", "stack_set"}
+            ),
+            None,
+        )
+        if stack_expr is None:
+            return None
+
+        if stack_expr.get("kind") == "stack":
+            offset = int(stack_expr.get("offset") or 0)
+            if offset & const_value:
+                return None
+            merged = dict(stack_expr)
+            merged["offset"] = self._normalize_stack_offset(offset + self._stack_offset_const_value(const_expr, const_value))
+        else:
+            offsets = [int(offset) for offset in (stack_expr.get("offsets") or [])]
+            if not offsets or any(offset & const_value for offset in offsets):
+                return None
+            merged = dict(stack_expr)
+            merged["offsets"] = sorted(
+                {
+                    self._normalize_stack_offset(offset + self._stack_offset_const_value(const_expr, const_value))
+                    for offset in offsets
+                }
+            )
+        if bit_expr is not None:
+            merged["bit_expr"] = bit_expr
+        merged["size_bits"] = output_bits
+        return merged
 
     def _can_use_register_offset_fallback(self, fg: FunctionGraph, node: ValueId | None) -> bool:
         if node is None or node.space != "reg":
@@ -2461,6 +2512,31 @@ class SliceGraphBuilder:
 
     def _should_materialize_observed_memory(self, mem_key: str) -> bool:
         return self._is_program_memory_key(mem_key) or ":stack:" in mem_key
+
+    def _observed_memory_load_expression(
+        self,
+        fg: FunctionGraph,
+        mem_key: str,
+        mem_node: ValueId,
+        output: dict,
+    ) -> dict:
+        output_size = int(output.get("size") or 0)
+        memory_range = self._memory_range_for_key(mem_key)
+        if (
+            output_size == fg.architecture.pointer_size
+            and memory_range is not None
+            and ":stack:" in mem_key
+            and not self._is_program_memory_key(mem_key)
+            and memory_range.start > 0
+        ):
+            return {
+                "kind": "register",
+                "key": f"loaded_pointer:{mem_key}",
+                "node": mem_node,
+                "size_bits": output_size * 8,
+                "loaded_from": f"mem:{mem_key}",
+            }
+        return {"kind": "value"}
 
     def _display_for(
         self,

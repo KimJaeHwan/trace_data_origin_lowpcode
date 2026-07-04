@@ -1886,7 +1886,7 @@ class SliceGraphBuilder:
             fg.slice_graph.add_edge(mem_node, pre_node, kind="data", opcode=pre_kind)
 
     def _allocator_expression(self, target_name: str | None, callsite_key: str, state: BuildState) -> dict | None:
-        if target_name in {"malloc", "calloc"}:
+        if target_name in {"malloc", "calloc", "operator.new", "operator.new[]"}:
             return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
         if target_name == "realloc":
             previous = state.expressions.get(state.recent_store) if state.recent_store is not None else None

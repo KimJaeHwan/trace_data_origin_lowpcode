@@ -969,6 +969,34 @@ in the phase-specific files.
   pre-regression P0/P1 x86, x64, armv7, and aarch64 inputs: PASS 8 / FAIL 0 /
   FP 0, with actual source set `dfb_source_A.ret` for every variant.
 
+- Exercised the Codex-backed frontier case-author closed loop on suite10. The
+  loop generated TV2C606 and TV2C607 as proposed cpp-like fusion regressions,
+  applied them through the approval-gated work-item path, regenerated expected
+  data from the manifest, and attempted P0/P1 all-architecture rebuild/extract.
+  The first generated proposals used unsupported `dfb_source_int(...)` source
+  markers, so the suite10 work-item doctor now rejects non-canonical source
+  labels and source text before they reach build/extract. This keeps generated
+  cases within the boundary-provider source/sink contract instead of teaching
+  the engine new test-only source names.
+- Repaired the proposed TV2C606 indexed callback heap-field frontier with
+  convention-free graph evidence. `operator.new` is modeled as a heap allocator,
+  automatic summaries now propagate through expression provenance and a second
+  observed-storage preservation pass, scalar pointer-field summary edges can
+  use callee-observed memory effects on non-thunk helpers, and callsite-aware
+  stack/register storage matching maps callee stack inputs back to caller
+  pre-call storage. The affine address recognizer now handles observed-input
+  loads and `INT_LEFT` shift operands, allowing callee stores such as
+  `base + index * stride + field` to match caller heap field ranges without
+  ABI argument or return conventions.
+- Verified the frontier changes with `.venv/bin/python -m compileall -q
+  analysis core frontend query report tools`, `git diff --check`, and focused
+  no-cache harness checks. Stable suite10 tier0 remains green at PASS 104 /
+  FAIL 0 / FP 0. Stable suite09 improved from the prior PASS 470 / FAIL 18 /
+  FP 0 snapshot to PASS 476 / FAIL 12 / FP 0. Proposed TV2C606 improved to
+  PASS 5 / FAIL 3 / FP 0 across the eight P0/P1 tier0 variants. Proposed
+  TV2C607 remains PASS 0 / FAIL 8 / FP 0 and is kept as a loaded-pointer /
+  container-alias frontier rather than being forced through expected edits.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

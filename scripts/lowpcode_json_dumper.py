@@ -12,8 +12,8 @@ import hashlib
 from ghidra.util.task import TaskMonitor
 
 
-DUMPER_SCHEMA_VERSION = 5
-DUMPER_NAME = "lowpcode_json_dumper_v5_external_prototypes"
+DUMPER_SCHEMA_VERSION = 6
+DUMPER_NAME = "lowpcode_json_dumper_v6_reachable_function_pointers"
 REACHABLE_HELPER_MAX_DEPTH = 8
 
 
@@ -29,7 +29,7 @@ def safe_str(value):
 def safe_call(default_value, func, *args):
     try:
         return func(*args)
-    except Exception:
+    except:
         return default_value
 
 
@@ -668,6 +668,138 @@ def find_functions_by_prefix(prefix):
     return functions
 
 
+def build_function_name_index():
+    index = {}
+    try:
+        fm = currentProgram.getFunctionManager()
+        it = fm.getFunctions(True)
+        while it.hasNext():
+            func = it.next()
+            name = func.getName()
+            if name and name not in index:
+                index[name] = func
+    except Exception as e:
+        print("[-] 함수 이름 index 생성 실패: %s" % str(e))
+    return index
+
+
+def iter_java_items(value):
+    if value is None:
+        return
+    try:
+        while value.hasNext():
+            yield value.next()
+        return
+    except Exception:
+        pass
+    try:
+        for item in value:
+            yield item
+    except Exception:
+        return
+
+
+def get_symbol_names_at_address(addr):
+    names = []
+    try:
+        symbol_table = currentProgram.getSymbolTable()
+        for symbol in iter_java_items(symbol_table.getSymbols(addr)):
+            name = safe_str(safe_call(None, symbol.getName))
+            if name and name not in names:
+                names.append(name)
+    except Exception:
+        pass
+    return names
+
+
+def function_name_from_pointer_symbol(symbol_name, data_address, function_name_index):
+    if not symbol_name or not symbol_name.startswith("PTR_"):
+        return None
+    candidate = symbol_name[4:]
+    suffix = str(data_address).lower().lstrip("0") or "0"
+    parts = candidate.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].lower().lstrip("0") == suffix:
+        candidate = parts[0]
+    if candidate in function_name_index:
+        return candidate
+
+    # Some toolchains keep extra suffixes on pointer symbols. Prefer the
+    # longest function name prefix so underscores inside function names remain
+    # unambiguous without relying on ABI conventions.
+    for name in sorted(function_name_index.keys(), key=len, reverse=True):
+        if candidate.startswith(name + "_"):
+            return name
+    return None
+
+
+def function_from_data_pointer_value(addr):
+    try:
+        data = currentProgram.getListing().getDataAt(addr)
+        value = safe_call(None, data.getValue) if data else None
+        if value is None:
+            return None
+        target_func = safe_call(None, getFunctionAt, value)
+        if target_func is not None:
+            return target_func
+        target_func = safe_call(None, getFunctionContaining, value)
+        if target_func is not None:
+            return target_func
+    except Exception:
+        pass
+    return None
+
+
+def resolve_function_pointer_ref_targets(ref, function_name_index):
+    targets = []
+    seen = set()
+    data_addr = safe_call(None, ref.getToAddress)
+    if data_addr is None:
+        return targets
+
+    for symbol_name in get_symbol_names_at_address(data_addr):
+        target_name = function_name_from_pointer_symbol(symbol_name, data_addr, function_name_index)
+        target_func = function_name_index.get(target_name) if target_name else None
+        key = function_key(target_func)
+        if target_func is not None and key not in seen:
+            seen.add(key)
+            targets.append({
+                "to_function": target_func,
+                "reference_kind": "data_function_pointer_symbol",
+                "via_symbol": symbol_name,
+                "data_addr": safe_str(data_addr),
+            })
+
+    try:
+        ref_manager = currentProgram.getReferenceManager()
+        for pointer_ref in iter_java_items(ref_manager.getReferencesFrom(data_addr)):
+            target_func = getFunctionAt(pointer_ref.getToAddress())
+            if not target_func:
+                target_func = getFunctionContaining(pointer_ref.getToAddress())
+            key = function_key(target_func)
+            if target_func is not None and key not in seen:
+                seen.add(key)
+                targets.append({
+                    "to_function": target_func,
+                    "reference_kind": "data_function_pointer_reference",
+                    "via_symbol": None,
+                    "data_addr": safe_str(data_addr),
+                })
+    except Exception:
+        pass
+
+    target_func = function_from_data_pointer_value(data_addr)
+    key = function_key(target_func)
+    if target_func is not None and key not in seen:
+        seen.add(key)
+        targets.append({
+            "to_function": target_func,
+            "reference_kind": "data_function_pointer_value",
+            "via_symbol": None,
+            "data_addr": safe_str(data_addr),
+        })
+    return targets
+
+
 def function_key(func):
     if func is None:
         return None
@@ -706,7 +838,7 @@ def is_followable_internal_function(func):
     return True
 
 
-def resolve_called_functions(func):
+def resolve_called_functions(func, function_name_index):
     called = []
     seen = set()
     try:
@@ -715,20 +847,35 @@ def resolve_called_functions(func):
         while instructions.hasNext():
             instr = instructions.next()
             for ref in instr.getReferencesFrom():
-                if not ref.getReferenceType().isCall():
-                    continue
-                target_func = getFunctionAt(ref.getToAddress())
-                if not target_func:
-                    target_func = getFunctionContaining(ref.getToAddress())
-                key = function_key(target_func)
-                if target_func is not None and key not in seen:
-                    seen.add(key)
-                    called.append({
-                        "from_addr": safe_str(instr.getAddress()),
-                        "from_function": func.getName(),
-                        "to_addr": safe_str(ref.getToAddress()),
+                ref_type = ref.getReferenceType()
+                targets = []
+                if ref_type.isCall():
+                    target_func = getFunctionAt(ref.getToAddress())
+                    if not target_func:
+                        target_func = getFunctionContaining(ref.getToAddress())
+                    targets.append({
                         "to_function": target_func,
+                        "reference_kind": "direct_call",
+                        "via_symbol": None,
+                        "data_addr": None,
                     })
+                elif ref_type.isData() and ref_type.isRead():
+                    targets.extend(resolve_function_pointer_ref_targets(ref, function_name_index))
+
+                for target in targets:
+                    target_func = target.get("to_function")
+                    key = function_key(target_func)
+                    if target_func is not None and key not in seen:
+                        seen.add(key)
+                        called.append({
+                            "from_addr": safe_str(instr.getAddress()),
+                            "from_function": func.getName(),
+                            "to_addr": safe_str(target_func.getEntryPoint()),
+                            "to_function": target_func,
+                            "reference_kind": target.get("reference_kind"),
+                            "via_symbol": target.get("via_symbol"),
+                            "data_addr": target.get("data_addr"),
+                        })
     except Exception as e:
         print("[-] 호출 대상 수집 실패: %s: %s" % (func.getName(), str(e)))
     return called
@@ -740,6 +887,7 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
     queue = []
     edges = []
     skipped = []
+    function_name_index = build_function_name_index()
 
     for func in seed_funcs:
         key = function_key(func)
@@ -752,7 +900,7 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
         func, depth, root = queue.pop(0)
         if depth >= max_depth:
             continue
-        for call in resolve_called_functions(func):
+        for call in resolve_called_functions(func, function_name_index):
             target_func = call["to_function"]
             edge = {
                 "from_function": call["from_function"],
@@ -761,7 +909,12 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
                 "to_function": target_func.getName(),
                 "root": root,
                 "depth": depth + 1,
+                "reference_kind": call.get("reference_kind") or "direct_call",
             }
+            if call.get("via_symbol"):
+                edge["via_symbol"] = call.get("via_symbol")
+            if call.get("data_addr"):
+                edge["data_addr"] = call.get("data_addr")
             edges.append(edge)
 
             if not is_followable_internal_function(target_func):

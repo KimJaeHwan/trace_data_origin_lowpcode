@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from analysis.boundary_provider import BoundaryProvider, DataFlowBenchBoundaryBinder, NoBoundaryProvider
 from analysis.call_boundary_mapper import CallBoundaryMapper, CallContext
-from analysis.call_resolver import CallResolver
+from analysis.call_resolver import CallResolver, ResolvedCallTarget
 from analysis.cfg_builder import CFGBuilder
 from analysis.memory_model import MemoryModel
 from core.graph import FunctionGraph
@@ -403,6 +403,7 @@ class SliceGraphBuilder:
             return
         addr_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
         out_node = self._new_value(fg, state, output, instr, "LOAD")
+        function_pointer_expr = self._function_pointer_read_expression(instr)
         data_ref_key = self._data_ref_memory_key(instr, "read", output.get("size"))
         mem_keys = [data_ref_key] if data_ref_key else self._memory_keys_for(fg, state, addr_node, inputs[1], output.get("size"))
         mem_key = mem_keys[0]
@@ -459,9 +460,12 @@ class SliceGraphBuilder:
                 for narrowed_source in selected_sources:
                     fg.slice_graph.add_edge(narrowed_source, mem_node, kind="memory", opcode="LOAD_OVERLAP")
             state.memory[mem_key] = mem_node
-            state.expressions[mem_node] = {"kind": "value"}
+            state.expressions[mem_node] = self._merged_function_pointer_expression(
+                state,
+                selected_sources,
+            ) or {"kind": "value"}
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
-            state.expressions[out_node] = {"kind": "value"}
+            state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
         elif memory_nodes:
             for mem_node in memory_nodes:
                 opcode = "LOAD" if fg.slice_graph.nodes[mem_node].get("storage") == f"mem:{mem_key}" else "LOAD_OVERLAP"
@@ -469,7 +473,10 @@ class SliceGraphBuilder:
             if len(memory_nodes) == 1:
                 state.expressions[out_node] = dict(state.expressions.get(memory_nodes[0]) or {"kind": "value"})
             else:
-                state.expressions[out_node] = {"kind": "value"}
+                state.expressions[out_node] = self._merged_function_pointer_expression(
+                    state,
+                    memory_nodes,
+                ) or {"kind": "value"}
         elif self._should_materialize_observed_memory(mem_key):
             mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
             fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
@@ -483,6 +490,13 @@ class SliceGraphBuilder:
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
             state.expressions[out_node] = {"kind": "value"}
+        if function_pointer_expr is not None:
+            state.expressions[out_node] = function_pointer_expr
+            fg.slice_graph.nodes[out_node]["points_to_function"] = {
+                "address": function_pointer_expr.get("address"),
+                "name": function_pointer_expr.get("name"),
+                "confidence": function_pointer_expr.get("confidence"),
+            }
 
     def _process_subpiece(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -612,7 +626,15 @@ class SliceGraphBuilder:
         out_node = self._new_value(fg, state, output, instr, "COPY")
         if source_node is not None:
             fg.slice_graph.add_edge(source_node, out_node, kind="memory", opcode="COPY_GLOBAL_LOAD")
-            state.expressions[out_node] = dict(state.expressions.get(source_node) or {"kind": "value"})
+            state.expressions[out_node] = self._function_pointer_read_expression(instr) or dict(
+                state.expressions.get(source_node) or {"kind": "value"}
+            )
+            if state.expressions[out_node].get("kind") == "function_ptr":
+                fg.slice_graph.nodes[out_node]["points_to_function"] = {
+                    "address": state.expressions[out_node].get("address"),
+                    "name": state.expressions[out_node].get("name"),
+                    "confidence": state.expressions[out_node].get("confidence"),
+                }
 
     def _memory_read_value(
         self,
@@ -1615,6 +1637,8 @@ class SliceGraphBuilder:
 
     def _materialize_call_boundary(self, fg: FunctionGraph, state: BuildState, instr: dict) -> None:
         resolved = self.call_resolver.resolve(instr)
+        if resolved.name is None and resolved.address is None:
+            resolved = self._resolve_indirect_call_from_state(fg, state, instr, resolved)
         callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
         callsite_node = self._new_synthetic_value(fg, state, "callsite", callsite_key, instr, "CALLSITE")
         fg.slice_graph.nodes[callsite_node]["kind"] = "callsite"
@@ -1691,6 +1715,143 @@ class SliceGraphBuilder:
 
         state.recent_store = None
         state.recent_store_text = None
+
+    def _function_pointer_read_expression(self, instr: dict) -> dict | None:
+        targets = instr.get("function_pointer_reads") or []
+        if len(targets) != 1:
+            return None
+        target = targets[0]
+        name = str(target.get("name") or "")
+        address = str(target.get("address") or "")
+        if not name or not address:
+            return None
+        return {
+            "kind": "function_ptr",
+            "name": name,
+            "address": address,
+            "data_address": str(target.get("data_address") or ""),
+            "source_symbol": str(target.get("source_symbol") or ""),
+            "confidence": str(target.get("confidence") or "ghidra_data_pointer_symbol"),
+        }
+
+    def _merged_function_pointer_expression(self, state: BuildState, nodes: list[ValueId]) -> dict | None:
+        expressions = [
+            state.expressions.get(node)
+            for node in nodes
+            if (state.expressions.get(node) or {}).get("kind") == "function_ptr"
+        ]
+        if not expressions or len(expressions) != len(nodes):
+            return None
+        first = expressions[0]
+        if all(
+            expr.get("name") == first.get("name") and expr.get("address") == first.get("address")
+            for expr in expressions
+        ):
+            return dict(first)
+        return None
+
+    def _resolve_indirect_call_from_state(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+        fallback: ResolvedCallTarget,
+    ) -> ResolvedCallTarget:
+        expression = self._callind_target_expression(fg, state, instr)
+        if not expression or expression.get("kind") != "function_ptr":
+            return fallback
+        name = str(expression.get("name") or "")
+        address = str(expression.get("address") or "")
+        if not name or not address:
+            return fallback
+        target = {
+            "resolved": True,
+            "function_name": name,
+            "address": address,
+            "confidence": expression.get("confidence") or "observed_function_pointer",
+            "source": "observed_function_pointer",
+            "source_symbol": expression.get("source_symbol") or "",
+            "data_address": expression.get("data_address") or "",
+        }
+        inferred = instr.setdefault("inferred_call_targets", [])
+        if not any(
+            item.get("function_name") == target["function_name"] and item.get("address") == target["address"]
+            for item in inferred
+        ):
+            inferred.append(target)
+        return ResolvedCallTarget(
+            address=address,
+            name=name,
+            confidence=str(target["confidence"]),
+        )
+
+    def _callind_target_expression(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+    ) -> dict | None:
+        for pcode in reversed(instr.get("low_pcode") or []):
+            if pcode.get("opcode") != "CALLIND":
+                continue
+            inputs = pcode.get("inputs") or []
+            if not inputs:
+                continue
+            key = self._storage_key(fg, inputs[0])
+            if key is None:
+                continue
+            node = self._current_value_for_storage(state, key)
+            if node is None:
+                continue
+            expression = state.expressions.get(node)
+            if expression and expression.get("kind") == "function_ptr":
+                return expression
+            if self._node_depends_on_memory_load(fg, node):
+                return self._unique_function_pointer_candidate_in_state(state)
+        return None
+
+    def _node_depends_on_memory_load(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        seen: set[ValueId] | None = None,
+    ) -> bool:
+        seen = seen or set()
+        if node in seen or len(seen) > 64:
+            return False
+        seen.add(node)
+        attrs = fg.slice_graph.nodes.get(node, {})
+        if attrs.get("opcode") in {"LOAD", "OBSERVED_MEMORY"}:
+            return True
+        for pred in fg.slice_graph.predecessors(node):
+            if fg.slice_graph.edges[pred, node].get("kind") in {"data", "memory"}:
+                if self._node_depends_on_memory_load(fg, pred, seen):
+                    return True
+        return False
+
+    def _unique_function_pointer_candidate_in_state(self, state: BuildState) -> dict | None:
+        candidates: list[dict] = []
+        for key, node in state.memory.items():
+            if ":stack:" not in key:
+                continue
+            expression = state.expressions.get(node) or {}
+            if expression.get("kind") != "function_ptr":
+                continue
+            if not expression.get("name") or not expression.get("address"):
+                continue
+            candidates.append(expression)
+        if not candidates:
+            return None
+        first = candidates[0]
+        if not all(
+            candidate.get("name") == first.get("name")
+            and candidate.get("address") == first.get("address")
+            for candidate in candidates
+        ):
+            return None
+        merged = dict(first)
+        merged["confidence"] = "unique_observed_stack_function_pointer"
+        return merged
 
     def _materialize_pre_call_memory(
         self,

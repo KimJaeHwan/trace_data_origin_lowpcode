@@ -23,6 +23,15 @@ class CallResolver:
                     thunk_target_name=target.get("thunk_target_name"),
                     confidence="ghidra_symbol_verified",
                 )
+        for target in instr.get("inferred_call_targets", []):
+            if target.get("resolved") and target.get("function_name"):
+                return ResolvedCallTarget(
+                    address=target.get("address"),
+                    name=target.get("function_name"),
+                    is_thunk=bool(target.get("is_thunk")),
+                    thunk_target_name=target.get("thunk_target_name"),
+                    confidence=target.get("confidence") or "inferred_call_target",
+                )
         flow_targets = instr.get("flow_targets", [])
         if flow_targets:
             return ResolvedCallTarget(

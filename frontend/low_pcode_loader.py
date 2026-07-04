@@ -60,6 +60,7 @@ class LowPcodeLoader:
         functions_by_entry = indices.get("functions_by_entry") or {}
 
         names_by_address: dict[str, list[str]] = {}
+        function_entry_by_name: dict[str, str] = {}
         for address, symbols in symbols_by_address.items():
             for symbol in symbols or []:
                 name = symbol.get("name")
@@ -69,6 +70,8 @@ class LowPcodeLoader:
             name = function.get("name")
             if name and name not in names_by_address.setdefault(str(address), []):
                 names_by_address[str(address)].append(str(name))
+            if name:
+                function_entry_by_name.setdefault(str(name), str(address))
 
         for instr in data.get("instructions", []):
             names: list[str] = []
@@ -84,6 +87,63 @@ class LowPcodeLoader:
                         names.append(name)
             if names:
                 instr["flow_target_names"] = names
+            pointer_reads = self._function_pointer_reads(instr, symbols_by_address, function_entry_by_name)
+            if pointer_reads:
+                instr["function_pointer_reads"] = pointer_reads
+
+    def _function_pointer_reads(
+        self,
+        instr: dict,
+        symbols_by_address: dict,
+        function_entry_by_name: dict[str, str],
+    ) -> list[dict]:
+        reads: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        for ref in instr.get("refs_from") or []:
+            if not ref.get("is_data") or not ref.get("is_read"):
+                continue
+            data_address = str(ref.get("to") or "")
+            if not data_address:
+                continue
+            for symbol in symbols_by_address.get(data_address) or []:
+                symbol_name = str(symbol.get("name") or "")
+                target_name = self._function_name_from_pointer_symbol(symbol_name, data_address, function_entry_by_name)
+                if not target_name:
+                    continue
+                target_entry = function_entry_by_name.get(target_name)
+                if not target_entry:
+                    continue
+                key = (target_entry, target_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                reads.append(
+                    {
+                        "address": target_entry,
+                        "name": target_name,
+                        "data_address": data_address,
+                        "source_symbol": symbol_name,
+                        "confidence": "ghidra_data_pointer_symbol",
+                    }
+                )
+        return reads
+
+    def _function_name_from_pointer_symbol(
+        self,
+        symbol_name: str,
+        data_address: str,
+        function_entry_by_name: dict[str, str],
+    ) -> str | None:
+        if not symbol_name.startswith("PTR_"):
+            return None
+        candidate = symbol_name.removeprefix("PTR_")
+        suffix = data_address.lower().lstrip("0") or "0"
+        parts = candidate.rsplit("_", 1)
+        if len(parts) == 2 and parts[1].lower().lstrip("0") == suffix:
+            candidate = parts[0]
+        if candidate in function_entry_by_name:
+            return candidate
+        return None
 
     def _infer_architecture(self, path: Path, data: dict | None = None) -> str:
         program = (data or {}).get("program") or {}

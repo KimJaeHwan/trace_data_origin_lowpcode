@@ -911,6 +911,31 @@ in the phase-specific files.
   missing-recall residuals TV2C018 on x86/P1-x86 and TV2C502 on P1 aarch64,
   not forbidden-source regressions.
 
+- Accepted the next frontier-generated cpp-like fusion case, TV2C604, as a
+  proposed regression. The case combines aggregate initialization, function
+  pointer table dispatch, a callback field write, a neighbor-field forbidden
+  source, and a final field sink. This was used as a structural regression for
+  indirect-call summary wiring rather than as a case-name-specific rule.
+- Extended the low-pcode Ghidra dumper to schema v6 so root extraction follows
+  Ghidra-observed data function-pointer evidence (`PTR_<function>_<addr>`
+  symbols, data pointer references, and concrete data pointer values) when
+  collecting reachable internal helpers. This keeps helper discovery
+  convention-free: no ABI argument/return semantics and no source/sink oracle
+  interpretation are added to the core.
+- Extended the loader and slice graph builder to carry observed function
+  pointer facts through low-pcode loads/copies/stores and to resolve otherwise
+  unresolved indirect calls only when the current value graph contains a unique
+  observed function-pointer target. Bumped the summary cache schema for this
+  graph behavior.
+- Verified `TV2C604` over all eight tv2 tier0 P0/P1 architecture/profile
+  variants: PASS 8 / FAIL 0 / FP 0. Re-extracted tv2 P0/P1 with the v6 dumper
+  and verified full no-cache proposed regression
+  `post_tv2c604_v6_full_09_10`: suite09 PASS 488 / FAIL 0 / FP 0; suite10
+  PASS 186 / FAIL 2 / FP 0. UE local Development and DebugGame both pass 26 /
+  FAIL 0 / FP 0. The remaining suite10 failures are pre-existing missing-recall
+  frontiers TV2C601 on P1 x86 and TV2C502 on P1 aarch64, with no forbidden
+  sources.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

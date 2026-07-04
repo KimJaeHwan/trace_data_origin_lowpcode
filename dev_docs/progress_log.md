@@ -997,6 +997,25 @@ in the phase-specific files.
   TV2C607 remains PASS 0 / FAIL 8 / FP 0 and is kept as a loaded-pointer /
   container-alias frontier rather than being forced through expected edits.
 
+- Tightened the TV2C606 heap-field frontier with allocation-site observed
+  memory materialization. When Low P-Code address arithmetic proves a concrete
+  `heap:allocsite:*` memory key, the graph now materializes an observed heap
+  memory node just like observed stack/global/unknown program memory. This lets
+  later summary edges attach to the actual sink-reaching heap field load
+  without relying on ABI parameter roles, return conventions, helper names, or
+  expected edits. The change closed the P0 x64 and P0 aarch64 heap-field LOAD
+  residuals by preserving the `operator.new` allocation identity through stack
+  spill/reload and field-offset arithmetic.
+- Verified with `.venv/bin/python -m compileall -q analysis core frontend
+  query report tools`, `git diff --check`, focused no-cache TV2C606 proposed
+  regression PASS 7 / FAIL 1 / FP 0, and focused TV2C607 proposed regression
+  PASS 0 / FAIL 8 / FP 0. Stable suite10 tier0 remains PASS 104 / FAIL 0 /
+  FP 0, and stable suite09 remains PASS 476 / FAIL 12 / FP 0. The remaining
+  TV2C606 P1-x64 failure is intentionally left as a thunk-body extraction /
+  provider-design frontier: its helper JSON is only a thunk jump, so forcing it
+  through Ghidra prototype parameter semantics would violate the convention-free
+  core policy.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

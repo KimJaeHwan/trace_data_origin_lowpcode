@@ -2521,7 +2521,7 @@ class SliceGraphBuilder:
         )
 
     def _should_materialize_observed_memory(self, mem_key: str) -> bool:
-        return self._is_program_memory_key(mem_key) or ":stack:" in mem_key
+        return self._is_program_memory_key(mem_key) or ":stack:" in mem_key or mem_key.startswith("heap:allocsite:")
 
     def _observed_memory_load_expression(
         self,

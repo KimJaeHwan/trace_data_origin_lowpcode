@@ -875,6 +875,24 @@ in the phase-specific files.
   sources; the remaining residual is TV2C601 on P0 aarch64 and P1 x86/x64.
   Also verified `compileall -q analysis core frontend query report tools`.
 
+- Repaired the residual stronger proposed callback/frontier case without
+  naming case-local helpers or offsets. Boundary adapters may now expose
+  generic metadata source-pointer marker facts, while the interprocedural
+  summary layer consumes them only under strict observed-storage guards:
+  unresolved/computed or thunk-like calls, no existing source reachability, a
+  later sink-reaching memory field, a matching pre-call pointer range, and a
+  prior zero-initialized overlap. This covers optimized aggregate/vector
+  clearing before callback-table writes while preserving the no arg/no ret
+  core model and avoiding ABI parameter semantics.
+- Bumped the summary cache schema again for the metadata source-pointer marker
+  bridge. Rechecked all eight available cpp-like roots with the local runner:
+  120 checked case/root combinations, 0 failures, including TV2C601 with
+  `dfb_source_A.ret` and no forbidden sources on the residual P0 aarch64 and
+  P1 x86/x64 roots. `compileall -q analysis core frontend query report tools`
+  also passed. Full no-cache proposed regression
+  `tv2c601_full_nohardcode_regression` reports suite09 PASS 488 / FAIL 0 /
+  FP 0 and suite10 PASS 172 / FAIL 0 / FP 0.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

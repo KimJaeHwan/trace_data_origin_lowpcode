@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 from core.graph import FunctionGraph
@@ -19,6 +20,9 @@ class BoundaryProvider(Protocol):
     def choose_sink_target(self, function_graph: FunctionGraph, state: Any, instr: dict) -> ValueId | None:
         ...
 
+    def metadata_source_pointer_markers(self, program: Any) -> list[str]:
+        ...
+
 
 class NoBoundaryProvider:
     """Default boundary provider for ordinary binaries with no test oracle markers."""
@@ -36,6 +40,9 @@ class NoBoundaryProvider:
 
     def choose_sink_target(self, function_graph: FunctionGraph, state: Any, instr: dict) -> ValueId | None:
         return None
+
+    def metadata_source_pointer_markers(self, program: Any) -> list[str]:
+        return []
 
 
 class DataFlowBenchBoundaryProvider:
@@ -62,6 +69,27 @@ class DataFlowBenchBoundaryProvider:
 
     def source_label(self, name: str) -> str:
         return f"{name}.ret"
+
+    def metadata_source_pointer_markers(self, program: Any) -> list[str]:
+        indices = (getattr(program, "data", {}) or {}).get("indices") or {}
+        markers: list[tuple[int, str]] = []
+        for address, symbols in (indices.get("symbols_by_address") or {}).items():
+            for symbol in symbols or []:
+                name = str(symbol.get("name") or "")
+                if not name.startswith("PTR_"):
+                    continue
+                match = re.search(r"(dfb_source_[A-Za-z0-9_]+?)(?:_[0-9A-Fa-f]+)?$", name)
+                if match:
+                    try:
+                        sort_address = int(str(address), 16)
+                    except ValueError:
+                        sort_address = 0
+                    markers.append((sort_address, match.group(1)))
+        ordered: list[str] = []
+        for _, marker in sorted(markers):
+            if marker not in ordered:
+                ordered.append(marker)
+        return ordered
 
     def choose_sink_target(self, function_graph: FunctionGraph, state: Any, instr: dict) -> ValueId | None:
         if (

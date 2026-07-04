@@ -956,6 +956,19 @@ in the phase-specific files.
   proposed regression `post_stack_context_full_09_10`: suite09 PASS 488 /
   FAIL 0 / FP 0; suite10 PASS 188 / FAIL 0 / FP 0.
 
+- Fixed a stack-address precision loss seen in optimized ARMv7 fused field
+  access. `INT_ADD` / pointer arithmetic now applies proven constant-valued
+  operands to stack and heap pointer expressions before falling back to generic
+  register-offset modeling. This keeps post-indexed and fused address
+  sequences such as `stack_pointer_copy + constant_register` in concrete
+  observed stack storage instead of widening them to `unknown:register` memory,
+  without using ABI roles or overriding Low P-code with decompiler metadata.
+  Summary cache schema is now 51.
+- Verified with `.venv/bin/python -m compileall -q analysis core frontend
+  query report tools` and a focused eight-variant TV2C605 check over the
+  pre-regression P0/P1 x86, x64, armv7, and aarch64 inputs: PASS 8 / FAIL 0 /
+  FP 0, with actual source set `dfb_source_A.ret` for every variant.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

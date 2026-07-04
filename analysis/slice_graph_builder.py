@@ -1971,6 +1971,44 @@ class SliceGraphBuilder:
                 for node in inputs
                 if node is not None and state.expressions.get(node) is not None
             ]
+            pointer_const_exprs = [
+                expr
+                for _, expr in expr_pairs
+                if expr and expr.get("kind") == "const"
+            ]
+            pointer_const_expr = pointer_const_exprs[0] if pointer_const_exprs else None
+            pointer_const_value = int(pointer_const_expr.get("value") or 0) if pointer_const_expr else None
+            if opcode in {"PTRSUB"} and pointer_const_value is not None:
+                pointer_const_value = -pointer_const_value
+            if stack_expr and pointer_const_expr and stack_expr.get("kind") == "stack":
+                merged = dict(stack_expr)
+                merged["offset"] = self._normalize_stack_offset(
+                    int(merged.get("offset") or 0)
+                    + self._stack_offset_const_value(pointer_const_expr, pointer_const_value or 0)
+                )
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
+            if stack_expr and pointer_const_expr and stack_expr.get("kind") == "stack_set":
+                delta = self._stack_offset_const_value(pointer_const_expr, pointer_const_value or 0)
+                merged = dict(stack_expr)
+                offsets = [
+                    self._normalize_stack_offset(int(offset) + delta)
+                    for offset in (stack_expr.get("offsets") or [])
+                ]
+                merged["offsets"] = sorted(set(offsets))
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
+            if heap_expr and pointer_const_expr:
+                merged = dict(heap_expr)
+                merged["offset"] = int(merged.get("offset") or 0) + int(pointer_const_value or 0)
+                if bit_expr is not None:
+                    merged["bit_expr"] = bit_expr
+                merged["size_bits"] = output_bits
+                return merged
             register_expr = next(
                 (
                     expr
@@ -1996,34 +2034,6 @@ class SliceGraphBuilder:
             const_value = int(const_expr.get("value") or 0) if const_expr else None
             if opcode in {"PTRSUB"} and const_value is not None:
                 const_value = -const_value
-            if stack_expr and const_expr and stack_expr.get("kind") == "stack":
-                merged = dict(stack_expr)
-                merged["offset"] = self._normalize_stack_offset(
-                    int(merged.get("offset") or 0) + self._stack_offset_const_value(const_expr, const_value or 0)
-                )
-                if bit_expr is not None:
-                    merged["bit_expr"] = bit_expr
-                merged["size_bits"] = output_bits
-                return merged
-            if stack_expr and const_expr and stack_expr.get("kind") == "stack_set":
-                delta = self._stack_offset_const_value(const_expr, const_value or 0)
-                merged = dict(stack_expr)
-                offsets = [
-                    self._normalize_stack_offset(int(offset) + delta)
-                    for offset in (stack_expr.get("offsets") or [])
-                ]
-                merged["offsets"] = sorted(set(offsets))
-                if bit_expr is not None:
-                    merged["bit_expr"] = bit_expr
-                merged["size_bits"] = output_bits
-                return merged
-            if heap_expr and const_expr:
-                merged = dict(heap_expr)
-                merged["offset"] = int(merged.get("offset") or 0) + int(const_value or 0)
-                if bit_expr is not None:
-                    merged["bit_expr"] = bit_expr
-                merged["size_bits"] = output_bits
-                return merged
             if register_expr and const_value is not None:
                 if register_expr.get("kind") == "register_offset":
                     merged = dict(register_expr)

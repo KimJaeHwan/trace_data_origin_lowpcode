@@ -1016,6 +1016,36 @@ in the phase-specific files.
   through Ghidra prototype parameter semantics would violate the convention-free
   core policy.
 
+- Repaired loaded-pointer/container-alias scalar field propagation using
+  Low P-Code graph evidence only. Scalar pointer-field summary matching now
+  recognizes a destination pointer loaded from observed caller memory, resolves
+  that loaded pointer back to concrete stack/heap/register-offset storage, and
+  matches the callee's affine field write against the caller's sink-reaching
+  observed memory range. The affine recognizer also preserves observed memory
+  terms, follows dereferenced observed addresses, and handles narrowed
+  subpieces from same-instruction scaled index expressions. Summary cache
+  schema is now 54.
+- Focused checks close the P0/P1 TV2C607/TV2C608 loaded-pointer misses for
+  x86, armv7, and aarch64, plus P0 x64 and P1 x64 TV2C608, without adding
+  ABI argument/return semantics or helper/case/source-name special cases.
+  P1 x64 TV2C607 remains a thunk-body frontier because its helper Low P-Code
+  file is only a computed-jump thunk and the concrete target body is absent
+  from the scope; forcing the write from prototype metadata would violate the
+  convention-free core policy.
+
+- Repaired source-empty post-call memory redirects with a guarded summary-layer
+  preservation edge. When a later `CALL_POST_OBSERVED_MEMORY` node has no data
+  producer, reaches a sink, and its outgoing memory edge records that consumers
+  were redirected from exactly one overlapping source-bearing prior memory node,
+  the composed graph now preserves that prior source into the post-call memory
+  node. This is driven by existing low-pcode storage ranges and redirect
+  provenance, not ABI roles, helper names, expected labels, or fixed offsets.
+  Summary cache schema is now 55.
+- Focused cycle-02 checks now pass the reported P1 x86/armv7 TV2C603 misses and
+  the DebugGame TV2R001/TV2R201/TV2R301 misses. The P1 x64 TV2C606 and TV2C607
+  residuals remain the known thunk-body/provider frontier: their sink-reaching
+  post-memory nodes do not have a source-bearing prior redirect to preserve.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

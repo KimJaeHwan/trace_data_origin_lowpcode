@@ -499,6 +499,7 @@ class ProgramSliceGraphBuilder:
         self._inject_prior_call_context_memory_result_edges(program_graph)
         self._inject_redirected_prior_memory_source_edges(program_graph)
         self._inject_prior_observed_memory_overlap_edges(program_graph)
+        self._inject_late_narrow_thunk_scalar_post_memory_edges(program_graph, programs)
         self._record_sccs(program_graph)
         self._cache[cache_key] = program_graph
         return program_graph
@@ -3523,11 +3524,9 @@ class ProgramSliceGraphBuilder:
                 summary = summaries.get(resolved.name)
                 if summary is None:
                     continue
-                if not (
-                    self._is_observed_thunk_like_program(programs_by_name.get(resolved.name))
-                    or self._is_nonvararg_thunk_call(instr, resolved.name)
-                    or summary.observed_to_memory
-                ):
+                observed_thunk_like = self._is_observed_thunk_like_program(programs_by_name.get(resolved.name))
+                nonvararg_thunk = self._is_nonvararg_thunk_call(instr, resolved.name)
+                if not (observed_thunk_like or nonvararg_thunk or summary.observed_to_memory):
                     continue
                 source_nodes = self._single_label_scalar_pre_nodes(caller_graph, callsite_key)
                 if not source_nodes:
@@ -3603,6 +3602,17 @@ class ProgramSliceGraphBuilder:
                                 target_range.size,
                             )
                         ]
+                        if not supporting_sources and self._can_infer_narrow_thunk_scalar_field_write(
+                            caller_graph,
+                            observed_thunk_like or nonvararg_thunk,
+                            target_attrs,
+                            target_range,
+                        ):
+                            supporting_sources = self._latest_prepared_scalar_source_nodes(
+                                caller_graph,
+                                callsite_key,
+                                selected_sources,
+                            )
                         if not supporting_sources:
                             continue
                         supporting_labels = set().union(
@@ -3637,6 +3647,207 @@ class ProgramSliceGraphBuilder:
                                 relative_offset=str(relative),
                                 opcode="SUMMARY_OBSERVED_THUNK_SCALAR_POINTER_FIELD",
                             )
+
+    def _can_infer_narrow_thunk_scalar_field_write(
+        self,
+        caller_graph: FunctionGraph,
+        is_thunk_like: bool,
+        target_attrs: dict,
+        target_range: MemoryRange,
+    ) -> bool:
+        if not is_thunk_like:
+            return False
+        if target_attrs.get("opcode") != "CALL_POST_OBSERVED_MEMORY":
+            return False
+        if target_range.size <= 0:
+            return False
+        return target_range.size < caller_graph.architecture.pointer_size
+
+    def _latest_prepared_scalar_source_nodes(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        source_nodes: list[ValueId],
+    ) -> list[ValueId]:
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        ranked: list[tuple[int, ValueId, set[str]]] = []
+        for source_node in source_nodes:
+            labels = self._source_labels_reaching_node(caller_graph, source_node)
+            if len(labels) != 1:
+                continue
+            prepared_addr = self._latest_non_boundary_value_addr_before_call(
+                caller_graph,
+                source_node,
+                callsite_addr,
+            )
+            if prepared_addr <= 0:
+                continue
+            ranked.append((prepared_addr, source_node, labels))
+        if not ranked:
+            return []
+        latest_addr = max(addr for addr, _, _ in ranked)
+        latest = [(node, labels) for addr, node, labels in ranked if addr == latest_addr]
+        label_sets = {tuple(sorted(labels)) for _, labels in latest}
+        if len(label_sets) != 1:
+            return []
+        return [node for node, _ in latest]
+
+    def _latest_non_boundary_value_addr_before_call(
+        self,
+        caller_graph: FunctionGraph,
+        node: ValueId,
+        callsite_addr: int,
+    ) -> int:
+        graph = caller_graph.slice_graph
+        latest = 0
+        seen: set[ValueId] = set()
+        stack = [node]
+        while stack and len(seen) < 256:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            attrs = graph.nodes[current]
+            kind = attrs.get("kind")
+            if kind not in {"call_pre_storage", "source_boundary"}:
+                addr = parse_int(attrs.get("addr")) or 0
+                if 0 < addr < callsite_addr:
+                    latest = max(latest, addr)
+            for expression_node in self._value_nodes_in_expression(attrs.get("expression") or {}):
+                if expression_node not in seen and graph.has_node(expression_node):
+                    stack.append(expression_node)
+            for pred in graph.predecessors(current):
+                if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES:
+                    stack.append(pred)
+        return latest
+
+    def _inject_late_narrow_thunk_scalar_post_memory_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+    ) -> None:
+        programs_by_name = {program.function_name: program for program in programs}
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            composed_caller = self._composed_caller_graph(program_graph, caller_graph)
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                if not resolved.name or self._is_provider_boundary_call(instr):
+                    continue
+                observed_thunk_like = self._is_observed_thunk_like_program(programs_by_name.get(resolved.name))
+                nonvararg_thunk = self._is_nonvararg_thunk_call(instr, resolved.name)
+                if not (observed_thunk_like or nonvararg_thunk):
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                source_nodes = self._latest_prepared_scalar_source_nodes(
+                    composed_caller,
+                    callsite_key,
+                    self._single_label_scalar_pre_nodes(composed_caller, callsite_key),
+                )
+                if not source_nodes:
+                    continue
+                source_labels = set().union(
+                    *(self._source_labels_reaching_node(composed_caller, node) for node in source_nodes)
+                )
+                if len(source_labels) != 1:
+                    continue
+                pointer_nodes = self._concrete_non_source_pointer_pre_nodes(composed_caller, callsite_key)
+                if not pointer_nodes:
+                    continue
+                for target_node, target_attrs in list(program_graph.slice_graph.nodes(data=True)):
+                    if target_node.function != caller_graph.function_name:
+                        continue
+                    if target_attrs.get("opcode") != "CALL_POST_OBSERVED_MEMORY":
+                        continue
+                    if not target_node.key.startswith(f"{callsite_key}:post:"):
+                        continue
+                    if not self._node_reaches_sink_boundary(composed_caller, target_node):
+                        continue
+                    target_range = self._slice_memory_range_for_storage(target_attrs.get("storage") or "")
+                    if target_range is None:
+                        continue
+                    if not self._can_infer_narrow_thunk_scalar_field_write(
+                        composed_caller,
+                        True,
+                        target_attrs,
+                        target_range,
+                    ):
+                        continue
+                    loaded_pointer_matches = self._loaded_dest_pointer_matches_for_target(
+                        composed_caller,
+                        pointer_nodes,
+                        callsite_key,
+                        target_range,
+                    )
+                    matching_pointers = loaded_pointer_matches or self._dest_pointer_matches_for_target(
+                        composed_caller,
+                        pointer_nodes,
+                        target_range,
+                    )
+                    if not matching_pointers:
+                        continue
+                    relative_offsets = {relative for _, relative in matching_pointers}
+                    if len(relative_offsets) != 1:
+                        continue
+                    self._remove_stale_prior_edges_for_precise_call_overwrite(
+                        program_graph,
+                        target_node,
+                        source_labels,
+                    )
+                    relative = next(iter(relative_offsets))
+                    pointer_storage = caller_graph.slice_graph.nodes[matching_pointers[0][0]].get("observed_storage") or ""
+                    target_storage = target_attrs.get("storage") or ""
+                    for source_node in source_nodes:
+                        source_storage = caller_graph.slice_graph.nodes[source_node].get("observed_storage") or ""
+                        program_graph.slice_graph.add_edge(
+                            source_node,
+                            target_node,
+                            kind="call_out_mem",
+                            opcode="SUMMARY_OBSERVED_THUNK_NARROW_SCALAR_POST_MEMORY",
+                            summary_kind="summary_memory",
+                            callee=resolved.name,
+                            observed_address=pointer_storage,
+                            observed_input=source_storage,
+                            observed_output=target_storage,
+                            relative_offset=str(relative),
+                            confidence="late_materialized_narrow_scalar_call_overwrites_matching_pointer_field",
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            "call_out_mem",
+                            observed_address=pointer_storage,
+                            observed_input=source_storage,
+                            observed_output=target_storage,
+                            relative_offset=str(relative),
+                            opcode="SUMMARY_OBSERVED_THUNK_NARROW_SCALAR_POST_MEMORY",
+                        )
+
+    def _remove_stale_prior_edges_for_precise_call_overwrite(
+        self,
+        program_graph: ProgramSliceGraph,
+        target_node: ValueId,
+        source_labels: set[str],
+    ) -> None:
+        stale_opcodes = {
+            "OBSERVED_MEMORY_REDIRECTED_PRIOR_SOURCE",
+            "OBSERVED_MEMORY_PRIOR_OVERLAP",
+        }
+        for pred in list(program_graph.slice_graph.predecessors(target_node)):
+            edge_attrs = program_graph.slice_graph.edges[pred, target_node]
+            if edge_attrs.get("kind") not in DATA_SLICE_EDGES:
+                continue
+            if edge_attrs.get("opcode") not in stale_opcodes:
+                continue
+            pred_labels = self._source_labels_reaching_node(
+                self._composed_caller_graph(program_graph, program_graph.functions[target_node.function]),
+                pred,
+            )
+            if pred_labels and pred_labels <= source_labels:
+                continue
+            program_graph.slice_graph.remove_edge(pred, target_node)
 
     def _summary_supports_scalar_pointer_field_write(
         self,

@@ -7,6 +7,11 @@ in the phase-specific files.
 
 - Repaired part of the rebuilt cpp_like low-pcode regression without changing
   expected files, manifests, generated samples, or oracle data.
+- Added a narrow observed-thunk scalar field overwrite repair for late
+  `CALL_POST_OBSERVED_MEMORY` nodes. The repair requires sink reachability,
+  pointer/range agreement, and an unambiguous latest source-carrying scalar
+  preparation before the call; pointer-sized/container-wide writes stay out of
+  the fallback.
 - Added loader-level flow-target name annotations and kept DataFlowBench marker
   interpretation inside `BoundaryProvider`.
 - Fixed x86 external stack-slot binding for call summaries by deriving caller

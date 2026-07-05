@@ -1051,6 +1051,24 @@ in the phase-specific files.
   residuals remain the known thunk-body/provider frontier: their sink-reaching
   post-memory nodes do not have a source-bearing prior redirect to preserve.
 
+- Hardened the low-pcode evidence model for obfuscated Suite12 samples without
+  moving source/sink knowledge into the core. Prior observed-memory overlap now
+  accepts CFG-preceding stores so flattened state-machine blocks can connect
+  later-address stores back to sink-reaching loads, and it may seed call input
+  memory when the consumed call output is proven by graph use. Computed
+  callback wrappers now add observed-storage passthrough edges only from
+  low-pcode evidence: a callee contains a computed call, a non-target observed
+  input reaches the computed call input, and the computed-call output is
+  consumed by the caller. The fallback unresolved-boundary passthrough is now
+  source-aware: it does not add another source to a post-call storage once any
+  source label already reaches that post, preventing DFB call-context and
+  recursion false positives while still allowing opaque constant/control
+  predecessors in obfuscated code.
+- Verified with `.venv/bin/python -m compileall analysis` plus no-cache harness
+  gates: Suite09 `PASS 488 / FAIL 0 / FP 0`, Suite10 `PASS 152 / FAIL 0 / FP 0`,
+  and Suite12 `PASS 91 / FAIL 0 / FP 0`. No expected JSON, manifest, or sample
+  low-pcode files were edited.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

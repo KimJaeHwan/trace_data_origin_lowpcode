@@ -20,7 +20,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 55
+SUMMARY_CACHE_SCHEMA_VERSION = 57
 
 
 @dataclass
@@ -103,7 +103,7 @@ class MinimalAutoFunctionSummaryProvider:
                     input_storages = self._observed_storages_reaching(graph, node, function_graph)
                     if not input_storages:
                         continue
-                    if function_graph.architecture.name == "x86_64" and len(input_storages) != 1:
+                    if len(input_storages) != 1:
                         continue
                     for input_storage in input_storages:
                         summary.observed_to_primary.setdefault(input_storage, set()).update(
@@ -132,10 +132,34 @@ class MinimalAutoFunctionSummaryProvider:
         for sink_node in function_graph.sink_index.values():
             for address_storage in self._observed_memory_address_storages_reaching(graph, sink_node, function_graph):
                 summary.observed_memory_to_sink.setdefault(address_storage, set()).add(sink_node)
+        self._drop_ambiguous_primary_output_summaries(summary)
         return summary
 
     def _is_program_memory_storage(self, storage: str) -> bool:
         return storage.startswith("mem:global:") or storage.startswith("mem:unknown:unique:")
+
+    def _drop_ambiguous_primary_output_summaries(self, summary: AutoFunctionSummary) -> None:
+        self._drop_ambiguous_output_mappings(summary.observed_to_primary)
+        self._drop_ambiguous_output_mappings(summary.observed_memory_to_primary)
+
+    def _drop_ambiguous_output_mappings(self, mappings: dict[str, set[str]]) -> None:
+        inputs_by_output: dict[str, set[str]] = {}
+        for input_storage, output_storages in mappings.items():
+            for output_storage in output_storages:
+                inputs_by_output.setdefault(output_storage, set()).add(input_storage)
+
+        ambiguous_outputs = {
+            output_storage
+            for output_storage, input_storages in inputs_by_output.items()
+            if len(input_storages) > 1
+        }
+        if not ambiguous_outputs:
+            return
+
+        for input_storage in list(mappings):
+            mappings[input_storage].difference_update(ambiguous_outputs)
+            if not mappings[input_storage]:
+                del mappings[input_storage]
 
     def _is_unknown_register_memory_storage(self, storage: str) -> bool:
         return storage.startswith("mem:unknown:register:")
@@ -502,7 +526,9 @@ class ProgramSliceGraphBuilder:
         self._inject_prior_observed_memory_overlap_edges(program_graph)
         self._inject_observed_callback_wrapper_passthrough_edges(program_graph, programs)
         self._inject_late_narrow_thunk_scalar_post_memory_edges(program_graph, programs)
+        self._prune_ambiguous_stack_phi_backedges(program_graph)
         self._record_sccs(program_graph)
+        self._inject_prior_observed_memory_overlap_edges(program_graph)
         self._cache[cache_key] = program_graph
         return program_graph
 
@@ -2251,7 +2277,57 @@ class ProgramSliceGraphBuilder:
             return False
         if source_key not in caller_graph.cfg or target_key not in caller_graph.cfg:
             return False
-        return nx.has_path(caller_graph.cfg, source_key, target_key)
+        if not nx.has_path(caller_graph.cfg, source_key, target_key):
+            return False
+        if (
+            source_addr > target_addr
+            and nx.has_path(caller_graph.cfg, target_key, source_key)
+            and not self._is_same_location_memory_loop_candidate(source_attrs, target_attrs)
+        ):
+            return False
+        return True
+
+    def _is_same_location_memory_loop_candidate(self, source_attrs: dict, target_attrs: dict) -> bool:
+        if target_attrs.get("kind") not in {"observed_memory", "phi"}:
+            return False
+        if source_attrs.get("opcode") not in {"PHI", "STORE_VAL"}:
+            return False
+        source_range = self._slice_memory_range_for_storage(source_attrs.get("storage") or "")
+        target_range = self._slice_memory_range_for_storage(target_attrs.get("storage") or "")
+        if source_range is None or target_range is None:
+            return False
+        return source_range.identity == target_range.identity and source_range.overlaps(target_range)
+
+    def _prune_ambiguous_stack_phi_backedges(self, program_graph: ProgramSliceGraph) -> None:
+        for caller_graph in program_graph.functions.values():
+            composed_caller = self._composed_caller_graph(program_graph, caller_graph)
+            for source, target, edge_attrs in list(program_graph.slice_graph.edges(data=True)):
+                if source.function != caller_graph.function_name or target.function != caller_graph.function_name:
+                    continue
+                if edge_attrs.get("kind") not in DATA_SLICE_EDGES or edge_attrs.get("opcode") != "PHI":
+                    continue
+                target_attrs = program_graph.slice_graph.nodes[target]
+                if target_attrs.get("kind") != "phi":
+                    continue
+                source_attrs = program_graph.slice_graph.nodes[source]
+                source_range = self._slice_memory_range_for_storage(source_attrs.get("storage") or "")
+                target_range = self._slice_memory_range_for_storage(target_attrs.get("storage") or "")
+                if source_range is None or target_range is None or not source_range.overlaps(target_range):
+                    continue
+                if ":stack:" not in source_range.identity or ":stack:" not in target_range.identity:
+                    continue
+                source_addr = parse_int(source_attrs.get("addr")) or 0
+                target_addr = parse_int(target_attrs.get("addr")) or 0
+                if not source_addr or not target_addr or source_addr <= target_addr:
+                    continue
+                if not self._source_labels_reaching_node(composed_caller, source):
+                    continue
+                if not self._stored_value_has_ambiguous_phi_source(composed_caller, source):
+                    continue
+                program_graph.slice_graph.remove_edge(source, target)
+                local_graph = caller_graph.slice_graph
+                if local_graph.has_edge(source, target):
+                    local_graph.remove_edge(source, target)
 
     def _inject_prior_observed_memory_overlap_edges(self, program_graph: ProgramSliceGraph) -> None:
         for caller_graph in program_graph.functions.values():
@@ -2272,9 +2348,12 @@ class ProgramSliceGraphBuilder:
             for target_node, target_attrs in list(program_graph.slice_graph.nodes(data=True)):
                 if target_node.function != caller_graph.function_name:
                     continue
-                if target_attrs.get("kind") != "observed_memory":
+                if target_attrs.get("kind") not in {"observed_memory", "phi"}:
                     continue
-                if self._has_data_predecessor(composed_caller, target_node):
+                if target_attrs.get("kind") == "observed_memory" and self._has_data_predecessor(
+                    composed_caller,
+                    target_node,
+                ):
                     continue
                 if self._source_labels_reaching_node(composed_caller, target_node):
                     continue
@@ -2303,6 +2382,8 @@ class ProgramSliceGraphBuilder:
                     if not self._memory_node_may_precede_target_by_flow(caller_graph, source_attrs, target_attrs):
                         continue
                     source_addr = parse_int(source_attrs.get("addr")) or 0
+                    if self._stored_value_has_ambiguous_phi_source(composed_caller, source_node):
+                        continue
                     if source_range.overlaps(target_range):
                         narrowed = self.function_builder._narrow_memory_node_to_range(
                             composed_caller,
@@ -2477,6 +2558,8 @@ class ProgramSliceGraphBuilder:
                     if prior_range is None or not prior_range.overlaps(target_range):
                         continue
                     if not self._memory_node_may_precede_target_by_flow(caller_graph, prior_attrs, target_attrs):
+                        continue
+                    if self._data_reaches_node(composed_caller, target_node, prior_node):
                         continue
                     labels = self._source_labels_reaching_node(composed_caller, prior_node)
                     if not labels:
@@ -4564,6 +4647,7 @@ class ProgramSliceGraphBuilder:
                     instr,
                     callsite_key,
                     prefer_registers=not (resolved.name and resolved.name in program_graph.functions),
+                    allow_memory_latest=not resolved.name,
                 )
                 if not input_nodes:
                     continue
@@ -4607,6 +4691,7 @@ class ProgramSliceGraphBuilder:
         callsite_key: str,
         *,
         prefer_registers: bool,
+        allow_memory_latest: bool = False,
     ) -> list[ValueId]:
         input_nodes = self._source_carrying_pre_nodes(
             caller_graph,
@@ -4615,6 +4700,17 @@ class ProgramSliceGraphBuilder:
         )
         if not input_nodes:
             return input_nodes
+        all_labels = set().union(
+            *(self._source_labels_reaching_node(caller_graph, node) for node in input_nodes)
+        )
+        if len(all_labels) != 1 and (
+            not allow_memory_latest
+            or any(
+                (caller_graph.slice_graph.nodes[node].get("observed_storage") or "").startswith("reg:")
+                for node in input_nodes
+            )
+        ):
+            return []
         latest_addr = None
         latest_labels: set[str] = set()
         labels_by_node: dict[ValueId, dict[str, int]] = {}
@@ -4630,7 +4726,7 @@ class ProgramSliceGraphBuilder:
             elif node_latest == latest_addr:
                 latest_labels.update(label for label, addr in label_addrs.items() if addr == node_latest)
         if latest_addr is None or len(latest_labels) != 1:
-            return input_nodes
+            return []
         latest_label = next(iter(latest_labels))
         narrowed = [
             node
@@ -4950,6 +5046,67 @@ class ProgramSliceGraphBuilder:
     def _has_data_predecessor(self, caller_graph: FunctionGraph, node: ValueId) -> bool:
         graph = caller_graph.slice_graph
         return any(graph.edges[pred, node].get("kind") in DATA_SLICE_EDGES for pred in graph.predecessors(node))
+
+    def _data_reaches_node(
+        self,
+        caller_graph: FunctionGraph,
+        source: ValueId,
+        target: ValueId,
+        *,
+        limit: int = 512,
+    ) -> bool:
+        graph = caller_graph.slice_graph
+        if source not in graph or target not in graph:
+            return False
+        seen: set[ValueId] = set()
+        stack = [source]
+        while stack and len(seen) < limit:
+            current = stack.pop()
+            if current in seen:
+                continue
+            if current == target:
+                return True
+            seen.add(current)
+            for successor in graph.successors(current):
+                if graph.edges[current, successor].get("kind") in DATA_SLICE_EDGES:
+                    stack.append(successor)
+        return False
+
+    def _stored_value_has_ambiguous_phi_source(
+        self,
+        caller_graph: FunctionGraph,
+        memory_node: ValueId,
+        *,
+        limit: int = 128,
+    ) -> bool:
+        graph = caller_graph.slice_graph
+        if memory_node not in graph:
+            return False
+        roots = [
+            pred
+            for pred in graph.predecessors(memory_node)
+            if graph.edges[pred, memory_node].get("kind") in DATA_SLICE_EDGES
+        ]
+        seen: set[ValueId] = set()
+        stack = roots
+        while stack and len(seen) < limit:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            attrs = graph.nodes[current]
+            if attrs.get("kind") == "phi" or attrs.get("opcode") in {"PHI", "MULTIEQUAL"}:
+                label_sets = {
+                    tuple(sorted(self._source_labels_reaching_node(caller_graph, pred)))
+                    for pred in graph.predecessors(current)
+                    if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES
+                }
+                if any(label_sets) and len(label_sets) > 1:
+                    return True
+            for pred in graph.predecessors(current):
+                if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES:
+                    stack.append(pred)
+        return False
 
     def _has_non_summary_data_predecessor(self, caller_graph: FunctionGraph, node: ValueId) -> bool:
         graph = caller_graph.slice_graph

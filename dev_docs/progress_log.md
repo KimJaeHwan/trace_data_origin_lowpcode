@@ -3,6 +3,43 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-05
+
+- Added a final same-location memory overlap backfill for flattened state
+  machines after graph finalization. The repair is still storage/range based:
+  it accepts CFG cycles only when producer and target refer to the same memory
+  location, rejects source-bearing targets, and keeps ambiguous stored-PHI
+  sources out of the slice.
+- Extended the prior-overlap target set from source-empty observed memory loads
+  to source-empty memory PHIs that already reach a sink or consumed call-pre
+  storage. This restores the reported DFB201 A+C stack-PHI flow across x86_64,
+  AArch64, and ARMv7 without adding ABI argument/return semantics.
+- Fresh-cache probes now have DFB201 passing for PE_x64, linux_amd64,
+  linux_arm64, and linux_arm_v7, and restore OBF001/OBF006/OBF007 in
+  OLLVM_FLA_SUB_SPLIT while keeping the focused OLLVM OBF008-OBF011 rows free
+  of forbidden B/C labels. OBF008/009/010/011 remain missing-source frontier
+  cases where broad memory overlap would recreate the Suite12 false positives.
+- Hardened Suite12 OLLVM summary composition without introducing ABI
+  argument/return semantics or marker-name special cases. Unresolved boundary
+  passthrough keeps the strict single-label rule for register candidates and
+  named internal helpers, while allowing unresolved computed calls with only
+  memory candidates to use the existing latest-source narrowing. This restores
+  DFB072 without reopening OLLVM register-ambiguous false positives.
+- Pruned flattened stack-PHI backedges only when a later stack store feeds an
+  earlier stack PHI and the stored value reaches a source through an ambiguous
+  PHI. This removes the reported OBF008 false positives without suppressing
+  direct stack stores or source-equivalent PHIs.
+- Added `INT_XOR` bit-expression cancellation while preserving the existing
+  `x ^ x` zero-idiom kill, so obfuscation arithmetic can cancel repeated terms
+  instead of reintroducing stale source edges.
+- Bumped the summary cache schema to 57 for the changed summary facts and graph
+  repair behavior.
+- Focused fresh-cache diagnostic over DFB072 plus the reported Suite12 OLLVM
+  failures now has DFB072 passing and no forbidden labels in the OLLVM rows;
+  remaining OLLVM rows are missing-source frontier cases.
+- Verified `.venv/bin/python -m py_compile analysis/slice_graph_builder.py
+  analysis/interprocedural_summary.py`.
+
 ## 2026-07-03
 
 - Repaired part of the rebuilt cpp_like low-pcode regression without changing
@@ -1068,6 +1105,28 @@ in the phase-specific files.
   gates: Suite09 `PASS 488 / FAIL 0 / FP 0`, Suite10 `PASS 152 / FAIL 0 / FP 0`,
   and Suite12 `PASS 91 / FAIL 0 / FP 0`. No expected JSON, manifest, or sample
   low-pcode files were edited.
+
+- Re-audited Suite12 OBF after suspecting the OLLVM oracle/extraction inputs.
+  The OBF010 case source/oracle was corrected in `tdo_testbed_Obf`: the helper
+  index now resolves to lane1 so the sink is intentionally `dfb_source_A.ret`
+  rather than the killed lane2 constant. The low-pcode dumper was also updated
+  to include address-taken function pointer targets from DATA references even
+  when Ghidra does not classify the reference as a read, closing missing helper
+  extraction for `obf009_pick_left`, `obf009_pick_right`, and
+  `obf011_payload_path` across all Suite12 profiles.
+- Verified the corrected input baseline with `python3 -m py_compile` for
+  `analysis/interprocedural_summary.py`, `analysis/slice_graph_builder.py`, and
+  `scripts/lowpcode_json_dumper.py`; `python3 -m harness.design_lint
+  --engine-repo /Volumes/DO/00_gitProject/01_tdo/lowpcode_data_origin`;
+  Suite09 quick cached harness `PASS 488 / FAIL 0 / FP 0`; and a fresh Suite12
+  rebuild/extract/regression over all current profiles. The corrected Suite12
+  frontier is no longer a missing-helper issue: P0 is `PASS 8 / FAIL 3 / FP 1`,
+  P1 `PASS 9 / FAIL 2 / FP 1`, P2 `PASS 7 / FAIL 4 / FP 0`, OLLVM_ALL
+  `PASS 7 / FAIL 4 / FP 2`, and the other OLLVM profiles retain OBF006/008/009/
+  010/011 recall or forbidden-source precision residuals. Next Suite12 engine
+  work should repair false positives first (OBF008/009/011 forbidden B) and then
+  improve missing-source recall, without moving test-marker knowledge into the
+  core or relying on ABI calling-convention roles.
 
 ## Current Focus
 

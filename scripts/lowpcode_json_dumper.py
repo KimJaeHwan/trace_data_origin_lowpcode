@@ -13,7 +13,7 @@ from ghidra.util.task import TaskMonitor
 
 
 DUMPER_SCHEMA_VERSION = 6
-DUMPER_NAME = "lowpcode_json_dumper_v6_reachable_function_pointers"
+DUMPER_NAME = "lowpcode_json_dumper_v7_address_taken_function_pointers"
 REACHABLE_HELPER_MAX_DEPTH = 8
 
 
@@ -756,6 +756,19 @@ def resolve_function_pointer_ref_targets(ref, function_name_index):
     if data_addr is None:
         return targets
 
+    direct_func = safe_call(None, getFunctionAt, data_addr)
+    if direct_func is None:
+        direct_func = safe_call(None, getFunctionContaining, data_addr)
+    key = function_key(direct_func)
+    if direct_func is not None and key not in seen:
+        seen.add(key)
+        targets.append({
+            "to_function": direct_func,
+            "reference_kind": "data_function_pointer_direct_address",
+            "via_symbol": None,
+            "data_addr": safe_str(data_addr),
+        })
+
     for symbol_name in get_symbol_names_at_address(data_addr):
         target_name = function_name_from_pointer_symbol(symbol_name, data_addr, function_name_index)
         target_func = function_name_index.get(target_name) if target_name else None
@@ -859,7 +872,7 @@ def resolve_called_functions(func, function_name_index):
                         "via_symbol": None,
                         "data_addr": None,
                     })
-                elif ref_type.isData() and ref_type.isRead():
+                elif ref_type.isData():
                     targets.extend(resolve_function_pointer_ref_targets(ref, function_name_index))
 
                 for target in targets:

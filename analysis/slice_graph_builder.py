@@ -338,6 +338,9 @@ class SliceGraphBuilder:
         if opcode == "INT_AND":
             self._process_int_and(fg, state, instr, pcode)
             return
+        if opcode == "INT_XOR":
+            self._process_int_xor(fg, state, instr, pcode)
+            return
         if opcode in {"INT_LEFT", "INT_RIGHT", "INT_SRIGHT"}:
             self._process_shift(fg, state, instr, pcode)
             return
@@ -568,6 +571,30 @@ class SliceGraphBuilder:
             for source in input_nodes:
                 if source is not None:
                     fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_AND")
+        state.expressions[out_node] = expr
+
+    def _process_int_xor(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
+        inputs = pcode.get("inputs", [])
+        output = pcode.get("output")
+        if len(inputs) < 2 or output is None:
+            return
+
+        input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
+        out_node = self._new_value(fg, state, output, instr, "INT_XOR")
+        zero_expr = self._zero_idiom_expression("INT_XOR", input_nodes, output)
+        if zero_expr is not None:
+            state.expressions[out_node] = zero_expr
+            return
+        expr = self._expression_for(fg, "INT_XOR", input_nodes, state, output)
+        bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
+        bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
+        if bit_sources:
+            for source in bit_sources:
+                fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_XOR_CANCELLED")
+        else:
+            for source in input_nodes:
+                if source is not None:
+                    fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_XOR")
         state.expressions[out_node] = expr
 
     def _process_shift(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
@@ -1046,6 +1073,11 @@ class SliceGraphBuilder:
                     )
             return sources
         if op == "or":
+            sources: list[tuple[ValueId, int, int]] = []
+            for value in bit_expr.get("values") or []:
+                sources = self._merge_source_ranges(sources, self._resolve_bit_source_ranges(value, start, size))
+            return sources
+        if op == "xor":
             sources: list[tuple[ValueId, int, int]] = []
             for value in bit_expr.get("values") or []:
                 sources = self._merge_source_ranges(sources, self._resolve_bit_source_ranges(value, start, size))
@@ -2203,6 +2235,8 @@ class SliceGraphBuilder:
         if opcode == "INT_OR" and len(input_exprs) >= 2:
             values = [expr for expr in input_exprs[:2] if expr is not None]
             return {"op": "or", "values": values} if values else None
+        if opcode == "INT_XOR" and len(input_exprs) >= 2:
+            return self._xor_bit_expression(input_exprs[:2], output_bits)
         if opcode == "INT_LEFT" and len(inputs) >= 2 and first is not None:
             amount = self._const_expr_value(state.expressions.get(inputs[1]), output_bits)
             if amount is not None:
@@ -2213,6 +2247,71 @@ class SliceGraphBuilder:
                 op = "shift_sright" if opcode == "INT_SRIGHT" else "shift_right"
                 return {"op": op, "value": first, "amount": amount}
         return None
+
+    def _xor_bit_expression(self, input_exprs: list[dict | None], output_bits: int) -> dict | None:
+        terms: dict[str, tuple[int, dict]] = {}
+        const_value = 0
+        for expr in input_exprs:
+            if expr is None:
+                continue
+            for term in self._flatten_xor_terms(expr):
+                if term.get("op") == "const":
+                    const_value ^= int(term.get("value") or 0)
+                    continue
+                key = self._bit_expr_identity(term)
+                count, original = terms.get(key, (0, term))
+                terms[key] = (count + 1, original)
+
+        remaining = [term for count, term in terms.values() if count % 2 == 1]
+        if const_value:
+            remaining.append({"op": "const", "value": const_value, "size": output_bits})
+        if not remaining:
+            return {"op": "const", "value": 0, "size": output_bits}
+        if len(remaining) == 1:
+            return remaining[0]
+        return {"op": "xor", "values": remaining}
+
+    def _flatten_xor_terms(self, expr: dict) -> list[dict]:
+        if expr.get("op") == "xor":
+            terms: list[dict] = []
+            for value in expr.get("values") or []:
+                if isinstance(value, dict):
+                    terms.extend(self._flatten_xor_terms(value))
+            return terms
+        return [expr]
+
+    def _bit_expr_identity(self, expr: dict) -> str:
+        op = expr.get("op")
+        if op == "leaf":
+            node = expr.get("node")
+            node_id = node.stable_id() if hasattr(node, "stable_id") else repr(node)
+            return f"leaf:{node_id}:{expr.get('size')}"
+        if op == "const":
+            return f"const:{expr.get('value')}:{expr.get('size')}"
+        if op in {"zext", "sext"}:
+            value = expr.get("value")
+            inner = self._bit_expr_identity(value) if isinstance(value, dict) else repr(value)
+            return f"{op}:{expr.get('from_size')}:{inner}"
+        if op == "and":
+            value = expr.get("value")
+            inner = self._bit_expr_identity(value) if isinstance(value, dict) else repr(value)
+            return f"and:{expr.get('mask')}:{inner}"
+        if op in {"shift_left", "shift_right", "shift_sright"}:
+            value = expr.get("value")
+            inner = self._bit_expr_identity(value) if isinstance(value, dict) else repr(value)
+            return f"{op}:{expr.get('amount')}:{inner}"
+        if op in {"or", "xor"}:
+            children = [
+                self._bit_expr_identity(value)
+                for value in (expr.get("values") or [])
+                if isinstance(value, dict)
+            ]
+            return f"{op}:{'|'.join(sorted(children))}"
+        if op == "subpiece":
+            value = expr.get("value")
+            inner = self._bit_expr_identity(value) if isinstance(value, dict) else repr(value)
+            return f"subpiece:{expr.get('offset')}:{inner}"
+        return repr(expr)
 
     def _bit_size_for_node(self, node: ValueId | None, state: BuildState) -> int:
         if node is None:

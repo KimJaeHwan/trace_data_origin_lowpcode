@@ -4,6 +4,8 @@ __pycache__/
 output/
 .venv/
 venv/
+.ghidra_config/
+.ghidra_cache/
 samples/v7_batch/reports/
 samples/low_pcode/
 samples/low_pcode_probes/

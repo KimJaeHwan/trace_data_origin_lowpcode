@@ -101,6 +101,27 @@ def build_command(
     return command
 
 
+def build_ghidra_env(repo_root: Path, xdg_config_home: str | None, xdg_cache_home: str | None) -> dict[str, str]:
+    env = os.environ.copy()
+    config_home = Path(
+        xdg_config_home
+        or os.environ.get("GHIDRA_XDG_CONFIG_HOME")
+        or os.environ.get("XDG_CONFIG_HOME")
+        or repo_root / ".ghidra_config"
+    ).expanduser().resolve()
+    cache_home = Path(
+        xdg_cache_home
+        or os.environ.get("GHIDRA_XDG_CACHE_HOME")
+        or os.environ.get("XDG_CACHE_HOME")
+        or repo_root / ".ghidra_cache"
+    ).expanduser().resolve()
+    config_home.mkdir(parents=True, exist_ok=True)
+    cache_home.mkdir(parents=True, exist_ok=True)
+    env["XDG_CONFIG_HOME"] = str(config_home)
+    env["XDG_CACHE_HOME"] = str(cache_home)
+    return env
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run Ghidra headless low-pcode extraction for every .gpr project under a root."
@@ -112,6 +133,8 @@ def main() -> int:
     parser.add_argument("--program", help="Optional Ghidra project program path/name to pass to -process.")
     parser.add_argument("--root-prefix", default="case_DFB")
     parser.add_argument("--max-depth", type=int, default=8)
+    parser.add_argument("--xdg-config-home", help="Ghidra config root. Defaults to repo-local .ghidra_config.")
+    parser.add_argument("--xdg-cache-home", help="Ghidra cache root. Defaults to repo-local .ghidra_cache.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("script_args", nargs=argparse.REMAINDER, help="Extra args passed to lowpcode_json_dumper.py")
     args = parser.parse_args()
@@ -122,6 +145,7 @@ def main() -> int:
     project_root = Path(args.project_root).expanduser().resolve()
     analyze_headless = find_analyze_headless(args.analyze_headless)
     projects = find_projects(project_root, args.project)
+    ghidra_env = build_ghidra_env(repo_root, args.xdg_config_home, args.xdg_cache_home)
     extra_script_args = list(args.script_args)
     if extra_script_args and extra_script_args[0] == "--":
         extra_script_args = extra_script_args[1:]
@@ -132,6 +156,8 @@ def main() -> int:
     print(f"[*] analyzeHeadless: {analyze_headless}")
     print(f"[*] project count: {len(projects)}")
     print(f"[*] output root: {output_root}")
+    print(f"[*] XDG_CONFIG_HOME: {ghidra_env['XDG_CONFIG_HOME']}")
+    print(f"[*] XDG_CACHE_HOME: {ghidra_env['XDG_CACHE_HOME']}")
     output_root.mkdir(parents=True, exist_ok=True)
 
     for project_file in projects:
@@ -148,7 +174,7 @@ def main() -> int:
         print("[*] running:", " ".join(command))
         if args.dry_run:
             continue
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, env=ghidra_env)
 
     return 0
 

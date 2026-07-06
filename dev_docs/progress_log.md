@@ -1128,6 +1128,32 @@ in the phase-specific files.
   improve missing-source recall, without moving test-marker knowledge into the
   core or relying on ABI calling-convention roles.
 
+- Repaired several Suite12 OLLVM residuals in the summary/boundary layer while
+  keeping Low P-code storage as the source of truth. Function summaries now
+  prefer pointer-sized general registers when narrowing observed memory
+  addresses, drop addressless memory-output fallbacks once concrete address
+  outputs exist for the same input, and match post-call memory candidates by
+  requested byte-range overlap. Computed callback wrapper passthrough now
+  connects overlapping post-register aliases and can use a single-label memory
+  value reached through a non-source pointer input. Resolved computed callees
+  are filtered to concrete observed memory for unresolved-boundary fallback, so
+  unknown-register decoy paths are not promoted as broad call returns.
+- Added caller-side support for nested indexed pointer writes proven by callee
+  affine address terms. When a summary output names memory reached through a
+  loaded pointer plus a constant caller index, the caller resolves the concrete
+  range from the observed pointer snapshot and materializes the corresponding
+  post-call memory node if the later pass has not created it yet. This repairs
+  fused callback/container layouts without introducing ABI parameter or return
+  semantics.
+- Focused validation now keeps the Suite09 DFB guard green for
+  DFB051/DFB075/DFB101 across sampled roots, keeps the armv7/P1 cpp-like
+  callback family green (`48/48` with data+control slices, including both
+  TV2C607 variants), and improves the compact Suite12 OBF sweep to `PASS 117 /
+  FAIL 26 / FP 5` against the verified `PASS 109 / FAIL 34 / FP 5` baseline.
+  Remaining OBF residuals are concentrated in OBF008 stack-slot reconstruction,
+  split/FLA OBF009/OBF010 missing A, and OBF011 decoy/payload precision.
+  Summary cache schema is now 62.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

@@ -20,7 +20,7 @@ from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 57
+SUMMARY_CACHE_SCHEMA_VERSION = 62
 
 
 @dataclass
@@ -57,7 +57,10 @@ class MinimalAutoFunctionSummaryProvider:
                         for alias_storage in self._same_canonical_storages(observed_storage, primary_storages):
                             summary.source_to_primary.setdefault(alias_storage, set()).add(node)
             if self._is_observed_pointer_memory_storage(storage):
-                address_storages = self._observed_address_storages_reaching(graph, node, function_graph)
+                address_storages = self._narrow_memory_address_storages(
+                    self._observed_address_storages_reaching(graph, node, function_graph),
+                    function_graph,
+                )
                 source_nodes = self._source_boundaries_reaching(graph, node)
                 if source_nodes:
                     for address_storage in address_storages or {""}:
@@ -66,9 +69,12 @@ class MinimalAutoFunctionSummaryProvider:
                         )
                 if address_storages:
                     if attrs.get("opcode") != "OBSERVED_MEMORY":
-                        memory_input_storages = self._observed_memory_address_storages_reaching(
-                            graph,
-                            node,
+                        memory_input_storages = self._narrow_memory_address_storages(
+                            self._observed_memory_address_storages_reaching(
+                                graph,
+                                node,
+                                function_graph,
+                            ),
                             function_graph,
                         )
                         for input_address_storage in memory_input_storages:
@@ -91,9 +97,12 @@ class MinimalAutoFunctionSummaryProvider:
                     node_addr = parse_int(attrs.get("addr")) or 0
                     if canonical and node_addr < latest_primary_addr.get(canonical, node_addr):
                         continue
-                    memory_address_storages = self._observed_memory_address_storages_reaching(
-                        graph,
-                        node,
+                    memory_address_storages = self._narrow_memory_address_storages(
+                        self._observed_memory_address_storages_reaching(
+                            graph,
+                            node,
+                            function_graph,
+                        ),
                         function_graph,
                     )
                     for address_storage in memory_address_storages:
@@ -110,7 +119,10 @@ class MinimalAutoFunctionSummaryProvider:
                             self._same_canonical_storages(storage, primary_storages) or {storage}
                         )
                 if self._is_observed_pointer_memory_storage(storage):
-                    address_storages = self._observed_address_storages_reaching(graph, node, function_graph) or {""}
+                    address_storages = self._narrow_memory_address_storages(
+                        self._observed_address_storages_reaching(graph, node, function_graph),
+                        function_graph,
+                    ) or {""}
                     for input_storage in self._observed_storages_reaching(graph, node, function_graph):
                         for address_storage in address_storages:
                             summary.observed_to_memory.setdefault(input_storage, {}).setdefault(address_storage, set()).add(
@@ -132,15 +144,70 @@ class MinimalAutoFunctionSummaryProvider:
         for sink_node in function_graph.sink_index.values():
             for address_storage in self._observed_memory_address_storages_reaching(graph, sink_node, function_graph):
                 summary.observed_memory_to_sink.setdefault(address_storage, set()).add(sink_node)
+        self._drop_shadowed_addressless_memory_outputs(summary.observed_to_memory)
+        self._drop_shadowed_addressless_memory_outputs(summary.source_to_memory)
         self._drop_ambiguous_primary_output_summaries(summary)
         return summary
 
     def _is_program_memory_storage(self, storage: str) -> bool:
         return storage.startswith("mem:global:") or storage.startswith("mem:unknown:unique:")
 
+    def _narrow_memory_address_storages(
+        self,
+        storages: set[str],
+        function_graph: FunctionGraph,
+    ) -> set[str]:
+        pointer_bits = function_graph.architecture.pointer_size * 8
+        pointer_registers = {
+            storage
+            for storage in storages
+            if self._is_pointer_sized_general_register_storage(function_graph, storage, pointer_bits)
+        }
+        if pointer_registers:
+            return pointer_registers
+        return storages
+
+    def _is_pointer_sized_general_register_storage(
+        self,
+        function_graph: FunctionGraph,
+        storage: str,
+        pointer_bits: int,
+    ) -> bool:
+        parts = storage.split(":")
+        if len(parts) < 4 or parts[0] != "reg":
+            return False
+        canonical = parts[1]
+        try:
+            start = int(parts[2], 0)
+            size = int(parts[3], 0)
+        except ValueError:
+            return False
+        return start == 0 and size == pointer_bits and function_graph.architecture.is_general_register(canonical)
+
     def _drop_ambiguous_primary_output_summaries(self, summary: AutoFunctionSummary) -> None:
         self._drop_ambiguous_output_mappings(summary.observed_to_primary)
         self._drop_ambiguous_output_mappings(summary.observed_memory_to_primary)
+
+    def _drop_shadowed_addressless_memory_outputs(self, mappings: dict[str, dict[str, set]]) -> None:
+        for input_storage in list(mappings):
+            outputs_by_address = mappings[input_storage]
+            addressless_outputs = outputs_by_address.get("")
+            if not addressless_outputs:
+                continue
+            concrete_outputs = set().union(
+                *(
+                    output_memories
+                    for address_storage, output_memories in outputs_by_address.items()
+                    if address_storage
+                )
+            )
+            if not concrete_outputs:
+                continue
+            addressless_outputs.difference_update(concrete_outputs)
+            if not addressless_outputs:
+                del outputs_by_address[""]
+            if not outputs_by_address:
+                del mappings[input_storage]
 
     def _drop_ambiguous_output_mappings(self, mappings: dict[str, set[str]]) -> None:
         inputs_by_output: dict[str, set[str]] = {}
@@ -515,6 +582,7 @@ class ProgramSliceGraphBuilder:
         self._inject_observed_thunk_pointer_memory_copy_edges(program_graph, programs)
         self._inject_unresolved_boundary_passthrough_edges(program_graph, programs, summaries)
         self._inject_observed_callback_wrapper_passthrough_edges(program_graph, programs)
+        self._inject_resolved_computed_scalar_passthrough_edges(program_graph, programs, summaries)
         self._inject_observed_pointer_passthrough_edges(program_graph, programs)
         self._inject_observed_runtime_register_restore_edges(program_graph, programs)
         self._inject_observed_thread_callback_sink_edges(program_graph, programs)
@@ -525,6 +593,7 @@ class ProgramSliceGraphBuilder:
         self._inject_redirected_prior_memory_source_edges(program_graph)
         self._inject_prior_observed_memory_overlap_edges(program_graph)
         self._inject_observed_callback_wrapper_passthrough_edges(program_graph, programs)
+        self._inject_resolved_computed_scalar_passthrough_edges(program_graph, programs, summaries)
         self._inject_late_narrow_thunk_scalar_post_memory_edges(program_graph, programs)
         self._prune_ambiguous_stack_phi_backedges(program_graph)
         self._record_sccs(program_graph)
@@ -4625,6 +4694,7 @@ class ProgramSliceGraphBuilder:
         programs: list[LowPcodeProgram],
         summaries: dict[str, AutoFunctionSummary],
     ) -> None:
+        programs_by_name = {program.function_name: program for program in programs}
         for program in programs:
             caller_graph = program_graph.functions[program.function_name]
             composed_caller = self._composed_caller_graph(program_graph, caller_graph)
@@ -4633,6 +4703,9 @@ class ProgramSliceGraphBuilder:
             for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
                 resolved = self.call_resolver.resolve(instr)
                 callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                resolved_computed_callee = bool(
+                    resolved.name and self._program_has_computed_call(programs_by_name.get(resolved.name))
+                )
                 if not self._can_apply_unresolved_boundary_passthrough(
                     program_graph,
                     summaries,
@@ -4649,6 +4722,11 @@ class ProgramSliceGraphBuilder:
                     prefer_registers=not (resolved.name and resolved.name in program_graph.functions),
                     allow_memory_latest=not resolved.name,
                 )
+                if resolved_computed_callee:
+                    input_nodes = self._concrete_memory_source_nodes_for_computed_passthrough(
+                        caller_graph,
+                        input_nodes,
+                    )
                 if not input_nodes:
                     continue
                 source_labels = set().union(
@@ -4683,6 +4761,30 @@ class ProgramSliceGraphBuilder:
                             observed_output=output_storage,
                             opcode="SUMMARY_UNRESOLVED_BOUNDARY_PASSTHROUGH",
                         )
+
+    def _concrete_memory_source_nodes_for_computed_passthrough(
+        self,
+        caller_graph: FunctionGraph,
+        input_nodes: list[ValueId],
+    ) -> list[ValueId]:
+        return [
+            node
+            for node in input_nodes
+            if self._is_concrete_observed_memory_storage(
+                caller_graph.slice_graph.nodes[node].get("observed_storage") or ""
+            )
+        ]
+
+    def _is_concrete_observed_memory_storage(self, storage: str) -> bool:
+        key = storage.removeprefix("mem:") if storage.startswith("mem:") else storage
+        if key.startswith("unknown:register:"):
+            return False
+        return (
+            ":stack:" in key
+            or key.startswith("global:")
+            or key.startswith("heap:allocsite:")
+            or key.startswith("unknown:unique:")
+        )
 
     def _source_carrying_pre_nodes_for_passthrough(
         self,
@@ -4770,6 +4872,13 @@ class ProgramSliceGraphBuilder:
                         input_storage,
                     )
                     if not source_nodes:
+                        source_nodes = self._source_memory_nodes_for_callback_pointer_input(
+                            composed_caller,
+                            callsite_key,
+                            input_storage,
+                            output_storage,
+                        )
+                    if not source_nodes:
                         continue
                     source_nodes = self._latest_prepared_scalar_source_nodes(
                         composed_caller,
@@ -4781,7 +4890,11 @@ class ProgramSliceGraphBuilder:
                     )
                     if len(source_labels) != 1:
                         continue
-                    for post_node in self._caller_summary_post_nodes(composed_caller, callsite_key, output_storage):
+                    for post_node in self._caller_summary_post_nodes_overlapping_storage(
+                        composed_caller,
+                        callsite_key,
+                        output_storage,
+                    ):
                         if self._has_non_summary_data_predecessor(composed_caller, post_node):
                             continue
                         if not (
@@ -4811,6 +4924,191 @@ class ProgramSliceGraphBuilder:
                                 observed_output=output_storage,
                                 opcode="SUMMARY_OBSERVED_CALLBACK_WRAPPER_PASSTHROUGH",
                             )
+
+    def _source_memory_nodes_for_callback_pointer_input(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        input_storage: str,
+        output_storage: str,
+    ) -> list[ValueId]:
+        if not input_storage.startswith("reg:"):
+            return []
+        if not self._is_general_register_storage(caller_graph, input_storage):
+            return []
+        pointer_node = self._caller_summary_input_node(caller_graph, callsite_key, input_storage)
+        if pointer_node is None:
+            return []
+        if self._source_labels_reaching_node(caller_graph, pointer_node):
+            return []
+        expression = caller_graph.slice_graph.nodes[pointer_node].get("expression") or {}
+        if expression.get("kind") not in {"stack", "stack_set", "heap_ptr", "register", "register_offset"}:
+            return []
+        output_size = self._storage_size_bytes(output_storage)
+        if output_size is None:
+            return []
+        memory_nodes = self._memory_nodes_for_observed_pointer(
+            caller_graph,
+            pointer_node,
+            f"mem:summary:field:{output_size}",
+            callsite_key,
+        )
+        source_nodes = [
+            node
+            for node in memory_nodes
+            if self._source_labels_reaching_node(caller_graph, node)
+        ]
+        return self._single_label_nodes(caller_graph, source_nodes)
+
+    def _caller_summary_post_nodes_overlapping_storage(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        output_storage: str,
+    ) -> list[ValueId]:
+        exact_nodes = self._caller_summary_post_nodes(caller_graph, callsite_key, output_storage)
+        wanted = self._register_storage_range(output_storage)
+        if wanted is None:
+            return exact_nodes
+        wanted_canonical, wanted_start, wanted_end = wanted
+        nodes = list(exact_nodes)
+        prefix = f"{callsite_key}:post:"
+        for key, post_node in sorted(caller_graph.call_post_storage_index.items()):
+            if not key.startswith(prefix) or post_node in nodes:
+                continue
+            candidate_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+            candidate = self._register_storage_range(candidate_storage)
+            if candidate is None:
+                continue
+            canonical, start, end = candidate
+            if canonical == wanted_canonical and start < wanted_end and wanted_start < end:
+                nodes.append(post_node)
+        return sorted(
+            nodes,
+            key=lambda node: (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0, node.version or 0),
+        )
+
+    def _inject_resolved_computed_scalar_passthrough_edges(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs: list[LowPcodeProgram],
+        summaries: dict[str, AutoFunctionSummary],
+    ) -> None:
+        programs_by_name = {program.function_name: program for program in programs}
+        pairs_by_function: dict[str, set[tuple[str, str]]] = {}
+        for program in programs:
+            caller_graph = program_graph.functions[program.function_name]
+            composed_caller = self._composed_caller_graph(program_graph, caller_graph)
+            external_summaries = self.external_summary_provider.resolve_program_callsites(program)
+            primary_storages = self.call_boundary_mapper.primary_value_storage_keys(caller_graph.architecture)
+            for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
+                resolved = self.call_resolver.resolve(instr)
+                if not resolved.name or resolved.name not in program_graph.functions:
+                    continue
+                if self._is_provider_boundary_call(instr):
+                    continue
+                callsite_key = f"{instr.get('address')}:{resolved.name}"
+                if callsite_key in external_summaries:
+                    continue
+                summary = summaries.get(resolved.name)
+                if summary is None or self._summary_has_observed_outputs(summary):
+                    continue
+                callee_program = programs_by_name.get(resolved.name)
+                callee_graph = program_graph.functions.get(resolved.name)
+                if callee_program is None or callee_graph is None:
+                    continue
+                pairs = pairs_by_function.setdefault(
+                    resolved.name,
+                    self._computed_callback_wrapper_storage_pairs(callee_graph, callee_program),
+                )
+                if not pairs:
+                    continue
+                input_nodes = self._source_carrying_pre_nodes_for_passthrough(
+                    caller_graph,
+                    instr,
+                    callsite_key,
+                    prefer_registers=True,
+                )
+                if not input_nodes or any(
+                    not self._is_passthrough_register_input(caller_graph, node) for node in input_nodes
+                ):
+                    continue
+                input_nodes = self._latest_prepared_scalar_source_nodes(
+                    composed_caller,
+                    callsite_key,
+                    input_nodes,
+                ) or input_nodes
+                if not self._input_nodes_share_single_register_family(caller_graph, input_nodes):
+                    continue
+                source_labels = set().union(
+                    *(self._source_labels_reaching_node(composed_caller, node) for node in input_nodes)
+                )
+                if len(source_labels) != 1:
+                    continue
+                wrapper_outputs = {output_storage for _, output_storage in pairs}
+                for post_node in self._consumed_primary_post_nodes(caller_graph, callsite_key, primary_storages):
+                    output_storage = caller_graph.slice_graph.nodes[post_node].get("observed_storage") or ""
+                    if not any(
+                        self._storage_keys_overlap(output_storage, wrapper_output)
+                        for wrapper_output in wrapper_outputs
+                    ):
+                        continue
+                    if self._source_labels_reaching_node(composed_caller, post_node):
+                        continue
+                    if self._has_non_summary_data_predecessor(composed_caller, post_node):
+                        continue
+                    for input_node in input_nodes:
+                        input_storage = caller_graph.slice_graph.nodes[input_node].get("observed_storage") or ""
+                        program_graph.slice_graph.add_edge(
+                            input_node,
+                            post_node,
+                            kind="call_out_reg",
+                            opcode="SUMMARY_RESOLVED_COMPUTED_SCALAR_PASSTHROUGH",
+                            summary_kind="summary_data",
+                            callee=resolved.name,
+                            observed_input=input_storage,
+                            observed_output=output_storage,
+                            confidence="single_source_scalar_pre_to_consumed_computed_wrapper_output",
+                        )
+                        self._record_summary_call_out_boundary(
+                            program_graph,
+                            caller_graph,
+                            resolved.name,
+                            callsite_key,
+                            "call_out_reg",
+                            observed_input=input_storage,
+                            observed_output=output_storage,
+                            opcode="SUMMARY_RESOLVED_COMPUTED_SCALAR_PASSTHROUGH",
+                        )
+
+    def _summary_has_observed_outputs(self, summary: AutoFunctionSummary) -> bool:
+        return bool(
+            summary.source_to_primary
+            or summary.source_to_memory
+            or summary.observed_to_primary
+            or summary.observed_memory_to_primary
+            or summary.observed_to_memory
+            or summary.global_writes
+        )
+
+    def _is_passthrough_register_input(self, caller_graph: FunctionGraph, node: ValueId) -> bool:
+        observed_storage = caller_graph.slice_graph.nodes[node].get("observed_storage") or ""
+        return observed_storage.startswith("reg:") and self._is_general_register_storage(caller_graph, observed_storage)
+
+    def _input_nodes_share_single_register_family(
+        self,
+        caller_graph: FunctionGraph,
+        input_nodes: list[ValueId],
+    ) -> bool:
+        families = {
+            register_range[0]
+            for node in input_nodes
+            if (register_range := self._register_storage_range(
+                caller_graph.slice_graph.nodes[node].get("observed_storage") or ""
+            ))
+            is not None
+        }
+        return len(families) == 1
 
     def _computed_callback_wrapper_storage_pairs(
         self,
@@ -5989,6 +6287,11 @@ class ProgramSliceGraphBuilder:
             return True
         return any(pcode.get("opcode") == "CALLIND" for pcode in instr.get("low_pcode") or [])
 
+    def _program_has_computed_call(self, program: LowPcodeProgram | None) -> bool:
+        if program is None:
+            return False
+        return any(self._is_computed_call_instruction(instr) for instr in program.instructions)
+
     def _computed_call_target_storage(self, caller_graph: FunctionGraph, instr: dict) -> str | None:
         callind_inputs = [
             pcode.get("inputs") or []
@@ -6210,6 +6513,8 @@ class ProgramSliceGraphBuilder:
                             callsite_key,
                             output_memory,
                             address_storage,
+                            program_graph,
+                            program_graph.functions.get(resolved.name),
                         ):
                             for source_node in source_nodes:
                                 program_graph.slice_graph.add_edge(
@@ -6444,6 +6749,8 @@ class ProgramSliceGraphBuilder:
                                 callsite_key,
                                 output_memory,
                                 output_address_storage,
+                                program_graph,
+                                program_graph.functions.get(resolved.name),
                             ):
                                 post_memory_node = self._summary_observed_memory_post_node(
                                     program_graph,
@@ -6494,6 +6801,8 @@ class ProgramSliceGraphBuilder:
                                 callsite_key,
                                 output_memory,
                                 address_storage,
+                                program_graph,
+                                program_graph.functions.get(resolved.name),
                             ):
                                 program_graph.slice_graph.add_edge(
                                     input_node,
@@ -7356,11 +7665,16 @@ class ProgramSliceGraphBuilder:
         prefix = memory_key.rsplit(":", 1)[0]
         exact = f"mem:{memory_key}"
         prefix_text = f"mem:{prefix}:"
+        requested_range = self._memory_range_for_key(memory_key)
         candidates = [
             node
             for node, attrs in caller_graph.slice_graph.nodes(data=True)
             if (parse_int(attrs.get("addr")) or 0) >= callsite_addr
             and (attrs.get("storage") == exact or (attrs.get("storage") or "").startswith(prefix_text))
+            and (
+                attrs.get("storage") == exact
+                or self._memory_storage_overlaps_requested_range(attrs.get("storage") or "", requested_range)
+            )
         ]
         if not candidates:
             return []
@@ -7737,6 +8051,8 @@ class ProgramSliceGraphBuilder:
         callsite_key: str,
         output_memory: str,
         address_storage: str,
+        program_graph: ProgramSliceGraph | None = None,
+        callee_graph: FunctionGraph | None = None,
     ) -> list[ValueId]:
         if not self._is_observed_pointer_memory_storage(output_memory):
             return []
@@ -7762,6 +8078,16 @@ class ProgramSliceGraphBuilder:
             pointed_nodes = self._memory_nodes_for_observed_pointer(caller_graph, address_node, output_memory, callsite_key)
             if pointed_nodes:
                 return pointed_nodes
+            indexed_nodes = self._nested_indexed_pointer_memory_output_nodes(
+                caller_graph,
+                callee_graph,
+                program_graph,
+                callsite_key,
+                output_memory,
+                address_storage,
+            )
+            if indexed_nodes:
+                return indexed_nodes
             return []
         preferred_prefix = f"{callsite_key}:pre:mem:"
         memory_nodes: list[ValueId] = []
@@ -7780,6 +8106,171 @@ class ProgramSliceGraphBuilder:
             for node in memory_nodes
             if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == latest_addr
         ]
+
+    def _nested_indexed_pointer_memory_output_nodes(
+        self,
+        caller_graph: FunctionGraph,
+        callee_graph: FunctionGraph | None,
+        program_graph: ProgramSliceGraph | None,
+        callsite_key: str,
+        output_memory: str,
+        address_storage: str,
+    ) -> list[ValueId]:
+        if callee_graph is None:
+            return []
+        target_size = self._memory_size(output_memory)
+        if target_size is None:
+            return []
+        base_storage = self._nested_output_memory_base_storage(output_memory)
+        if base_storage is None:
+            return []
+        relative_offset = self._callee_indexed_relative_offset_at_callsite(
+            callee_graph,
+            caller_graph,
+            callsite_key,
+            output_memory,
+            base_storage,
+        )
+        if relative_offset is None:
+            return []
+        if relative_offset < 0 or relative_offset > 1_000_000:
+            return []
+        base_node = self._caller_summary_input_node(caller_graph, callsite_key, base_storage)
+        if base_node is None:
+            return []
+        base_memory = self._nested_output_memory_base_memory(output_memory)
+        base_memory_nodes = self._memory_nodes_for_observed_pointer(
+            caller_graph,
+            base_node,
+            base_memory,
+            callsite_key,
+        )
+        if len(base_memory_nodes) != 1:
+            return []
+        base_expression = self._pre_call_memory_expression_for_node(
+            caller_graph,
+            callsite_key,
+            base_memory_nodes[0],
+        )
+        if not base_expression or base_expression.get("kind") not in {"stack", "heap_ptr", "register", "register_offset"}:
+            return []
+        base_key = self._memory_key_from_expression(
+            caller_graph,
+            base_expression,
+            "mem:summary:field:1",
+        )
+        if base_key is None:
+            return []
+        base_range = self._memory_range_for_key(base_key)
+        if base_range is None:
+            return []
+        wanted_identity = base_range[0]
+        wanted_start = base_range[1] + relative_offset
+        wanted_range = (wanted_identity, wanted_start, wanted_start + target_size)
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        candidates: list[ValueId] = []
+        for node, attrs in caller_graph.slice_graph.nodes(data=True):
+            kind = attrs.get("kind")
+            is_call_post_memory = (
+                kind == "call_post_storage"
+                and attrs.get("opcode") == "CALL_POST_OBSERVED_MEMORY"
+                and node.key.startswith(f"{callsite_key}:post:")
+            )
+            if kind != "observed_memory" and not is_call_post_memory:
+                continue
+            node_addr = parse_int(attrs.get("addr")) or 0
+            if kind == "observed_memory" and node_addr <= callsite_addr:
+                continue
+            if is_call_post_memory and node_addr != callsite_addr:
+                continue
+            node_range = self._memory_range_for_storage(attrs.get("storage") or "")
+            if node_range != wanted_range:
+                continue
+            if self._has_data_predecessor(caller_graph, node):
+                continue
+            if self._source_labels_reaching_node(caller_graph, node):
+                continue
+            if not self._node_reaches_sink_boundary(caller_graph, node):
+                continue
+            candidates.append(node)
+        if not candidates:
+            if program_graph is None:
+                return []
+            prior_nodes = self._prior_memory_nodes_for_exact_range(
+                caller_graph,
+                callsite_key,
+                wanted_range,
+            )
+            if not prior_nodes:
+                return []
+            candidates = [
+                self._summary_observed_memory_post_node(
+                    program_graph,
+                    caller_graph,
+                    callsite_key,
+                    prior_node,
+                )
+                for prior_node in prior_nodes
+            ]
+        earliest_addr = min(parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0 for node in candidates)
+        return [
+            node
+            for node in candidates
+            if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == earliest_addr
+        ]
+
+    def _prior_memory_nodes_for_exact_range(
+        self,
+        caller_graph: FunctionGraph,
+        callsite_key: str,
+        wanted_range: tuple[str, int, int],
+    ) -> list[ValueId]:
+        callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
+        candidates: list[ValueId] = []
+        for node, attrs in caller_graph.slice_graph.nodes(data=True):
+            if not (attrs.get("storage") or "").startswith("mem:"):
+                continue
+            if attrs.get("kind") == "call_post_storage":
+                continue
+            node_addr = parse_int(attrs.get("addr")) or 0
+            if node_addr > callsite_addr:
+                continue
+            node_range = self._memory_range_for_storage(attrs.get("storage") or "")
+            if node_range == wanted_range:
+                candidates.append(node)
+        if not candidates:
+            return []
+        latest_addr = max(parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0 for node in candidates)
+        return [
+            node
+            for node in candidates
+            if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == latest_addr
+        ]
+
+    def _nested_output_memory_base_storage(self, output_memory: str) -> str | None:
+        prefix = "mem:unknown:register:mem:unknown:register:"
+        if not output_memory.startswith(prefix):
+            return None
+        rest = output_memory[len(prefix):]
+        marker = ":offset:"
+        marker_index = rest.find(marker)
+        if marker_index < 0:
+            return None
+        base_parts = rest[:marker_index].split(":")
+        if len(base_parts) < 3:
+            return None
+        return f"reg:{base_parts[0]}:{base_parts[1]}:{base_parts[2]}"
+
+    def _nested_output_memory_base_memory(self, output_memory: str) -> str:
+        memory_range = self._memory_range_for_storage(output_memory)
+        size = self._memory_size(output_memory) or 1
+        if memory_range is None:
+            return f"mem:summary:field:{size}"
+        identity, _, _ = memory_range
+        if identity.startswith("unknown:register:"):
+            inner = identity.removeprefix("unknown:register:")
+            return inner if inner.startswith("mem:") else f"mem:{inner}"
+        return f"mem:summary:field:{size}"
 
     def _memory_nodes_for_observed_pointer(
         self,
@@ -7802,9 +8293,33 @@ class ProgramSliceGraphBuilder:
         output_memory: str,
         callsite_key: str,
     ) -> list[ValueId]:
+        if expression.get("kind") == "stack_set":
+            size = self._memory_size(output_memory)
+            output_offset = self._observed_pointer_memory_offset(output_memory)
+            nodes: list[ValueId] = []
+            for offset in expression.get("offsets") or []:
+                memory_key = self.memory_model.stack_key(
+                    caller_graph.function_name,
+                    caller_graph.context_id,
+                    expression.get("base") or "STACK",
+                    int(offset) + output_offset,
+                    size,
+                )
+                for node in self._memory_nodes_for_memory_key(caller_graph, memory_key, callsite_key):
+                    if node not in nodes:
+                        nodes.append(node)
+            return nodes
         memory_key = self._memory_key_from_expression(caller_graph, expression, output_memory)
         if memory_key is None:
             return []
+        return self._memory_nodes_for_memory_key(caller_graph, memory_key, callsite_key)
+
+    def _memory_nodes_for_memory_key(
+        self,
+        caller_graph: FunctionGraph,
+        memory_key: str,
+        callsite_key: str,
+    ) -> list[ValueId]:
         callsite_addr = parse_int(callsite_key.split(":", 1)[0]) or 0
         candidates = [
             node
@@ -7813,11 +8328,13 @@ class ProgramSliceGraphBuilder:
         ]
         if not candidates:
             memory_prefix = memory_key.rsplit(":", 1)[0]
+            requested_range = self._memory_range_for_key(memory_key)
             candidates = [
                 node
                 for node, attrs in caller_graph.slice_graph.nodes(data=True)
                 if (attrs.get("storage") or "").startswith(f"mem:{memory_prefix}:")
                 and (parse_int(attrs.get("addr")) or 0) <= callsite_addr
+                and self._memory_storage_overlaps_requested_range(attrs.get("storage") or "", requested_range)
             ]
         if not candidates:
             return []
@@ -7827,6 +8344,16 @@ class ProgramSliceGraphBuilder:
             for node in candidates
             if (parse_int(caller_graph.slice_graph.nodes[node].get("addr")) or 0) == latest_addr
         ]
+
+    def _memory_storage_overlaps_requested_range(
+        self,
+        storage: str,
+        requested_range: tuple[str, int, int] | None,
+    ) -> bool:
+        if requested_range is None:
+            return True
+        candidate_range = self._memory_range_for_storage(storage)
+        return candidate_range is not None and self._ranges_overlap(candidate_range, requested_range)
 
     def _memory_nodes_for_loaded_observed_pointer(
         self,
@@ -7960,7 +8487,33 @@ class ProgramSliceGraphBuilder:
             base = str(identity or expression.get("base") or "unknown_register")
             offset = int(expression.get("offset") or 0) + output_offset
             return self.memory_model.unknown_key(f"register:{base}:offset:{offset}", size)
+        if expression.get("kind") == "value":
+            register_expression = self._single_leaf_register_expression(caller_graph, expression)
+            if register_expression is not None:
+                return self._memory_key_from_expression(caller_graph, register_expression, output_memory)
         return None
+
+    def _single_leaf_register_expression(
+        self,
+        caller_graph: FunctionGraph,
+        expression: dict,
+    ) -> dict | None:
+        value_nodes = self._value_nodes_in_expression(expression)
+        if len(value_nodes) != 1:
+            return None
+        node = value_nodes[0]
+        if not caller_graph.slice_graph.has_node(node):
+            return None
+        storage = caller_graph.slice_graph.nodes[node].get("storage") or ""
+        parts = storage.split(":")
+        if len(parts) < 4 or parts[0] != "reg":
+            return None
+        return {
+            "kind": "register",
+            "key": ":".join(parts[1:4]),
+            "size_bits": int(parts[3], 0),
+            "node": node,
+        }
 
     def _observed_pointer_memory_offset(self, output_memory: str) -> int:
         memory_range = self._memory_range_for_storage(output_memory)

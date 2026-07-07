@@ -1154,6 +1154,40 @@ in the phase-specific files.
   split/FLA OBF009/OBF010 missing A, and OBF011 decoy/payload precision.
   Summary cache schema is now 62.
 
+- 2026-07-07: Repaired the Suite10 computed-callback struct-overwrite residual
+  without adding case/helper/source-label logic. Computed callback wrapper
+  detection now carries exact observed pointer-relative memory inputs, including
+  memory-backed pointer bases and recovered register+constant address forms
+  when Ghidra materializes an observed memory node as unknown unique storage.
+  Terminal computed-jump wrappers are treated as the same low-pcode storage
+  transition shape, and computed-call wrapper outputs may use a primary
+  post-call storage only when that storage is not overwritten before function
+  exit. This preserves convention-free semantics while covering fused tail-call
+  callback forms across x86, x64, armv7, and aarch64.
+- Verified the focused repair with `py_compile` for
+  `analysis/interprocedural_summary.py`, direct validation of all eight reported
+  TV2C612 variants (`PASS 8 / FAIL 0 / FP 0`), and a same-suite x64 cpp-like
+  guard with data+control validation (`PASS 25 / FAIL 0`).
+
+- 2026-07-07: Repaired the Suite10 computed-callback field-kill residual using
+  observed low-pcode evidence rather than case-specific labels. Metadata marker
+  memory-effect injection now accepts callback-summary-validated field targets
+  that appear as observed memory, memory ranges, or call-post observed memory,
+  while still requiring source-free sink reachability, a selected callback
+  summary, and a pointer-relative write offset match. Prior zero-fill dataflow no
+  longer blocks the callback field write, but later post-call data writes still
+  do.
+- The loader now treats a single Ghidra `PARAM` data reference to a function
+  symbol on a load as the same optional function-pointer fact shape used for
+  pointer-symbol reads. This preserves low-pcode dataflow as source of truth and
+  lets optimized table-load callback selections feed the existing callback
+  summary path without ABI or helper-name semantics. Summary cache schema is now
+  64.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`,
+  `analysis/slice_graph_builder.py`, and `frontend/low_pcode_loader.py`; direct
+  validation of all eight TV2C613 roots (`PASS 8 / FAIL 0 / FP 0`); and a
+  same-suite x64 cpp-like guard over expected case files (`PASS 26`).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

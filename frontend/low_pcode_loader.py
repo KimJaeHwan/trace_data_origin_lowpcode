@@ -87,7 +87,12 @@ class LowPcodeLoader:
                         names.append(name)
             if names:
                 instr["flow_target_names"] = names
-            pointer_reads = self._function_pointer_reads(instr, symbols_by_address, function_entry_by_name)
+            pointer_reads = self._function_pointer_reads(
+                instr,
+                symbols_by_address,
+                functions_by_entry,
+                function_entry_by_name,
+            )
             if pointer_reads:
                 instr["function_pointer_reads"] = pointer_reads
 
@@ -95,10 +100,19 @@ class LowPcodeLoader:
         self,
         instr: dict,
         symbols_by_address: dict,
+        functions_by_entry: dict,
         function_entry_by_name: dict[str, str],
     ) -> list[dict]:
         reads: list[dict] = []
         seen: set[tuple[str, str]] = set()
+        read_data_addresses = [
+            str(ref.get("to") or "")
+            for ref in instr.get("refs_from") or []
+            if ref.get("is_data")
+            and ref.get("is_read")
+            and str(ref.get("to") or "")
+            and not str(ref.get("to") or "").startswith("Stack")
+        ]
         for ref in instr.get("refs_from") or []:
             if not ref.get("is_data") or not ref.get("is_read"):
                 continue
@@ -126,6 +140,29 @@ class LowPcodeLoader:
                         "confidence": "ghidra_data_pointer_symbol",
                     }
                 )
+        for ref in instr.get("refs_from") or []:
+            if not ref.get("is_data") or str(ref.get("type") or "").upper() != "PARAM":
+                continue
+            target_entry = str(ref.get("to") or "")
+            if not target_entry:
+                continue
+            function = functions_by_entry.get(target_entry) or {}
+            target_name = str(function.get("name") or "")
+            if not target_name:
+                continue
+            key = (target_entry, target_name)
+            if key in seen:
+                continue
+            seen.add(key)
+            reads.append(
+                {
+                    "address": target_entry,
+                    "name": target_name,
+                    "data_address": read_data_addresses[0] if len(read_data_addresses) == 1 else "",
+                    "source_symbol": target_name,
+                    "confidence": "ghidra_param_function_reference",
+                }
+            )
         return reads
 
     def _function_name_from_pointer_symbol(

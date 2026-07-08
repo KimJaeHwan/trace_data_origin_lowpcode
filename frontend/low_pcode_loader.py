@@ -21,7 +21,7 @@ class LowPcodeProgram:
 
     @property
     def instructions(self) -> list[dict]:
-        return list(self.data.get("instructions", []))
+        return self.data.get("instructions", [])
 
     @property
     def metadata_cache_key(self) -> str:

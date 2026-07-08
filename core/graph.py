@@ -28,6 +28,9 @@ class FunctionGraph:
 class ProgramSliceGraph:
     functions: dict[str, FunctionGraph] = field(default_factory=dict)
     slice_graph: nx.DiGraph = field(default_factory=nx.DiGraph)
+    function_name_by_path: dict[str, str] = field(default_factory=dict)
+    source_index: dict[str, ValueId] = field(default_factory=dict)
+    reachable_sink_index_cache: dict[str, dict[str, ValueId]] = field(default_factory=dict)
     callsites: dict[str, dict] = field(default_factory=dict)
     boundary_edges: list[dict] = field(default_factory=list)
     call_graph: nx.DiGraph = field(default_factory=nx.DiGraph)

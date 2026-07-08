@@ -5,6 +5,35 @@ in the phase-specific files.
 
 ## 2026-07-08
 
+- Started the Engine11 performance-hardening pass while keeping the existing
+  Suite09/Suite10 harness as the regression gate. Program directory
+  fingerprints are now cached for the lifetime of a `ProgramSliceGraphBuilder`
+  instance, avoiding repeated JSON metadata scans for every case in the same
+  variant. This keeps the analysis convention-free and does not change slice
+  semantics.
+- Replaced repeated `networkx.compose` graph copying with direct node/edge
+  accumulation for per-directory composed slice graphs, and retained
+  path-to-function/source-index metadata on `ProgramSliceGraph` so target
+  lookup does not reload the target JSON. Focused `tv2-tier0-P0-x64` timing
+  improved from `15.10s` after fingerprint caching to `10.92s` with the
+  composed-graph optimization while remaining `PASS 35 / FAIL 0 / FP 0`.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools` and full Suite09/Suite10 local-samples regression with proposed
+  regressions included: Suite09 `PASS 488 / FAIL 0 / FP 0`, Suite10 `PASS 334 /
+  FAIL 0 / FP 0`. Harness timing improved from `849.18s` aggregate case time
+  before the fingerprint cache to `378.54s` after it, then to `306.34s` after
+  composed-graph accumulation in serial fallback mode.
+- Completed the safe optimization batch by reusing already-loaded low-pcode
+  JSON for metadata-aware fingerprints, retaining merged source indexes and
+  path-to-function lookup on `ProgramSliceGraph`, avoiding duplicate data-slice
+  traversals in harness cut-point reporting, and caching stable artifact hashes
+  in the harness. Directory fingerprint reuse is guarded by file stat keys so a
+  long-lived builder does not reuse stale fingerprints after regenerated JSON.
+  Final full Suite09/Suite10 guard remains green: Suite09 `PASS 488 / FAIL 0 /
+  FP 0`, Suite10 `PASS 334 / FAIL 0 / FP 0`. Final aggregate case timing is
+  `290.64s` in serial fallback mode; the remaining slow cases are dominated by
+  ProgramSliceGraph build time rather than query traversal.
+
 - Repaired the Suite09/Suite10 cycle-03 false-positive regressions without
   adding case/helper/source-label/ABI rules. Low-confidence prior-memory carry
   edges into post-call memory are now pruned when any later summary edge

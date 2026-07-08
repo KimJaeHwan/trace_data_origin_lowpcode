@@ -507,20 +507,23 @@ class ProgramSliceGraphBuilder:
         self.memory_model = MemoryModel()
         self.summary_cache_dir = Path("output/.summary_cache")
         self._cache: dict[tuple[Path, str], ProgramSliceGraph] = {}
+        self._fingerprint_cache: dict[Path, tuple[str, str]] = {}
 
     def build_for_target(self, target_path: str | Path) -> FunctionGraph:
         target = Path(target_path)
         program_graph = self._build_directory(target.parent)
-        target_program = self.loader.load(target)
-        target_graph = program_graph.functions[target_program.function_name]
+        target_function_name = program_graph.function_name_by_path.get(str(target.resolve()))
+        if target_function_name is None:
+            target_function_name = self.loader.load(target).function_name
+        target_graph = program_graph.functions[target_function_name]
         composed = FunctionGraph(
             function_name=target_graph.function_name,
             context_id=target_graph.context_id,
             architecture=target_graph.architecture,
             cfg=target_graph.cfg,
             slice_graph=program_graph.slice_graph,
-            sink_index=self._reachable_sink_index(program_graph, target_program.function_name),
-            source_index=self._merged_source_index(program_graph.functions),
+            sink_index=self._reachable_sink_index(program_graph, target_function_name),
+            source_index=program_graph.source_index,
             call_pre_storage_index=dict(target_graph.call_pre_storage_index),
             call_post_storage_index=dict(target_graph.call_post_storage_index),
             callee_entry_observed_index=dict(target_graph.callee_entry_observed_index),
@@ -530,6 +533,9 @@ class ProgramSliceGraphBuilder:
         return composed
 
     def _reachable_sink_index(self, program_graph: ProgramSliceGraph, function_name: str) -> dict[str, ValueId]:
+        cached = program_graph.reachable_sink_index_cache.get(function_name)
+        if cached is not None:
+            return dict(cached)
         sinks = dict(program_graph.functions[function_name].sink_index)
         reachable = nx.descendants(program_graph.call_graph, function_name) if function_name in program_graph.call_graph else set()
         for callee_name in sorted(reachable):
@@ -538,17 +544,28 @@ class ProgramSliceGraphBuilder:
                 continue
             for key, sink in callee_graph.sink_index.items():
                 sinks.setdefault(f"{callee_name}:{key}", sink)
-        return sinks
+        program_graph.reachable_sink_index_cache[function_name] = dict(sinks)
+        return dict(sinks)
 
     def _build_directory(self, directory: Path) -> ProgramSliceGraph:
         directory = directory.resolve()
-        fingerprint = self._directory_cache_fingerprint(directory)
+        programs: list[LowPcodeProgram] | None = None
+        paths = sorted(directory.glob("*_low_pcode.json"))
+        stat_key = self._directory_stat_cache_key(paths)
+        cached_fingerprint = self._fingerprint_cache.get(directory)
+        if cached_fingerprint is not None and cached_fingerprint[0] == stat_key:
+            fingerprint = cached_fingerprint[1]
+        else:
+            programs = [self.loader.load(path) for path in paths]
+            fingerprint = self._directory_cache_fingerprint_from_programs(programs)
+            self._fingerprint_cache[directory] = (stat_key, fingerprint)
         cache_key = (directory, fingerprint)
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
 
-        programs = [self.loader.load(path) for path in sorted(directory.glob("*_low_pcode.json"))]
+        if programs is None:
+            programs = [self.loader.load(path) for path in paths]
         functions = {program.function_name: self.function_builder.build(program) for program in programs}
         summaries = self._load_summary_cache(fingerprint, functions)
         if summaries is None:
@@ -558,11 +575,14 @@ class ProgramSliceGraphBuilder:
             }
             self._save_summary_cache(fingerprint, summaries)
 
-        composed = nx.DiGraph()
-        for function_graph in functions.values():
-            composed = nx.compose(composed, function_graph.slice_graph)
+        composed = self._compose_function_slice_graphs(functions)
 
-        program_graph = ProgramSliceGraph(functions=functions, slice_graph=composed)
+        program_graph = ProgramSliceGraph(
+            functions=functions,
+            slice_graph=composed,
+            function_name_by_path={str(program.path.resolve()): program.function_name for program in programs},
+            source_index=self._merged_source_index(functions),
+        )
         self._record_direct_calls(program_graph, programs)
         self._inject_fused_tail_branch_edges(program_graph, programs)
         self._compose_transitive_sink_summaries(program_graph, programs, summaries)
@@ -606,23 +626,44 @@ class ProgramSliceGraphBuilder:
         self._cache[cache_key] = program_graph
         return program_graph
 
-    def _directory_cache_fingerprint(self, directory: Path) -> str:
+    def _compose_function_slice_graphs(self, functions: dict[str, FunctionGraph]) -> nx.DiGraph:
+        composed = nx.DiGraph()
+        for function_graph in functions.values():
+            composed.add_nodes_from(
+                (node, dict(attrs))
+                for node, attrs in function_graph.slice_graph.nodes(data=True)
+            )
+            composed.add_edges_from(
+                (source, target, dict(attrs))
+                for source, target, attrs in function_graph.slice_graph.edges(data=True)
+            )
+        return composed
+
+    def _directory_stat_cache_key(self, paths: list[Path]) -> str:
         entries = []
-        for path in sorted(directory.glob("*_low_pcode.json")):
+        for path in paths:
             stat = path.stat()
-            identity = None
-            try:
-                with path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                identity = (data.get("metadata_identity") or {}).get("metadata_hash")
-            except Exception:
-                identity = None
             entries.append(
                 {
                     "name": path.name,
                     "mtime_ns": stat.st_mtime_ns,
                     "size": stat.st_size,
-                    "metadata_hash": identity,
+                }
+            )
+        encoded = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _directory_cache_fingerprint_from_programs(self, programs: list[LowPcodeProgram]) -> str:
+        entries = []
+        for program in sorted(programs, key=lambda item: item.path.name):
+            path = program.path
+            stat = path.stat()
+            entries.append(
+                {
+                    "name": path.name,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "size": stat.st_size,
+                    "metadata_hash": program.metadata_cache_key,
                 }
             )
         encoded = json.dumps(
@@ -3849,6 +3890,8 @@ class ProgramSliceGraphBuilder:
             for key, node in sorted(caller_graph.call_pre_storage_index.items())
             if key.startswith(prefix)
         ]
+
+
 
     def _memory_nodes_for_expression_at_range(
         self,

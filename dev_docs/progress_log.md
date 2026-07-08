@@ -3,6 +3,85 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-08
+
+- Repaired the Suite09/Suite10 cycle-03 false-positive regressions without
+  adding case/helper/source-label/ABI rules. Low-confidence prior-memory carry
+  edges into post-call memory are now pruned when any later summary edge
+  materializes an observed write to the same post-call memory, preventing stale
+  pre-call contents from being joined with real overwrites such as swaps and
+  callback field kills. The prior indexed-thunk read bridge now reruns after
+  that pruning so AArch64 indexed field reads can use the cleaned post-call
+  evidence. Unresolved computed pointer writes also try a 4-byte lane when the
+  only scalar evidence is pointer-width on a 64-bit target, while keeping the
+  exact-one concrete target requirement. Summary cache schema is now 73.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`; a Suite09 guard over DFB001/DFB002/DFB054/DFB066/DFB080/
+  DFB081/DFB120/DFB121 across checked-in sample architectures (`PASS 48 /
+  FAIL 0`); and all 26 reported Suite10 cpp-like cycle-03 failures (`PASS 26 /
+  FAIL 0`).
+
+- Repaired the Suite09/Suite10 cycle-02 regressions from the computed
+  write/read hardening without adding case, helper, source-label, or ABI
+  special cases. Post-call observed memory redirection now skips self-redirects
+  and preserves a source-bearing prior exact memory version when an empty
+  post-call memory node is only being used to retarget later consumers. The
+  unresolved computed pointer-scalar overwrite bridge now narrows candidate
+  write width from low-pcode scalar expressions, so a zero/sign-extended
+  32-bit source in a 64-bit storage selects the 4-byte field instead of an
+  ambiguous pointer-sized overlap. Summary cache schema is now 71.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`; a Suite09 guard over DFB001/DFB002/DFB054/DFB080/DFB081/
+  DFB120/DFB121 across checked-in sample architectures (`PASS 42 / FAIL 0`);
+  all reported cpp-like failures for TV2C609/TV2C615/TV2C621 (`PASS 6 /
+  FAIL 0`); and the reported UE R301 DebugGame scope (`PASS`, actual
+  `dfb_source_C.ret`, no forbidden `dfb_source_B.ret`).
+
+- Hardened Suite 10 computed write-to-read field flow without ABI, helper-name,
+  case-id, or source-label-specific rules. Computed pointer writes now accept
+  later call-pre memory snapshots as observed consumers, redirect those
+  snapshots to materialized post-call memory, and unresolved memory-indirect
+  computed reads prefer the latest single-label observed memory snapshots from
+  the composed graph. Direct observed memory writes can now materialize a
+  concrete post-call memory version when later call-pre pointer evidence
+  observes the same location, and unresolved computed reads rank those
+  pointer-addressed memory versions together with ordinary pre-storage
+  candidates while excluding memory used only to determine the indirect target.
+  Pointer write target selection now uses concrete pointer preference before
+  generic call-pre candidates to avoid frame/base register noise.
+- Verified all eight focused TV2C622 variants across x86, x64, ARMv7,
+  AArch64, and P1 variants: PASS with `dfb_source_A.ret` and no forbidden
+  `dfb_source_C.ret`. Verified `.venv/bin/python -m py_compile
+  analysis/interprocedural_summary.py`, `.venv/bin/python -m compileall -q
+  analysis core frontend query report tools`, and the DFB guard set
+  `case_DFB001 case_DFB002 case_DFB080 case_DFB081 case_DFB120 case_DFB121`
+  as PASS 36 / FAIL 0.
+
+- Added a constrained unresolved computed-call pointer-scalar memory overwrite
+  bridge for Suite 10 field-kill flows. The bridge requires an unresolved
+  computed call target derived from a prior call-post value, exactly one concrete
+  pointer memory target that later reaches a sink, and a latest single-label
+  scalar pre-value; it supports register aliases and observed stack pre-values
+  without ABI parameter/return semantics. Conflicting prior summary-memory
+  inputs into the proven post-call memory version are pruned after later summary
+  passes. Summary cache schema is now 70.
+- Verified `case_TV2C621_computed_writer_field_kill` across x86, x64, ARMv7,
+  AArch64, and P1 variants (`PASS 8 / FAIL 0`) with actual
+  `dfb_source_C.ret`; verified `.venv/bin/python -m py_compile
+  analysis/interprocedural_summary.py`; and verified `.venv/bin/python -m
+  compileall -q analysis core frontend query report tools`.
+
+- Added a constrained prior indexed-thunk field-read bridge for Suite 10
+  cpp-like fused helper flows. The edge is still based on observed storage:
+  same concrete pointer expression, same single small selector, latest prior
+  single-label scalar source, and a consumed post-call primary register. It
+  avoids ABI/signature parameter or return semantics and filters frame/GOT-like
+  pointer noise with storage/expression evidence.
+- Verified the TV2C620 regression cluster across x86, x64, ARMv7, AArch64,
+  and P1 variants: all eight targeted variants PASS with actual
+  `dfb_source_B.ret` and no forbidden sources.
+- Verified `.venv/bin/python -m py_compile analysis/interprocedural_summary.py`.
+
 ## 2026-07-05
 
 - Added a final same-location memory overlap backfill for flattened state
@@ -1187,6 +1266,85 @@ in the phase-specific files.
   `analysis/slice_graph_builder.py`, and `frontend/low_pcode_loader.py`; direct
   validation of all eight TV2C613 roots (`PASS 8 / FAIL 0 / FP 0`); and a
   same-suite x64 cpp-like guard over expected case files (`PASS 26`).
+
+- 2026-07-08: Repaired the Suite10 computed-callback field-kill regression by
+  strengthening low-pcode value equality for XOR cancellation. The slice graph
+  builder now treats `x ^ x` as zero when both inputs are separate loads of the
+  same observed memory version, not only when they are the identical SSA node.
+  This lets existing constant propagation resolve callback-table index zero,
+  select the observed computed-call target, and apply the normal field-sensitive
+  callback summary/overwrite path without ABI roles, helper-name matching, or
+  source-label rules. Summary cache schema is now 65.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; direct validation of TV2C614 on x86 and x64
+  (`PASS 2 / FAIL 0 / FP 0`); and a focused DFB smoke batch for
+  DFB001/DFB002/DFB080/DFB081/DFB111 across available sample architectures
+  (`PASS 30 / FAIL 0`).
+
+- 2026-07-08: Hardened computed-callback field flow for Suite10 without adding
+  ABI or case-specific semantics. Metadata-marker callback writes now also
+  recognize source-empty pointer fields that are stored before a computed call
+  but consumed after it, and summary overlap narrowing no longer reintroduces a
+  broad memory-range node when a precise summary source already covers the
+  requested field. Redirected prior-memory sources are skipped when a narrower
+  successor has an exact source summary, preventing selector data from leaking
+  into the selected field. Summary cache schema is now 66.
+- Verified with `compileall`; focused TV2C615 validation across x86, x64,
+  aarch64, P1_x86, P1_armv7, P1_x64, and P1_aarch64 (`PASS 7 / FAIL 0`);
+  a local Suite10 cpp-like sweep over available case/variant inputs
+  (`PASS 224 / FAIL 0`); and a representative Suite09 DFB smoke batch for
+  DFB001/DFB002/DFB080/DFB081/DFB111/DFB120/DFB121 across checked-in sample
+  architectures (`PASS 42 / FAIL 0`).
+
+- 2026-07-08: Hardened interprocedural field memory summaries for Suite10
+  without ABI or case-specific semantics. Observed memory-to-primary summary
+  reads now derive the callee's pointer-relative field offset from low-pcode
+  address expressions and map that precise field back to the caller, including
+  narrow field loads zero-extended into wider primary storage. Observed
+  scalar-to-memory summary writes now materialize a post-call memory version and
+  redirect later consumers, so fused read-after-write field flows see the latest
+  observed storage transition instead of an older overlapping field. Summary
+  cache schema is now 67.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`; direct
+  validation of all 12 pre-regression Suite10 failures for TV2C617/TV2C618
+  across x86, x64, armv7, and aarch64 (`remaining []`); and a representative
+  Suite09 DFB smoke batch for
+  DFB001/DFB002/DFB080/DFB081/DFB111/DFB120/DFB121 across checked-in sample
+  architectures (`PASS 42 / FAIL 0`).
+
+- 2026-07-08: Repaired the Suite10 cycle-02 false-positive regressions without
+  adding ABI, helper-name, case-id, or source-label-specific rules. Observed
+  memory-to-primary summaries now require the candidate callee memory field to
+  reach the latest concrete primary output node, avoiding dispatch/input fields
+  that only overlap the output storage. Caller-side summary memory writes now
+  materialize precise post-call fields when the low-pcode pointer expression and
+  observed memory range prove containment, and memory consumer redirection is
+  range-overlap checked. Computed callback wrappers suppress only source-disjoint
+  observed-memory read summaries for the same post-call output, so the callback
+  data passthrough remains the chosen source. Prior-call context transfer now
+  prefers explicit source-bearing consumed field snapshots when they form a
+  single selected lane, preventing key-side snapshots from being projected onto
+  value-field sinks. Summary cache schema is now 68.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; direct validation of the six reported cycle-02
+  failures (`TV2C612` x86/x64/armv7/aarch64, `TV2C615` aarch64, and `TV2R302`
+  UE Development) with `PASS 6 / FAIL 0`; and a representative Suite09 DFB
+  smoke batch for DFB001/DFB002/DFB080/DFB081/DFB111/DFB120/DFB121 across
+  checked-in sample architectures (`PASS 42 / FAIL 0`).
+
+- 2026-07-08: Repaired the Suite10 cycle-03 prior-context false-positive
+  regressions without adding ABI, helper-name, case-id, or source-label-specific
+  rules. Explicit consumed-field snapshot projection is now used only when the
+  target field offset proves a later same-sized lane; first-lane and
+  one-field-offset targets fall back to the exact low-pcode expression/range
+  lookup. This keeps the nested-field R302 Development repair while avoiding
+  neighbor/key-field projection onto TArray/TMap first-field sinks. Summary
+  cache schema is now 69.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; direct validation of the four cycle-03 regressions
+  plus the R302 UE Development guard (`PASS 5 / FAIL 0`); and focused Suite10
+  cpp-like validation of TV2C612/TV2C615 across x86, x64, armv7, aarch64,
+  P1_x86, P1_x64, P1_armv7, and P1_aarch64 (`PASS 16 / FAIL 0`).
 
 ## Current Focus
 

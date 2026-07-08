@@ -582,6 +582,15 @@ class SliceGraphBuilder:
         input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
         out_node = self._new_value(fg, state, output, instr, "INT_XOR")
         zero_expr = self._zero_idiom_expression("INT_XOR", input_nodes, output)
+        input_sizes = [int(inp.get("size") or 0) * 8 for inp in inputs[:2]]
+        if zero_expr is None and self._xor_inputs_have_same_observed_value(fg, input_nodes[:2], input_sizes):
+            zero_expr = {
+                "kind": "const",
+                "value": 0,
+                "unsigned_value": 0,
+                "size_bits": int(output.get("size") or 0) * 8,
+                "bit_expr": {"op": "const", "value": 0, "size": int(output.get("size") or 0) * 8},
+            }
         if zero_expr is not None:
             state.expressions[out_node] = zero_expr
             return
@@ -596,6 +605,91 @@ class SliceGraphBuilder:
                 if source is not None:
                     fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_XOR")
         state.expressions[out_node] = expr
+
+    def _xor_inputs_have_same_observed_value(
+        self,
+        fg: FunctionGraph,
+        inputs: list[ValueId | None],
+        input_sizes: list[int],
+    ) -> bool:
+        if len(inputs) < 2 or inputs[0] is None or inputs[1] is None:
+            return False
+        left, right = inputs[0], inputs[1]
+        left_size = input_sizes[0] if len(input_sizes) > 0 else self._bit_size_for_graph_node(fg, left)
+        right_size = input_sizes[1] if len(input_sizes) > 1 else self._bit_size_for_graph_node(fg, right)
+        if left_size != right_size:
+            return False
+        left_signature = self._observed_value_signature(fg, left, set())
+        if left_signature is None:
+            return False
+        return left_signature == self._observed_value_signature(fg, right, set())
+
+    def _observed_value_signature(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        seen: set[ValueId],
+    ) -> tuple | None:
+        if node in seen or len(seen) > 64:
+            return None
+        seen.add(node)
+        graph = fg.slice_graph
+        attrs = graph.nodes.get(node, {})
+        opcode = attrs.get("opcode")
+        if attrs.get("kind") == "constant":
+            return ("const", attrs.get("storage"), self._bit_size_for_graph_node(fg, node))
+
+        if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE"}:
+            data_preds = [
+                pred
+                for pred in graph.predecessors(node)
+                if graph.edges[pred, node].get("kind") in {"data", "memory"}
+            ]
+            if len(data_preds) == 1:
+                return self._observed_value_signature(fg, data_preds[0], seen)
+
+        if opcode == "LOAD":
+            memory_preds = [
+                pred
+                for pred in graph.predecessors(node)
+                if graph.edges[pred, node].get("kind") == "memory"
+            ]
+            if not memory_preds:
+                return None
+            return (
+                "load",
+                tuple(sorted(pred.stable_id() for pred in memory_preds)),
+                self._bit_size_for_graph_node(fg, node),
+            )
+
+        if opcode == "STORE_VAL":
+            value_preds = [
+                pred
+                for pred in graph.predecessors(node)
+                if graph.edges[pred, node].get("kind") == "memory"
+                and graph.edges[pred, node].get("opcode") == "STORE"
+            ]
+            if len(value_preds) == 1:
+                return self._observed_value_signature(fg, value_preds[0], seen)
+
+        return None
+
+    def _bit_size_for_graph_node(self, fg: FunctionGraph, node: ValueId) -> int:
+        attrs = fg.slice_graph.nodes.get(node, {})
+        storage = attrs.get("storage") or ""
+        if storage.startswith("reg:"):
+            parts = storage.split(":")
+            if len(parts) >= 4:
+                try:
+                    return int(parts[3])
+                except ValueError:
+                    return 0
+        if node.space == "unique":
+            return 0
+        if storage.startswith("mem:"):
+            memory_range = self._memory_range_for_storage(storage)
+            return (memory_range.size if memory_range is not None else 0) * 8
+        return 0
 
     def _process_shift(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
         inputs = pcode.get("inputs", [])
@@ -1171,20 +1265,16 @@ class SliceGraphBuilder:
             if memory_range == wanted:
                 return [memory_node]
             selected: list[ValueId] = []
-            has_summary_copy_edge = False
             for pred in fg.slice_graph.predecessors(memory_node):
                 edge_kind = fg.slice_graph.edges[pred, memory_node].get("kind")
                 if not self._is_memory_dependency_kind(edge_kind):
                     continue
                 if edge_kind in {"call_out_mem", "call_out_global"}:
-                    has_summary_copy_edge = True
                     selected.append(pred)
                     continue
                 pred_range = self._memory_range_for_storage(fg.slice_graph.nodes[pred].get("storage") or "")
                 if pred_range is not None and pred_range.overlaps(wanted):
                     selected.append(pred)
-            if has_summary_copy_edge and memory_node not in selected:
-                selected.append(memory_node)
             return selected
         if memory_range is not None and memory_range.overlaps(wanted):
             return [memory_node]

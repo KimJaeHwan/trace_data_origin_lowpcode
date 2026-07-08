@@ -33,6 +33,17 @@ in the phase-specific files.
   FP 0`, Suite10 `PASS 334 / FAIL 0 / FP 0`. Final aggregate case timing is
   `290.64s` in serial fallback mode; the remaining slow cases are dominated by
   ProgramSliceGraph build time rather than query traversal.
+- Added build-stage profiling metadata to `ProgramSliceGraph`/`FunctionGraph`
+  so harness performance reports can show which load, summary, compose, or
+  injection stage dominates slow cold builds. This is instrumentation only; it
+  records timing metadata and does not alter dataflow edges or boundary policy.
+- Used the new profiler to trim `inject_metadata_source_pointer_marker_edges`:
+  metadata source-pointer propagation now skips instruction keys that have no
+  call-pre storage snapshot, because the downstream pointer-field matching
+  cannot succeed without one. Focused `tv2-tier0-P0-x64` stayed green and
+  improved from `10.56s` to `7.57s`; full Suite09/Suite10 stayed green
+  (Suite09 `PASS 488 / FAIL 0 / FP 0`, Suite10 `PASS 334 / FAIL 0 / FP 0`)
+  with aggregate serial-fallback timing reduced to `272.36s`.
 
 - Repaired the Suite09/Suite10 cycle-03 false-positive regressions without
   adding case/helper/source-label/ABI rules. Low-confidence prior-memory carry

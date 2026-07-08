@@ -22,6 +22,7 @@ class FunctionGraph:
     call_post_storage_index: dict[str, ValueId] = field(default_factory=dict)
     callsite_index: dict[str, ValueId] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    build_profile: dict[str, float | int | str] = field(default_factory=dict)
 
 
 @dataclass
@@ -35,3 +36,4 @@ class ProgramSliceGraph:
     boundary_edges: list[dict] = field(default_factory=list)
     call_graph: nx.DiGraph = field(default_factory=nx.DiGraph)
     scc_map: dict[str, int] = field(default_factory=dict)
+    build_profile: dict[str, float | int | str] = field(default_factory=dict)

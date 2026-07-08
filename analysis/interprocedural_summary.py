@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -529,6 +530,7 @@ class ProgramSliceGraphBuilder:
             callee_entry_observed_index=dict(target_graph.callee_entry_observed_index),
             callsite_index=dict(target_graph.callsite_index),
             warnings=list(target_graph.warnings),
+            build_profile=dict(program_graph.build_profile),
         )
         return composed
 
@@ -550,13 +552,16 @@ class ProgramSliceGraphBuilder:
     def _build_directory(self, directory: Path) -> ProgramSliceGraph:
         directory = directory.resolve()
         programs: list[LowPcodeProgram] | None = None
+        profile: dict[str, float | int | str] = {}
         paths = sorted(directory.glob("*_low_pcode.json"))
         stat_key = self._directory_stat_cache_key(paths)
         cached_fingerprint = self._fingerprint_cache.get(directory)
         if cached_fingerprint is not None and cached_fingerprint[0] == stat_key:
             fingerprint = cached_fingerprint[1]
         else:
+            load_start = time.perf_counter()
             programs = [self.loader.load(path) for path in paths]
+            profile["load_seconds"] = time.perf_counter() - load_start
             fingerprint = self._directory_cache_fingerprint_from_programs(programs)
             self._fingerprint_cache[directory] = (stat_key, fingerprint)
         cache_key = (directory, fingerprint)
@@ -565,66 +570,87 @@ class ProgramSliceGraphBuilder:
             return cached
 
         if programs is None:
+            load_start = time.perf_counter()
             programs = [self.loader.load(path) for path in paths]
+            profile["load_seconds"] = time.perf_counter() - load_start
+        profile["file_count"] = len(programs)
+        function_build_start = time.perf_counter()
         functions = {program.function_name: self.function_builder.build(program) for program in programs}
+        profile["function_build_seconds"] = time.perf_counter() - function_build_start
+        summary_cache_start = time.perf_counter()
         summaries = self._load_summary_cache(fingerprint, functions)
+        profile["summary_cache_load_seconds"] = time.perf_counter() - summary_cache_start
         if summaries is None:
+            summary_build_start = time.perf_counter()
             summaries = {
                 name: self.summary_provider.summarize(function_graph)
                 for name, function_graph in functions.items()
             }
+            profile["summary_build_seconds"] = time.perf_counter() - summary_build_start
+            summary_save_start = time.perf_counter()
             self._save_summary_cache(fingerprint, summaries)
+            profile["summary_cache_save_seconds"] = time.perf_counter() - summary_save_start
 
+        compose_start = time.perf_counter()
         composed = self._compose_function_slice_graphs(functions)
+        profile["compose_seconds"] = time.perf_counter() - compose_start
 
         program_graph = ProgramSliceGraph(
             functions=functions,
             slice_graph=composed,
             function_name_by_path={str(program.path.resolve()): program.function_name for program in programs},
             source_index=self._merged_source_index(functions),
+            build_profile=profile,
         )
-        self._record_direct_calls(program_graph, programs)
-        self._inject_fused_tail_branch_edges(program_graph, programs)
-        self._compose_transitive_sink_summaries(program_graph, programs, summaries)
-        self._record_call_in_edges(program_graph, programs)
-        self._inject_summary_edges(program_graph, programs, summaries)
-        self._inject_observed_indirect_sink_edges(program_graph, programs)
-        self._inject_unresolved_computed_pointer_scalar_memory_write_edges(program_graph, programs)
-        self._inject_observed_storage_preservation_edges(program_graph, programs)
-        self._inject_source_boundary_storage_preservation_edges(program_graph, programs)
-        self._inject_observed_storage_preservation_edges(program_graph, programs)
-        self._inject_source_pointer_observed_memory_edges(program_graph, programs)
-        self._inject_boundary_provider_memory_effect_edges(program_graph, programs)
-        self._inject_selected_stack_pointer_global_edges(program_graph, programs)
-        self._inject_latest_unique_memory_to_observed_field_edges(program_graph)
-        self._inject_keyed_nested_pointer_source_edges(program_graph, programs)
-        self._inject_observed_pointer_write_passthrough_edges(program_graph, programs)
-        self._inject_observed_thunk_scalar_pointer_field_edges(program_graph, programs, summaries)
-        self._inject_observed_thunk_pointer_memory_copy_edges(program_graph, programs)
-        self._inject_unresolved_boundary_passthrough_edges(program_graph, programs, summaries)
-        self._inject_observed_callback_wrapper_passthrough_edges(program_graph, programs)
-        self._inject_resolved_computed_scalar_passthrough_edges(program_graph, programs, summaries)
-        self._inject_observed_pointer_passthrough_edges(program_graph, programs)
-        self._inject_observed_runtime_register_restore_edges(program_graph, programs)
-        self._inject_observed_thread_callback_sink_edges(program_graph, programs)
-        self._inject_observed_runtime_escape_sink_edges(program_graph, programs)
-        self._inject_external_summary_edges(program_graph, programs)
-        self._inject_metadata_source_pointer_marker_edges(program_graph, programs, summaries)
-        self._inject_prior_call_context_memory_result_edges(program_graph)
-        self._inject_redirected_prior_memory_source_edges(program_graph)
-        self._inject_prior_observed_memory_overlap_edges(program_graph)
-        self._inject_observed_callback_wrapper_passthrough_edges(program_graph, programs)
-        self._inject_resolved_computed_scalar_passthrough_edges(program_graph, programs, summaries)
-        self._inject_late_narrow_thunk_scalar_post_memory_edges(program_graph, programs)
-        self._inject_prior_indexed_thunk_field_read_edges(program_graph, programs)
-        self._prune_conflicting_summary_memory_inputs_for_unresolved_computed_pointer_overwrites(program_graph)
-        self._prune_prior_memory_carry_edges_shadowed_by_summary_writes(program_graph)
-        self._inject_prior_indexed_thunk_field_read_edges(program_graph, programs)
-        self._prune_ambiguous_stack_phi_backedges(program_graph)
-        self._record_sccs(program_graph)
-        self._inject_prior_observed_memory_overlap_edges(program_graph)
+        self._time_build_stage(program_graph, "record_direct_calls", self._record_direct_calls, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_fused_tail_branch_edges", self._inject_fused_tail_branch_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "compose_transitive_sink_summaries", self._compose_transitive_sink_summaries, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "record_call_in_edges", self._record_call_in_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_summary_edges", self._inject_summary_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_observed_indirect_sink_edges", self._inject_observed_indirect_sink_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_unresolved_computed_pointer_scalar_memory_write_edges", self._inject_unresolved_computed_pointer_scalar_memory_write_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_storage_preservation_edges_1", self._inject_observed_storage_preservation_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_source_boundary_storage_preservation_edges", self._inject_source_boundary_storage_preservation_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_storage_preservation_edges_2", self._inject_observed_storage_preservation_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_source_pointer_observed_memory_edges", self._inject_source_pointer_observed_memory_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_boundary_provider_memory_effect_edges", self._inject_boundary_provider_memory_effect_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_selected_stack_pointer_global_edges", self._inject_selected_stack_pointer_global_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_latest_unique_memory_to_observed_field_edges", self._inject_latest_unique_memory_to_observed_field_edges, program_graph)
+        self._time_build_stage(program_graph, "inject_keyed_nested_pointer_source_edges", self._inject_keyed_nested_pointer_source_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_pointer_write_passthrough_edges", self._inject_observed_pointer_write_passthrough_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_thunk_scalar_pointer_field_edges", self._inject_observed_thunk_scalar_pointer_field_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_observed_thunk_pointer_memory_copy_edges", self._inject_observed_thunk_pointer_memory_copy_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_unresolved_boundary_passthrough_edges", self._inject_unresolved_boundary_passthrough_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_observed_callback_wrapper_passthrough_edges_1", self._inject_observed_callback_wrapper_passthrough_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_resolved_computed_scalar_passthrough_edges_1", self._inject_resolved_computed_scalar_passthrough_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_observed_pointer_passthrough_edges", self._inject_observed_pointer_passthrough_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_runtime_register_restore_edges", self._inject_observed_runtime_register_restore_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_thread_callback_sink_edges", self._inject_observed_thread_callback_sink_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_observed_runtime_escape_sink_edges", self._inject_observed_runtime_escape_sink_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_external_summary_edges", self._inject_external_summary_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_metadata_source_pointer_marker_edges", self._inject_metadata_source_pointer_marker_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_prior_call_context_memory_result_edges", self._inject_prior_call_context_memory_result_edges, program_graph)
+        self._time_build_stage(program_graph, "inject_redirected_prior_memory_source_edges", self._inject_redirected_prior_memory_source_edges, program_graph)
+        self._time_build_stage(program_graph, "inject_prior_observed_memory_overlap_edges_1", self._inject_prior_observed_memory_overlap_edges, program_graph)
+        self._time_build_stage(program_graph, "inject_observed_callback_wrapper_passthrough_edges_2", self._inject_observed_callback_wrapper_passthrough_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_resolved_computed_scalar_passthrough_edges_2", self._inject_resolved_computed_scalar_passthrough_edges, program_graph, programs, summaries)
+        self._time_build_stage(program_graph, "inject_late_narrow_thunk_scalar_post_memory_edges", self._inject_late_narrow_thunk_scalar_post_memory_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "inject_prior_indexed_thunk_field_read_edges_1", self._inject_prior_indexed_thunk_field_read_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "prune_conflicting_summary_memory_inputs_for_unresolved_computed_pointer_overwrites", self._prune_conflicting_summary_memory_inputs_for_unresolved_computed_pointer_overwrites, program_graph)
+        self._time_build_stage(program_graph, "prune_prior_memory_carry_edges_shadowed_by_summary_writes", self._prune_prior_memory_carry_edges_shadowed_by_summary_writes, program_graph)
+        self._time_build_stage(program_graph, "inject_prior_indexed_thunk_field_read_edges_2", self._inject_prior_indexed_thunk_field_read_edges, program_graph, programs)
+        self._time_build_stage(program_graph, "prune_ambiguous_stack_phi_backedges", self._prune_ambiguous_stack_phi_backedges, program_graph)
+        self._time_build_stage(program_graph, "record_sccs", self._record_sccs, program_graph)
+        self._time_build_stage(program_graph, "inject_prior_observed_memory_overlap_edges_2", self._inject_prior_observed_memory_overlap_edges, program_graph)
         self._cache[cache_key] = program_graph
         return program_graph
+
+    def _time_build_stage(self, program_graph: ProgramSliceGraph, stage_name: str, callback, *args) -> None:
+        start = time.perf_counter()
+        callback(*args)
+        elapsed = time.perf_counter() - start
+        profile_key = f"stage:{stage_name}:seconds"
+        program_graph.build_profile[profile_key] = program_graph.build_profile.get(profile_key, 0.0) + elapsed
 
     def _compose_function_slice_graphs(self, functions: dict[str, FunctionGraph]) -> nx.DiGraph:
         composed = nx.DiGraph()
@@ -1569,11 +1595,20 @@ class ProgramSliceGraphBuilder:
                 continue
             source_name = marker_names[0]
             caller_graph = program_graph.functions[program.function_name]
+            if not caller_graph.call_pre_storage_index:
+                continue
+            callsite_keys_with_pre = {
+                key.split(":pre:", 1)[0]
+                for key in caller_graph.call_pre_storage_index
+                if ":pre:" in key
+            }
             composed_caller = self._composed_caller_graph(program_graph, caller_graph)
             external_summaries = self.external_summary_provider.resolve_program_callsites(program)
             for instr in sorted(program.instructions, key=lambda item: parse_int(item.get("address")) or 0):
                 resolved = self.call_resolver.resolve(instr)
                 callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                if callsite_key not in callsite_keys_with_pre:
+                    continue
                 if not self._can_apply_metadata_marker_source_write(
                     program_graph,
                     programs_by_name,

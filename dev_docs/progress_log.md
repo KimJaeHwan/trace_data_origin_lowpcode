@@ -1405,6 +1405,16 @@ in the phase-specific files.
   without opcode profiling (`09 PASS 488 / FAIL 0 / FP 0`, `10 PASS 334 /
   FAIL 0 / FP 0`, 822 total cases, 271.11s aggregate timing).
 
+- 2026-07-09: Reduced ProgramSliceGraph post-processing scan cost by grouping
+  graph nodes and PHI edges by function before the overlap and ambiguous-stack
+  pruning passes. This keeps the same low-pcode semantics and summary rules but
+  avoids repeatedly scanning the full composed graph for each function.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; focused Suite10 P0 x64 validation (`PASS 35 / FAIL 0 /
+  FP 0`); focused TV2R301 UE validation (`PASS 2 / FAIL 0 / FP 0`); and full
+  default Suite09/Suite10 regression (`09 PASS 488 / FAIL 0 / FP 0`, `10 PASS
+  334 / FAIL 0 / FP 0`, 822 total cases, 256.15s aggregate timing).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

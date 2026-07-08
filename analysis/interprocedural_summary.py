@@ -2704,11 +2704,14 @@ class ProgramSliceGraphBuilder:
         return source_range.identity == target_range.identity and source_range.overlaps(target_range)
 
     def _prune_ambiguous_stack_phi_backedges(self, program_graph: ProgramSliceGraph) -> None:
+        edges_by_function: dict[str, list[tuple[ValueId, ValueId, dict]]] = {}
+        for source, target, edge_attrs in list(program_graph.slice_graph.edges(data=True)):
+            if source.function != target.function:
+                continue
+            edges_by_function.setdefault(source.function, []).append((source, target, edge_attrs))
         for caller_graph in program_graph.functions.values():
             composed_caller = self._composed_caller_graph(program_graph, caller_graph)
-            for source, target, edge_attrs in list(program_graph.slice_graph.edges(data=True)):
-                if source.function != caller_graph.function_name or target.function != caller_graph.function_name:
-                    continue
+            for source, target, edge_attrs in edges_by_function.get(caller_graph.function_name, []):
                 if edge_attrs.get("kind") not in DATA_SLICE_EDGES or edge_attrs.get("opcode") != "PHI":
                     continue
                 target_attrs = program_graph.slice_graph.nodes[target]
@@ -2735,7 +2738,11 @@ class ProgramSliceGraphBuilder:
                     local_graph.remove_edge(source, target)
 
     def _inject_prior_observed_memory_overlap_edges(self, program_graph: ProgramSliceGraph) -> None:
+        nodes_by_function: dict[str, list[tuple[ValueId, dict]]] = {}
+        for node, attrs in program_graph.slice_graph.nodes(data=True):
+            nodes_by_function.setdefault(node.function, []).append((node, attrs))
         for caller_graph in program_graph.functions.values():
+            function_nodes = nodes_by_function.get(caller_graph.function_name, [])
             composed_caller = FunctionGraph(
                 function_name=caller_graph.function_name,
                 context_id=caller_graph.context_id,
@@ -2750,9 +2757,7 @@ class ProgramSliceGraphBuilder:
                 callsite_index=caller_graph.callsite_index,
                 warnings=caller_graph.warnings,
             )
-            for target_node, target_attrs in list(program_graph.slice_graph.nodes(data=True)):
-                if target_node.function != caller_graph.function_name:
-                    continue
+            for target_node, target_attrs in function_nodes:
                 if target_attrs.get("kind") not in {"observed_memory", "phi"}:
                     continue
                 if target_attrs.get("kind") == "observed_memory" and self._has_data_predecessor(
@@ -2773,9 +2778,7 @@ class ProgramSliceGraphBuilder:
                     continue
                 target_addr = parse_int(target_attrs.get("addr")) or 0
                 candidates: list[tuple[int, list[ValueId], set[str]]] = []
-                for source_node, source_attrs in program_graph.slice_graph.nodes(data=True):
-                    if source_node.function != caller_graph.function_name:
-                        continue
+                for source_node, source_attrs in function_nodes:
                     if source_node == target_node:
                         continue
                     source_storage = source_attrs.get("storage") or ""

@@ -496,10 +496,17 @@ def merge_function_summary(target: AutoFunctionSummary, source: AutoFunctionSumm
 
 
 class ProgramSliceGraphBuilder:
-    def __init__(self, boundary_provider: BoundaryProvider | None = None):
+    def __init__(
+        self,
+        boundary_provider: BoundaryProvider | None = None,
+        profile_opcodes: bool = False,
+    ):
         self.loader = LowPcodeLoader()
         self.boundary_provider = boundary_provider or DataFlowBenchBoundaryProvider()
-        self.function_builder = SliceGraphBuilder(boundary_provider=self.boundary_provider)
+        self.function_builder = SliceGraphBuilder(
+            boundary_provider=self.boundary_provider,
+            profile_opcodes=profile_opcodes,
+        )
         self.auto_summary_provider = MinimalAutoFunctionSummaryProvider()
         self.summary_provider = CompositeSummaryProvider([self.auto_summary_provider])
         self.external_summary_provider = ExternalSummaryProvider()
@@ -662,6 +669,7 @@ class ProgramSliceGraphBuilder:
                     "node_count": profile.get("node_count"),
                     "edge_count": profile.get("edge_count"),
                     "loop_revisit_count": profile.get("loop_revisit_count"),
+                    "opcode_profile_top": profile.get("opcode_profile_top") or [],
                 }
             )
         rows.sort(key=lambda item: item["seconds"], reverse=True)

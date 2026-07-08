@@ -1393,6 +1393,18 @@ in the phase-specific files.
   cpp-like validation of TV2C612/TV2C615 across x86, x64, armv7, aarch64,
   P1_x86, P1_x64, P1_armv7, and P1_aarch64 (`PASS 16 / FAIL 0`).
 
+- 2026-07-08: Added optional opcode-level SliceGraphBuilder profiling for
+  performance work. `ProgramSliceGraphBuilder(profile_opcodes=True)` now
+  records per-low-pcode opcode counts, elapsed time, and node/edge growth for
+  the hottest function builds. This is an instrumentation-only path: the
+  default builder remains unchanged, and the harness must opt in with
+  `--slice-profile-opcodes`.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; focused Suite10 P0 x64 opcode-profile run
+  (`PASS 35 / FAIL 0 / FP 0`); and full default Suite09/Suite10 regression
+  without opcode profiling (`09 PASS 488 / FAIL 0 / FP 0`, `10 PASS 334 /
+  FAIL 0 / FP 0`, 822 total cases, 271.11s aggregate timing).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

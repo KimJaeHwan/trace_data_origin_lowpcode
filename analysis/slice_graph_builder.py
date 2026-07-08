@@ -88,6 +88,7 @@ class SliceGraphBuilder:
         self,
         boundary_provider: BoundaryProvider | None = None,
         boundary_binder: BoundaryProvider | None = None,
+        profile_opcodes: bool = False,
     ):
         if boundary_provider is not None and boundary_binder is not None:
             raise ValueError("Pass either boundary_provider or boundary_binder, not both.")
@@ -95,6 +96,7 @@ class SliceGraphBuilder:
         self.call_resolver = CallResolver()
         self.call_boundary_mapper = CallBoundaryMapper()
         self.memory_model = MemoryModel()
+        self.profile_opcodes = profile_opcodes
 
     def build(self, program: LowPcodeProgram) -> FunctionGraph:
         instructions = program.instructions
@@ -112,9 +114,10 @@ class SliceGraphBuilder:
         profile["cfg_seconds"] = time.perf_counter() - cfg_start
         state = BuildState()
         block_out_states: dict[str, BuildState] = {}
+        opcode_profile: dict[str, dict[str, float | int]] = {}
 
         process_start = time.perf_counter()
-        self._process_instruction_range(function_graph, state, instructions, block_out_states)
+        self._process_instruction_range(function_graph, state, instructions, block_out_states, opcode_profile)
         profile["process_initial_seconds"] = time.perf_counter() - process_start
 
         revisit_start = time.perf_counter()
@@ -127,11 +130,14 @@ class SliceGraphBuilder:
                 state,
                 instructions[start_index:],
                 block_out_states,
+                opcode_profile,
             )
         profile["loop_revisit_count"] = revisit_count
         profile["loop_revisit_seconds"] = time.perf_counter() - revisit_start
         profile["node_count"] = function_graph.slice_graph.number_of_nodes()
         profile["edge_count"] = function_graph.slice_graph.number_of_edges()
+        if self.profile_opcodes:
+            profile["opcode_profile_top"] = self._top_opcode_profile(opcode_profile)
         function_graph.build_profile = profile
 
         return function_graph
@@ -142,6 +148,7 @@ class SliceGraphBuilder:
         state: BuildState,
         instructions: list[dict],
         block_out_states: dict[str, BuildState],
+        opcode_profile: dict[str, dict[str, float | int]],
     ) -> None:
         for instr in instructions:
             block_start = instr["address"]
@@ -156,7 +163,10 @@ class SliceGraphBuilder:
                 self._bind_sink(function_graph, state, instr, sink_name)
 
             for pcode in instr.get("low_pcode", []):
-                self._process_pcode(function_graph, state, instr, pcode)
+                if self.profile_opcodes:
+                    self._profiled_process_pcode(function_graph, state, instr, pcode, opcode_profile)
+                else:
+                    self._process_pcode(function_graph, state, instr, pcode)
 
             if self._is_call_instruction(instr):
                 self._materialize_call_boundary(function_graph, state, instr)
@@ -166,6 +176,47 @@ class SliceGraphBuilder:
                 self._bind_source(function_graph, state, instr, source_name)
 
             block_out_states[block_start] = state.copy()
+
+    def _profiled_process_pcode(
+        self,
+        function_graph: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+        pcode: dict,
+        opcode_profile: dict[str, dict[str, float | int]],
+    ) -> None:
+        opcode = str(pcode.get("opcode") or "UNKNOWN")
+        before_nodes = function_graph.slice_graph.number_of_nodes()
+        before_edges = function_graph.slice_graph.number_of_edges()
+        start = time.perf_counter()
+        self._process_pcode(function_graph, state, instr, pcode)
+        elapsed = time.perf_counter() - start
+        bucket = opcode_profile.setdefault(
+            opcode,
+            {"count": 0, "seconds": 0.0, "nodes_added": 0, "edges_added": 0},
+        )
+        bucket["count"] = int(bucket["count"]) + 1
+        bucket["seconds"] = float(bucket["seconds"]) + elapsed
+        bucket["nodes_added"] = int(bucket["nodes_added"]) + (
+            function_graph.slice_graph.number_of_nodes() - before_nodes
+        )
+        bucket["edges_added"] = int(bucket["edges_added"]) + (
+            function_graph.slice_graph.number_of_edges() - before_edges
+        )
+
+    def _top_opcode_profile(self, opcode_profile: dict[str, dict[str, float | int]], limit: int = 8) -> list[dict]:
+        rows = [
+            {
+                "opcode": opcode,
+                "count": int(bucket.get("count") or 0),
+                "seconds": round(float(bucket.get("seconds") or 0.0), 6),
+                "nodes_added": int(bucket.get("nodes_added") or 0),
+                "edges_added": int(bucket.get("edges_added") or 0),
+            }
+            for opcode, bucket in opcode_profile.items()
+        ]
+        rows.sort(key=lambda item: item["seconds"], reverse=True)
+        return rows[:limit]
 
     def _loop_revisit_start_indexes(self, instructions: list[dict], function_graph: FunctionGraph) -> list[int]:
         address_to_index = {instr["address"]: index for index, instr in enumerate(instructions)}

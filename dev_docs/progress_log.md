@@ -1429,6 +1429,21 @@ in the phase-specific files.
   0 / FP 0`, `10 PASS 334 / FAIL 0 / FP 0`, 822 total cases, 255.78s aggregate
   timing).
 
+- 2026-07-09: Extended optional function-build profiling with callsite-level
+  call-boundary details. Hot function rows now report the slowest callsites,
+  target names, repeated materialization count, unique pre/post storage counts,
+  and node/edge growth when profiling is enabled. TV2R301 showed the
+  call-boundary cost is distributed across many callsites rather than one
+  outlier, with DebugGame callsites commonly materializing 58 post storages and
+  hundreds of pre-storage observations. This points the next optimization toward
+  call-boundary candidate volume/lazy materialization, not source/sink or opcode
+  handling.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; focused TV2R301 UE call-boundary profiler validation
+  (`PASS 2 / FAIL 0 / FP 0`); and full default Suite09/Suite10 regression (`09
+  PASS 488 / FAIL 0 / FP 0`, `10 PASS 334 / FAIL 0 / FP 0`, 822 total cases,
+  255.75s aggregate timing).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

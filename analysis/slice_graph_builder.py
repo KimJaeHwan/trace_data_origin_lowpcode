@@ -116,9 +116,18 @@ class SliceGraphBuilder:
         block_out_states: dict[str, BuildState] = {}
         opcode_profile: dict[str, dict[str, float | int]] = {}
         step_profile: dict[str, dict[str, float | int]] = {}
+        call_boundary_profile: dict[str, dict[str, float | int | str]] = {}
 
         process_start = time.perf_counter()
-        self._process_instruction_range(function_graph, state, instructions, block_out_states, opcode_profile, step_profile)
+        self._process_instruction_range(
+            function_graph,
+            state,
+            instructions,
+            block_out_states,
+            opcode_profile,
+            step_profile,
+            call_boundary_profile,
+        )
         profile["process_initial_seconds"] = time.perf_counter() - process_start
 
         revisit_start = time.perf_counter()
@@ -133,6 +142,7 @@ class SliceGraphBuilder:
                 block_out_states,
                 opcode_profile,
                 step_profile,
+                call_boundary_profile,
             )
         profile["loop_revisit_count"] = revisit_count
         profile["loop_revisit_seconds"] = time.perf_counter() - revisit_start
@@ -141,6 +151,7 @@ class SliceGraphBuilder:
         if self.profile_opcodes:
             profile["opcode_profile_top"] = self._top_opcode_profile(opcode_profile)
             profile["step_profile_top"] = self._top_step_profile(step_profile)
+            profile["call_boundary_profile_top"] = self._top_call_boundary_profile(call_boundary_profile)
         function_graph.build_profile = profile
 
         return function_graph
@@ -153,6 +164,7 @@ class SliceGraphBuilder:
         block_out_states: dict[str, BuildState],
         opcode_profile: dict[str, dict[str, float | int]],
         step_profile: dict[str, dict[str, float | int]],
+        call_boundary_profile: dict[str, dict[str, float | int | str]],
     ) -> None:
         for instr in instructions:
             block_start = instr["address"]
@@ -183,7 +195,14 @@ class SliceGraphBuilder:
             if self._is_call_instruction(instr):
                 if self.profile_opcodes:
                     step_start = time.perf_counter()
-                self._materialize_call_boundary(function_graph, state, instr)
+                    self._profiled_materialize_call_boundary(
+                        function_graph,
+                        state,
+                        instr,
+                        call_boundary_profile,
+                    )
+                else:
+                    self._materialize_call_boundary(function_graph, state, instr)
                 if self.profile_opcodes:
                     self._record_step_profile(step_profile, "materialize_call_boundary", step_start)
 
@@ -264,6 +283,76 @@ class SliceGraphBuilder:
                 "seconds": round(float(bucket.get("seconds") or 0.0), 6),
             }
             for step, bucket in step_profile.items()
+        ]
+        rows.sort(key=lambda item: item["seconds"], reverse=True)
+        return rows[:limit]
+
+    def _profiled_materialize_call_boundary(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+        call_boundary_profile: dict[str, dict[str, float | int | str]],
+    ) -> None:
+        before_nodes = fg.slice_graph.number_of_nodes()
+        before_edges = fg.slice_graph.number_of_edges()
+        start = time.perf_counter()
+        self._materialize_call_boundary(fg, state, instr)
+        elapsed = time.perf_counter() - start
+        address = str(instr.get("address") or "")
+        callsite_key = self._latest_callsite_key_for_address(fg, address)
+        pre_prefix = f"{callsite_key}:pre:"
+        post_prefix = f"{callsite_key}:post:"
+        bucket = call_boundary_profile.setdefault(
+            callsite_key,
+            {
+                "callsite": callsite_key,
+                "address": address,
+                "target": callsite_key.split(":", 1)[1] if ":" in callsite_key else "",
+                "count": 0,
+                "seconds": 0.0,
+                "nodes_added": 0,
+                "edges_added": 0,
+                "pre_storage_count": 0,
+                "post_storage_count": 0,
+            },
+        )
+        bucket["count"] = int(bucket["count"]) + 1
+        bucket["seconds"] = float(bucket["seconds"]) + elapsed
+        bucket["nodes_added"] = int(bucket["nodes_added"]) + (fg.slice_graph.number_of_nodes() - before_nodes)
+        bucket["edges_added"] = int(bucket["edges_added"]) + (fg.slice_graph.number_of_edges() - before_edges)
+        bucket["pre_storage_count"] = max(
+            int(bucket["pre_storage_count"]),
+            sum(1 for key in fg.call_pre_storage_index if key.startswith(pre_prefix)),
+        )
+        bucket["post_storage_count"] = max(
+            int(bucket["post_storage_count"]),
+            sum(1 for key in fg.call_post_storage_index if key.startswith(post_prefix)),
+        )
+
+    def _latest_callsite_key_for_address(self, fg: FunctionGraph, address: str) -> str:
+        prefix = f"{address}:"
+        matches = [key for key in fg.callsite_index if key.startswith(prefix)]
+        return matches[-1] if matches else f"{address}:unresolved"
+
+    def _top_call_boundary_profile(
+        self,
+        call_boundary_profile: dict[str, dict[str, float | int | str]],
+        limit: int = 8,
+    ) -> list[dict]:
+        rows = [
+            {
+                "callsite": str(bucket.get("callsite") or callsite),
+                "address": str(bucket.get("address") or ""),
+                "target": str(bucket.get("target") or ""),
+                "count": int(bucket.get("count") or 0),
+                "seconds": round(float(bucket.get("seconds") or 0.0), 6),
+                "nodes_added": int(bucket.get("nodes_added") or 0),
+                "edges_added": int(bucket.get("edges_added") or 0),
+                "pre_storage_count": int(bucket.get("pre_storage_count") or 0),
+                "post_storage_count": int(bucket.get("post_storage_count") or 0),
+            }
+            for callsite, bucket in call_boundary_profile.items()
         ]
         rows.sort(key=lambda item: item["seconds"], reverse=True)
         return rows[:limit]

@@ -577,6 +577,7 @@ class ProgramSliceGraphBuilder:
         function_build_start = time.perf_counter()
         functions = {program.function_name: self.function_builder.build(program) for program in programs}
         profile["function_build_seconds"] = time.perf_counter() - function_build_start
+        profile["function_build_top"] = self._top_function_build_profiles(functions)
         summary_cache_start = time.perf_counter()
         summaries = self._load_summary_cache(fingerprint, functions)
         profile["summary_cache_load_seconds"] = time.perf_counter() - summary_cache_start
@@ -644,6 +645,27 @@ class ProgramSliceGraphBuilder:
         self._time_build_stage(program_graph, "inject_prior_observed_memory_overlap_edges_2", self._inject_prior_observed_memory_overlap_edges, program_graph)
         self._cache[cache_key] = program_graph
         return program_graph
+
+    def _top_function_build_profiles(self, functions: dict[str, FunctionGraph], limit: int = 8) -> list[dict]:
+        rows = []
+        for name, function_graph in functions.items():
+            profile = function_graph.build_profile
+            seconds = float(profile.get("process_initial_seconds") or 0.0) + float(
+                profile.get("loop_revisit_seconds") or 0.0
+            )
+            rows.append(
+                {
+                    "function": name,
+                    "seconds": round(seconds, 6),
+                    "instruction_count": profile.get("instruction_count"),
+                    "pcode_count": profile.get("pcode_count"),
+                    "node_count": profile.get("node_count"),
+                    "edge_count": profile.get("edge_count"),
+                    "loop_revisit_count": profile.get("loop_revisit_count"),
+                }
+            )
+        rows.sort(key=lambda item: item["seconds"], reverse=True)
+        return rows[:limit]
 
     def _time_build_stage(self, program_graph: ProgramSliceGraph, stage_name: str, callback, *args) -> None:
         start = time.perf_counter()

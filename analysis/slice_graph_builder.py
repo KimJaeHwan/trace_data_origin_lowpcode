@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from analysis.boundary_provider import BoundaryProvider, DataFlowBenchBoundaryBinder, NoBoundaryProvider
@@ -96,25 +97,42 @@ class SliceGraphBuilder:
         self.memory_model = MemoryModel()
 
     def build(self, program: LowPcodeProgram) -> FunctionGraph:
+        instructions = program.instructions
         function_graph = FunctionGraph(
             function_name=program.function_name,
             context_id="root",
             architecture=program.architecture,
         )
-        function_graph.cfg = CFGBuilder().build(program.instructions)
+        profile: dict[str, float | int] = {
+            "instruction_count": len(instructions),
+            "pcode_count": sum(len(instr.get("low_pcode") or []) for instr in instructions),
+        }
+        cfg_start = time.perf_counter()
+        function_graph.cfg = CFGBuilder().build(instructions)
+        profile["cfg_seconds"] = time.perf_counter() - cfg_start
         state = BuildState()
         block_out_states: dict[str, BuildState] = {}
 
-        self._process_instruction_range(function_graph, state, program.instructions, block_out_states)
+        process_start = time.perf_counter()
+        self._process_instruction_range(function_graph, state, instructions, block_out_states)
+        profile["process_initial_seconds"] = time.perf_counter() - process_start
 
-        for start_index in self._loop_revisit_start_indexes(program.instructions, function_graph):
+        revisit_start = time.perf_counter()
+        revisit_count = 0
+        for start_index in self._loop_revisit_start_indexes(instructions, function_graph):
             state = BuildState()
+            revisit_count += 1
             self._process_instruction_range(
                 function_graph,
                 state,
-                program.instructions[start_index:],
+                instructions[start_index:],
                 block_out_states,
             )
+        profile["loop_revisit_count"] = revisit_count
+        profile["loop_revisit_seconds"] = time.perf_counter() - revisit_start
+        profile["node_count"] = function_graph.slice_graph.number_of_nodes()
+        profile["edge_count"] = function_graph.slice_graph.number_of_edges()
+        function_graph.build_profile = profile
 
         return function_graph
 

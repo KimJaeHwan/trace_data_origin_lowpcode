@@ -44,6 +44,13 @@ in the phase-specific files.
   improved from `10.56s` to `7.57s`; full Suite09/Suite10 stayed green
   (Suite09 `PASS 488 / FAIL 0 / FP 0`, Suite10 `PASS 334 / FAIL 0 / FP 0`)
   with aggregate serial-fallback timing reduced to `272.36s`.
+- Added function-level build profiling inside `SliceGraphBuilder`. The current
+  hot spots are large low-pcode functions rather than query traversal:
+  `case_TV2R301_tarray_swap_remove_reindexed_field`, `case_TV2R010_nested_container`,
+  `FindIndexByHash<FName>`, `Rehash`, and PE TLS helper `__emutls_get_address`.
+  Full Suite09/Suite10 remains green with aggregate serial-fallback timing
+  `269.69s`. The next safe optimization track should profile pcode-op/node
+  creation costs before considering rustworkx or multiprocessing.
 
 - Repaired the Suite09/Suite10 cycle-03 false-positive regressions without
   adding case/helper/source-label/ABI rules. Low-confidence prior-memory carry

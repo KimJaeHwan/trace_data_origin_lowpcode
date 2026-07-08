@@ -115,9 +115,10 @@ class SliceGraphBuilder:
         state = BuildState()
         block_out_states: dict[str, BuildState] = {}
         opcode_profile: dict[str, dict[str, float | int]] = {}
+        step_profile: dict[str, dict[str, float | int]] = {}
 
         process_start = time.perf_counter()
-        self._process_instruction_range(function_graph, state, instructions, block_out_states, opcode_profile)
+        self._process_instruction_range(function_graph, state, instructions, block_out_states, opcode_profile, step_profile)
         profile["process_initial_seconds"] = time.perf_counter() - process_start
 
         revisit_start = time.perf_counter()
@@ -131,6 +132,7 @@ class SliceGraphBuilder:
                 instructions[start_index:],
                 block_out_states,
                 opcode_profile,
+                step_profile,
             )
         profile["loop_revisit_count"] = revisit_count
         profile["loop_revisit_seconds"] = time.perf_counter() - revisit_start
@@ -138,6 +140,7 @@ class SliceGraphBuilder:
         profile["edge_count"] = function_graph.slice_graph.number_of_edges()
         if self.profile_opcodes:
             profile["opcode_profile_top"] = self._top_opcode_profile(opcode_profile)
+            profile["step_profile_top"] = self._top_step_profile(step_profile)
         function_graph.build_profile = profile
 
         return function_graph
@@ -149,6 +152,7 @@ class SliceGraphBuilder:
         instructions: list[dict],
         block_out_states: dict[str, BuildState],
         opcode_profile: dict[str, dict[str, float | int]],
+        step_profile: dict[str, dict[str, float | int]],
     ) -> None:
         for instr in instructions:
             block_start = instr["address"]
@@ -156,11 +160,19 @@ class SliceGraphBuilder:
             if predecessors:
                 ready_states = [block_out_states[pred] for pred in predecessors if pred in block_out_states]
                 if ready_states:
+                    if self.profile_opcodes:
+                        step_start = time.perf_counter()
                     state = self._merge_states(function_graph, state, ready_states, instr)
+                    if self.profile_opcodes:
+                        self._record_step_profile(step_profile, "merge_states", step_start)
 
             sink_name = self.boundary_provider.is_sink_call(instr)
             if sink_name:
+                if self.profile_opcodes:
+                    step_start = time.perf_counter()
                 self._bind_sink(function_graph, state, instr, sink_name)
+                if self.profile_opcodes:
+                    self._record_step_profile(step_profile, "bind_sink", step_start)
 
             for pcode in instr.get("low_pcode", []):
                 if self.profile_opcodes:
@@ -169,13 +181,26 @@ class SliceGraphBuilder:
                     self._process_pcode(function_graph, state, instr, pcode)
 
             if self._is_call_instruction(instr):
+                if self.profile_opcodes:
+                    step_start = time.perf_counter()
                 self._materialize_call_boundary(function_graph, state, instr)
+                if self.profile_opcodes:
+                    self._record_step_profile(step_profile, "materialize_call_boundary", step_start)
 
             source_name = self.boundary_provider.is_source_call(instr)
             if source_name:
+                if self.profile_opcodes:
+                    step_start = time.perf_counter()
                 self._bind_source(function_graph, state, instr, source_name)
+                if self.profile_opcodes:
+                    self._record_step_profile(step_profile, "bind_source", step_start)
 
-            block_out_states[block_start] = state.copy()
+            if self.profile_opcodes:
+                step_start = time.perf_counter()
+                block_out_states[block_start] = state.copy()
+                self._record_step_profile(step_profile, "state_copy", step_start)
+            else:
+                block_out_states[block_start] = state.copy()
 
     def _profiled_process_pcode(
         self,
@@ -214,6 +239,31 @@ class SliceGraphBuilder:
                 "edges_added": int(bucket.get("edges_added") or 0),
             }
             for opcode, bucket in opcode_profile.items()
+        ]
+        rows.sort(key=lambda item: item["seconds"], reverse=True)
+        return rows[:limit]
+
+    def _record_step_profile(
+        self,
+        step_profile: dict[str, dict[str, float | int]],
+        step: str,
+        start: float,
+    ) -> None:
+        if not self.profile_opcodes:
+            return
+        elapsed = time.perf_counter() - start
+        bucket = step_profile.setdefault(step, {"count": 0, "seconds": 0.0})
+        bucket["count"] = int(bucket["count"]) + 1
+        bucket["seconds"] = float(bucket["seconds"]) + elapsed
+
+    def _top_step_profile(self, step_profile: dict[str, dict[str, float | int]], limit: int = 8) -> list[dict]:
+        rows = [
+            {
+                "step": step,
+                "count": int(bucket.get("count") or 0),
+                "seconds": round(float(bucket.get("seconds") or 0.0), 6),
+            }
+            for step, bucket in step_profile.items()
         ]
         rows.sort(key=lambda item: item["seconds"], reverse=True)
         return rows[:limit]

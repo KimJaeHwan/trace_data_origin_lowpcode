@@ -670,6 +670,7 @@ class ProgramSliceGraphBuilder:
                     "edge_count": profile.get("edge_count"),
                     "loop_revisit_count": profile.get("loop_revisit_count"),
                     "opcode_profile_top": profile.get("opcode_profile_top") or [],
+                    "step_profile_top": profile.get("step_profile_top") or [],
                 }
             )
         rows.sort(key=lambda item: item["seconds"], reverse=True)

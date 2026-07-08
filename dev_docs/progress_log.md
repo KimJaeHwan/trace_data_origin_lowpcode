@@ -1415,6 +1415,20 @@ in the phase-specific files.
   default Suite09/Suite10 regression (`09 PASS 488 / FAIL 0 / FP 0`, `10 PASS
   334 / FAIL 0 / FP 0`, 822 total cases, 256.15s aggregate timing).
 
+- 2026-07-09: Extended the optional SliceGraphBuilder profiler to include
+  non-opcode function-build steps. When `profile_opcodes=True`, hot function
+  reports now include merge, call-boundary materialization, source/sink binding,
+  and state-copy timing. This confirmed TV2R301's function-build bottleneck is
+  mostly call-boundary materialization and merge-state work, while state-copy and
+  individual opcode handlers are smaller. Linear merge skipping and architecture
+  storage caching were inspected but not kept because the measured benefit was
+  too small for the semantic risk/complexity.
+- Verified with `compileall` over `analysis`, `core`, `frontend`, `query`,
+  `report`, and `tools`; focused TV2R301 UE profiler validation (`PASS 2 / FAIL
+  0 / FP 0`); and full default Suite09/Suite10 regression (`09 PASS 488 / FAIL
+  0 / FP 0`, `10 PASS 334 / FAIL 0 / FP 0`, 822 total cases, 255.78s aggregate
+  timing).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

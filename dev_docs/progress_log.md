@@ -3,6 +3,17 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-09
+
+- Added `dev_docs/large_binary_scaling_plan.md` to shift the optimization
+  track from focused hot-case cleanup to game-scale readiness. The plan keeps
+  the Engine11 invariants intact: no argument/return vocabulary in the core, no
+  ABI-specific parameter semantics, no benchmark/source/sink naming shortcuts,
+  and no OLLVM symbolic deobfuscation inside the baseline backward-slice core.
+  The next optimization sequence is scale telemetry, persistent parsed/index
+  caching, deterministic parallel FunctionGraph construction, graph backend
+  isolation, and only then demand-driven/lazy materialization work.
+
 ## 2026-07-08
 
 - Started the Engine11 performance-hardening pass while keeping the existing

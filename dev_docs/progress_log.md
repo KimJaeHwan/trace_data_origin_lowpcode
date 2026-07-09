@@ -1455,6 +1455,74 @@ in the phase-specific files.
   PASS 488 / FAIL 0 / FP 0`, `10 PASS 334 / FAIL 0 / FP 0`, 822 total cases,
   255.75s aggregate timing).
 
+- 2026-07-09: Added a resolved function-pointer scalar memory-write summary
+  pass for computed calls. When a computed target is dataflow-linked to a prior
+  observed call result, the pass recovers concrete candidate callees from
+  low-pcode function-address constants and optional per-instruction data
+  references, then reuses callee observed-to-memory summaries only if the
+  pointer field and source storage bind unambiguously at the callsite. This
+  repairs fused computed writer field overwrites without treating ABI
+  signatures or source labels as semantics.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  targeted TV2C623 validation across x86, x64, armv7, and aarch64 all producing
+  `dfb_source_A.ret`; adjacent TV2C620-C623 scan across the same four
+  architectures preserving C620=`dfb_source_B.ret`, C621=`dfb_source_C.ret`,
+  C622=`dfb_source_A.ret`, and C623=`dfb_source_A.ret`; and a focused DFB guard
+  for DFB001/002/005/080/081/120/121 across available sample architectures
+  (`PASS` for all emitted rows).
+
+- 2026-07-09: Hardened metadata source-pointer marker writes for synthesized
+  post-call memory. Computed-call field candidates now include
+  `CALL_POST_OBSERVED_MEMORY` nodes for the same callsite, but marker writes to
+  those nodes are treated as replacement evidence: they may prune conflicting
+  summary carry/preservation inputs, must not compete with resolved
+  function-pointer memory-write summaries, and for actual computed-call
+  instructions must match the latest observed source-bearing scalar at the
+  callsite. Direct dispatch wrappers can still create post-call memory from
+  callback-summary evidence. This keeps callback field recovery general while
+  avoiding stale metadata overriding observed pre-call dataflow.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  focused TV2C613/TV2C621/TV2C624 checks; Suite10 P0 TV2C620-C624 across x86,
+  x64, armv7, and aarch64 (`PASS` 20/20); broader Suite10 P0 scan across x86,
+  x64, armv7, and aarch64 (`PASS` 148/148); and a focused DFB guard for
+  DFB001/002/005/080/081/120/121 across local sample architectures (`PASS`
+  42/42).
+
+- 2026-07-09: Added late refinement/materialization for unresolved computed
+  pointer scalar memory writes. The late pass revisits early unresolved
+  computed-call memory summaries after preservation, callback, and overlap
+  evidence has been injected; it replaces stale write sources only when the
+  final call-pre graph has a unique latest source-bearing scalar that does not
+  overlap the output memory. A companion materialization path covers computed
+  targets loaded through temporaries when the target value still traces to a
+  prior observed call result, there is exactly one concrete pointer-addressed
+  memory target, and the source selection is unique. This repairs fused
+  callback field overwrite/kill cases across register and stack-prepared
+  forms without using ABI roles, helper names, or case labels.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  Suite10 P1 TV2C620-C625 across x86, x64, armv7, and aarch64 (`PASS 24/24`);
+  broader Suite10 P1 TV2C* scan with data/control validation across the same
+  four architectures (`PASS 152/152`); and a focused DFB guard for
+  DFB001/002/005/080/081/120/121 across local sample architectures (`PASS`
+  42/42).
+
+- 2026-07-09: Repaired unresolved computed pointer scalar memory-write
+  fallback precedence. Late refinement/materialization now treats unresolved
+  computed-call memory writes as a fallback only: if the same synthesized
+  post-call memory already has a non-fallback summary write, such as a resolved
+  function-pointer callee summary, the late latest-scalar heuristic will not
+  replace it. This preserves stronger observed storage-transition evidence for
+  fused computed writers while keeping the unresolved path available for cases
+  without resolved callee/body evidence.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  targeted TV2C623 x86/x64 validation (`PASS`, both producing
+  `dfb_source_A.ret`); Suite10 P0 TV2C620-C625 across x86, x64, armv7, and
+  aarch64 (`PASS 24/24`); broader Suite10 P0 TV2C* scan with data/control
+  validation across the same four architectures (`PASS 152/152`); Suite10 P1
+  TV2C620-C625 across x86, x64, armv7, and aarch64 (`PASS 24/24`); and a
+  focused DFB guard for DFB001/002/005/070/071/080/081/120/121 across local
+  sample architectures (`PASS 54/54`).
+
 ## Current Focus
 
 Phase 6 external summary resolution.

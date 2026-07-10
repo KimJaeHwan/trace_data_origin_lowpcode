@@ -3,7 +3,96 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-11
+
+- Repaired computed callback field-read propagation through direct wrappers and
+  tail wrappers whose indirect target is loaded from one observed object field
+  while the callback payload pointer is loaded from a neighboring field. The
+  summary layer now recognizes source-bearing call-post primary outputs,
+  refreshes summaries after late computed-callback edges, traces loaded pointer
+  origins through observed memory/bit-range nodes, and applies a guarded
+  one-level payload-pointer dereference for computed tail wrappers. The rule is
+  based on low-pcode storage origins, observed object fields, source reachability,
+  and unique payload-field evidence; it does not add ABI roles, helper-name
+  rules, case IDs, source-label rules in core, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; the six reported TV2C637 variants across
+  P0 x86/x64/armv7/aarch64 and P1 x86/x64 now produce `dfb_source_A.ret`
+  without forbidden sources; adjacent TV2C630-TV2C637 across those affected C++
+  roots passes `48/48`; and the local DFB callback guard
+  DFB070/071/080/081 across repository sample roots passes `24/24`.
+
+- Extended the late computed-call pointer-scalar memory-write fallback to cover
+  observed function-pointer targets whose body is not present in the scoped
+  low-pcode set. The pass still requires a single concrete pointer field target,
+  a single latest source-bearing scalar, and storage-overlap exclusion before it
+  materializes a post-call memory write, so resolved internal functions with
+  available summaries continue to use summary-backed flow instead of fallback
+  inference.
+
+## 2026-07-10
+
+- Repaired computed function-pointer writer/read selection for fused callback
+  cases by preferring callsite-specialized target-body field evidence over
+  selector-indexed field fallback when a producer resolves to concrete function
+  pointers. Repeated callback-read passes now replace earlier same-post field
+  summaries, so a later resolved memory write can shadow stale preserved
+  storage. The constant p-code executor also handles additional integer
+  comparisons and unresolved PC-relative scalar function refs without using ABI
+  roles, helper names, case IDs, source labels, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  targeted TV2C621/622/625 across the reported x86, armv7, and P1_x86
+  variants plus adjacent TV2C623 armv7 (`PASS`); Suite10 TV2C620-TV2C629 across
+  x86, x64, armv7, aarch64, P1_x86, P1_x64, P1_armv7, and P1_aarch64
+  (`PASS 80/80`); and the focused Suite09 DFB001/002/005/070/071/080/081/120/121
+  guard across local sample architectures (`PASS 42/42`).
+
+- Tightened unresolved computed-call fallback selection so ambiguous
+  multi-source memory/scalar pre-call states no longer collapse to the latest
+  source-bearing storage without target or field evidence. This is a
+  convention-free false-positive repair for fused computed-call cases: single
+  source-bearing evidence still passes through, while adjacent fields with
+  distinct source labels require a more precise summary or observed target body
+  before contributing to the slice.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  targeted TV2C630 across x86, x64, armv7, aarch64, P1_x86, P1_x64, P1_armv7,
+  and P1_aarch64 now reports no forbidden source but still lacks the expected
+  source where scoped low-pcode has no target-body field-read evidence; adjacent
+  TV2C620-TV2C630 across the same eight variants is `PASS 80 / FAIL 8` with
+  only the TV2C630 missing-source residual; and the focused DFB guard for
+  DFB001/002/005/070/071/080/081/120/121 across local sample architectures is
+  `PASS 54/54`.
+- Repaired summary memory-copy application so a call's synthesized
+  `CALL_POST_OBSERVED_MEMORY` nodes are not eligible as input snapshots for the
+  same callsite during repeated summary passes. This keeps multi-output memory
+  transforms such as swaps connected from pre-call memory into each post-call
+  output, without introducing output-to-output cycles that can leak independent
+  sources across destinations. The rule is based only on observed callsite
+  storage timing and applies generally to fused summary reinjection.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  DFB066 across all local sample architectures (`PASS 6/6`); and a focused DFB
+  guard for DFB001/002/005/066/070/071/080/081/120/121 across local sample
+  architectures (`PASS 60/60`).
+
 ## 2026-07-09
+
+- Refined unresolved/computed thunk passthrough and callback field reads for
+  Suite09/Suite10 without adding case, helper, source-label, or ABI-specific
+  rules. Pointer-addressed fallback is now suppressed for resolved internal
+  callees whose consumed primary storage is backed by an ambiguous multi-input
+  memory read, and precise field-read stages can replace earlier unresolved
+  fallback edges on the same post-call storage. Summary cache schema is now 75.
+- Added an evidence-gated callback field-read synthesis for computed calls
+  whose target comes from a prior pointer-table helper or from an optimized
+  constant function-pointer producer. The new edge requires a unique concrete
+  caller pointer, a unique source-bearing field, and either a caller-observed
+  selector or a unique register-relative field read in the constant target
+  body; post-call values that feed explicit cancelled consumers are ignored.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  Suite10 TV2C620-C627 across x86, x64, armv7, aarch64, P1_x86, P1_x64,
+  P1_armv7, and P1_aarch64 (`PASS 64/64`); and a focused DFB guard for
+  DFB001/002/005/070/071/080/081/120/121 across local sample architectures
+  (`PASS 54/54`).
 
 - Added `dev_docs/large_binary_scaling_plan.md` to shift the optimization
   track from focused hot-case cleanup to game-scale readiness. The plan keeps
@@ -1522,6 +1611,226 @@ in the phase-specific files.
   TV2C620-C625 across x86, x64, armv7, and aarch64 (`PASS 24/24`); and a
   focused DFB guard for DFB001/002/005/070/071/080/081/120/121 across local
   sample architectures (`PASS 54/54`).
+
+- 2026-07-10: Refreshed auto summaries after observed/source storage
+  preservation has been injected, then re-applied summary edges. This lets
+  source-bearing values preserved across a boundary call inside a callee become
+  precise source-to-pointer-field memory summaries for direct callers. The
+  repair is based on observed storage transitions already present in the graph;
+  it does not use ABI roles, helper names, source labels, or case IDs as
+  semantics.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  targeted TV2C628 across P1 x86, x64, armv7, and aarch64 (`PASS 4/4`,
+  producing only `dfb_source_A.ret`); adjacent Suite10 P1 TV2C620-C628 across
+  the same four architectures (`PASS 36/36`); and a focused DFB guard for
+  DFB001/002/005/070/071/080/081/120/121 across local sample architectures
+  (`PASS 54/54`).
+
+- 2026-07-10: Added evidence-backed computed function-pointer target-set
+  summary edges and callsite-specialized constant function-pointer selection.
+  The new computed-call pass resolves observed local function-pointer table
+  stores only when every concrete target summary agrees on the same observed
+  input-to-primary output flow at the callsite. The callback field-read pass can
+  now narrow producer-returned function-pointer sets with low-pcode constant
+  branch evidence, including intra-instruction conditional p-code and generic
+  `PTR_<function>_<address>` pointer-symbol hints. The logic remains in the
+  summary layer and does not assign ABI return/argument semantics or use case
+  IDs, helper names, source labels, or fixed offsets as rules.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  focused DFB072 local CLI check (`PASS`); and a direct TV2C630 matrix probe
+  across P0/P1 x86, armv7, and aarch64 (`PASS 6/6`, only
+  `dfb_source_A.ret`). The P0/P1 x64 TV2C630 samples still have no source in
+  the focused probe because the scoped low-pcode exposes the picker as a thunk
+  without picker/reader target bodies; no signature/name-based fallback was
+  added.
+
+- 2026-07-10: Added a guarded scalar field-read bridge for unresolved computed
+  calls with boundary-provider metadata source-pointer markers. When an
+  indirect target value is itself traced to a prior observed call result, the
+  call has exactly one concrete non-source pointer input, and a marker-selected
+  source-bearing field under that pointer uniquely matches the consumed
+  post-register width, the summary layer connects that field to the post-call
+  primary storage. This covers thunk/fused cases where helper bodies are not
+  scoped without adding ABI return semantics, helper-name rules, case IDs, or
+  fixed field offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`; direct
+  probes for TV2C630 P0/P1 x64 now produce only `dfb_source_A.ret`; Suite10
+  x64 TV2C620-TV2C630 across P0/P1 (`PASS 22/22`); and a focused Suite09 local
+  DFB guard for DFB001/002/005/080/081/120/121 across sample architectures
+  (`PASS 42/42`).
+
+- 2026-07-10: Added a source-selected function-pointer dispatch memory-write
+  summary pass for unresolved computed calls. When an indirect call target is
+  loaded from a prior internal function-pointer producer, that producer has
+  multiple concrete internal target constants, the producer callsite has one
+  latest source-carrying selector, and the candidate target summaries show
+  ambiguous pointer-field write sources at the dispatch callsite, the summary
+  layer now records the selector as the source of the observed memory
+  transition and prunes stale fallback computed-pointer writes into the same
+  post-call memory node. This stays convention-free: the evidence is low-pcode
+  target production, observed callsite storage, concrete target summaries, and
+  sink-reaching memory overlap, not ABI roles, helper names, case IDs, source
+  labels, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  direct TV2C631 probes across P0 x86, x64, armv7, and aarch64 now produce
+  only `dfb_source_A.ret`; and a lightweight Suite10 P0 x64 TV2C* sweep using
+  data and control slicing matched expected results for 44/44 case roots.
+
+- 2026-07-10: Added direct-table computed-call field-read summary handling and
+  tightened the unresolved metadata-marker fallback. The new direct-table pass
+  resolves low-pcode function-pointer table loads from constants, data refs, and
+  pointer-symbol global ranges, then connects caller pointer-field sources to
+  consumed primary post storage only when all concrete target summaries agree
+  on one observed pointer-field read. For unresolved table calls, the
+  metadata-marker bridge now yields to concrete source-bearing evidence at the
+  selected pointer base field, preventing a low-confidence marker from
+  overwriting an observed pre-call field source. This stays source-label,
+  helper-name, case-ID, fixed-offset, and ABI-signature independent.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`;
+  focused TV2C626/TV2C632 probes covering the reported six TV2C632 variants plus
+  the adjacent TV2C626 aarch64 false-positive guard (`PASS 7/7`); and a
+  Suite10 TV2C620-TV2C632 adjacent sweep across P0 armv7/aarch64 and P1
+  x86/x64/armv7/aarch64 (`PASS 78/78`).
+
+- 2026-07-10: Tightened computed function-pointer memory-write handling for
+  callback field overwrites. The summary layer now narrows function-pointer
+  producer outputs with concrete low-pcode selector execution, including
+  intra-instruction conditional branches, simple scalar ops/shifts, optional
+  function-entry data-ref facts for literal/PC-relative stores, and explicit
+  prior storage writes when an intervening call boundary refreshed a preserved
+  target register. Ambiguous computed targets no longer assert unresolved
+  concrete field writes, and resolved broad-target writes avoid overwriting a
+  prior summary-written field when the target set is not uniquely selected.
+  This keeps the rule based on observed storage, low-pcode control/data facts,
+  and internal target summaries rather than ABI roles, helper names, source
+  labels, case IDs, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`; direct
+  TV2C633 probes across P0 x86/x64/armv7/aarch64 and P1
+  x86/x64/armv7/aarch64 now produce only `dfb_source_A.ret` (`PASS 8/8`).
+
+- 2026-07-11: Hardened observed memory identity and post-call memory
+  materialization for callback/global field flows. Register and register-offset
+  pointer expressions that have exactly one constant address origin now
+  materialize concrete global memory keys, and global identities are normalized
+  before range comparison so equivalent zero-padded and non-padded addresses
+  overlap. Caller-side source-to-memory summaries now splice post-call observed
+  memory into later overlapping memory/load consumers, and storage-overlap
+  pruning compares heap, stack, and global ranges as well as register ranges.
+  The change remains based on low-pcode storage/data evidence and summary
+  memory transitions; it does not introduce ABI argument/return semantics,
+  helper-name rules, case IDs, source-label rules, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; focused Suite10 UE probes show the global
+  callback field precise development/debug variants now produce only the
+  expected observed source, while the remaining computed mutator/overwrite/read
+  failures still require narrower computed-call source selection.
+
+- 2026-07-11: Repaired Suite10 UE computed-call regressions without adding
+  case/helper/source-label rules. Constant memory-key materialization now
+  requires all address-expression inputs to be constant before collapsing a
+  pointer expression to a global offset, preserving source-bearing pointer bases
+  in fused TArray address calculations. Computed-call memory-write handling now
+  accepts resolved-but-unscoped function-pointer targets only when a single
+  concrete pointer write and single source are observed, gates the late
+  unresolved fallback when multiple source labels are live without target
+  support, redirects later summary-memory reads through post-call overwrite
+  nodes, and inserts a no-source overwrite barrier when all ambiguous computed
+  targets write the same pointer memory but disagree on source. The low-pcode
+  builder also honors constant forward intra-instruction `CBRANCH` targets and
+  evaluates constant equality expressions.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; focused rerun of the nine pre-regression
+  Suite10 UE failures moved TArray cases to the expected data sources
+  (TV2R002/TV2R011/TV2R301), fixed callback field precision/read cases
+  (TV2R304/TV2R305), and removed the wrong computed-call sources from
+  TV2R307/TV2R309. The local expected-validator check reports 5/9 PASS on the
+  prior failure set; TV2R307 and TV2R309 still miss `dfb_source_A.ret` pending
+  stronger dispatch-target selection.
+
+- 2026-07-11: Added callsite-scoped low-pcode constant target selection for
+  ambiguous computed calls and made selected computed source-to-memory summaries
+  materialize a post-call memory node before redirecting later consumers. This
+  lets concrete function-pointer dispatches use the selected target's observed
+  memory summary and shadow prior heap field stores without trusting Ghidra's
+  single displayed target name. The unresolved computed-pointer heap write
+  fallback now declines to pick a latest scalar when multiple source labels are
+  live and no target summary supports the overwrite, avoiding unsupported heap
+  false positives while leaving stack/local strict-latest cases available.
+  These rules are based on low-pcode constants, observed storage, and summary
+  memory transitions, not ABI roles, helper names, source labels, case IDs, or
+  fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; focused rerun of the 12 reported Cycle 3
+  failures now passes 10/12. The affected-family subset
+  TV2C621/TV2C627/TV2C630/TV2R307/TV2R308/TV2R309 across the report variants
+  passes 28/30, with only TV2R307 Development/DebugGame still missing
+  `dfb_source_A.ret` and no forbidden source.
+
+- 2026-07-11: Tightened post-call memory load redirection after the Cycle 4
+  regression. A later `CALL_POST_OBSERVED_MEMORY` node now rewrites direct
+  `LOAD` memory inputs only when that post node has effective overwrite
+  evidence: a source-bearing path, a non-carry summary-memory write, or an
+  explicit no-source overwrite barrier. Source-empty broad post snapshots can
+  still feed later call-pre storage, but they no longer erase a precise
+  source-bearing subfield/lane load. This is based on observed storage ranges
+  and summary-write evidence, not ABI roles, helper names, case IDs, source
+  labels as rules, or fixed offsets.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; the 18 reported Cycle 4 Suite10 C++
+  regressions now pass in focused local probes. Adjacent UE guard probes for
+  TV2R301/304/305/309 stay passing across Development and DebugGame; TV2R307
+  remains a no-source miss because the scoped low-pcode includes the resolver
+  identity but not the selected mutator bodies needed for convention-free
+  source selection.
+
+- 2026-07-11: Repaired the remaining Suite10 UE TV2R307 computed mutator miss
+  with a guarded unresolved-computed field-write summary. When an indirect
+  target is traced to a prior observed call result, a single concrete non-source
+  pointer pre-storage reaches the later sink field, and exactly one source
+  scalar is prepared immediately after that pointer in the observed low-pcode
+  callsite storage flow, the summary layer now writes that scalar to the
+  precise sink-reaching field. Pre-call initialized fields are accepted only
+  when a post-call sink consumer proves the field is read after the computed
+  call, and competing candidates are narrowed to the smallest matching memory
+  range. This remains based on low-pcode storage order, pointer expressions,
+  source reachability, and memory ranges; it does not use ABI names, helper
+  names, case IDs, source labels as rules, or fixed offsets.
+- Bumped the summary cache schema for the changed computed-call summary
+  behavior. Verified with `py_compile`/`compileall`, direct scoped TV2R307
+  Development and DebugGame checks producing only `dfb_source_A.ret`, and a
+  compact UE guard over TV2R301/304/305/307/309 in both `low_pcode` and
+  `low_pcode_P0`.
+
+- 2026-07-11: Tightened unresolved computed callback readers for scoped UE
+  cases where the callback body is unavailable but the caller low-pcode shows
+  the callback target loaded from a concrete field of the same pointed object.
+  The summary layer now selects the nearest prior source-bearing field before
+  the loaded callback slot, removes the fallback unresolved passthrough, and
+  records the observed pointer, field offset, callback-field offset, and field
+  size on the summary edge. This stays convention-free: it uses materialized
+  callsite storage, pointer expressions, memory ranges, and source reachability,
+  not ABI roles, helper names, case IDs, source labels as rules, or fixed
+  offsets.
+- Verified with `compileall`, a scoped TV2R311 check returning exactly
+  `dfb_source_A.ret`, and the local DFB080/DFB081 computed-call guard across
+  the repository sample roots.
+
+- 2026-07-11: Fixed Suite09/10 regression cycle 1 by preserving temporal
+  order for source-to-memory summaries and broadening DFB metadata marker
+  recognition inside the boundary adapter. Source-to-memory summary writes now
+  materialize a `CALL_POST_OBSERVED_MEMORY` value before redirecting later
+  consumers, so a post-call field write no longer contaminates pre-call memory
+  used by an earlier fused/computed callback. The DFB boundary provider still
+  prefers explicit `PTR_dfb_source_*` symbols, but can now fall back to
+  source-name string symbols when pointer markers are absent in scoped UE
+  low-pcode. Both changes remain outside core ABI semantics and use observed
+  storage, memory ranges, and boundary-provider marker interpretation.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/boundary_provider.py`; focused reruns of TV2C638 x86/armv7 and
+  TV2R313 Development/DebugGame now pass. Additional guards passed: selected
+  Suite10 callback/summary P1 x86 cases 7/7, selected Suite09 DFB memory and
+  function-pointer cases 9/9, all Suite10 P1 x86 C++ cases 51/51 with control
+  validation, and UE scoped Development plus DebugGame sweeps 37/37 each.
 
 ## Current Focus
 

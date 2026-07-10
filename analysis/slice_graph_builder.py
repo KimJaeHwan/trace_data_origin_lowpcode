@@ -186,11 +186,34 @@ class SliceGraphBuilder:
                 if self.profile_opcodes:
                     self._record_step_profile(step_profile, "bind_sink", step_start)
 
-            for pcode in instr.get("low_pcode", []):
+            low_pcode = instr.get("low_pcode", [])
+            pcode_index = 0
+            while pcode_index < len(low_pcode):
+                pcode = low_pcode[pcode_index]
                 if self.profile_opcodes:
                     self._profiled_process_pcode(function_graph, state, instr, pcode, opcode_profile)
                 else:
                     self._process_pcode(function_graph, state, instr, pcode)
+                next_index = pcode_index + 1
+                if pcode.get("opcode") == "CBRANCH":
+                    branch_index = self._constant_intra_instruction_branch_index(
+                        pcode,
+                        pcode_index,
+                        len(low_pcode),
+                    )
+                    condition_value = self._constant_pcode_condition_value(
+                        function_graph,
+                        state,
+                        pcode,
+                    )
+                    if (
+                        branch_index is not None
+                        and branch_index > pcode_index
+                        and condition_value is not None
+                        and condition_value != 0
+                    ):
+                        next_index = branch_index
+                pcode_index = next_index
 
             if self._is_call_instruction(instr):
                 if self.profile_opcodes:
@@ -220,6 +243,52 @@ class SliceGraphBuilder:
                 self._record_step_profile(step_profile, "state_copy", step_start)
             else:
                 block_out_states[block_start] = state.copy()
+
+    def _constant_intra_instruction_branch_index(
+        self,
+        pcode: dict,
+        current_index: int,
+        pcode_count: int,
+    ) -> int | None:
+        inputs = pcode.get("inputs") or []
+        if not inputs:
+            return None
+        target = parse_int(inputs[0].get("offset") or inputs[0].get("address"))
+        if target is None:
+            return None
+        relative_target = current_index + target
+        if current_index < relative_target < pcode_count:
+            return relative_target
+        if current_index < target < pcode_count:
+            return target
+        return None
+
+    def _constant_pcode_condition_value(
+        self,
+        function_graph: FunctionGraph,
+        state: BuildState,
+        pcode: dict,
+    ) -> int | None:
+        inputs = pcode.get("inputs") or []
+        if len(inputs) < 2:
+            return None
+        condition = inputs[1]
+        if condition.get("is_constant"):
+            return parse_int(condition.get("offset") or condition.get("address"))
+        storage_key = self._storage_key(function_graph, condition)
+        if not storage_key:
+            return None
+        node = state.current.get(storage_key)
+        if node is None:
+            return None
+        expression = state.expressions.get(node) or {}
+        if expression.get("kind") == "const":
+            value = expression.get("unsigned_value", expression.get("value"))
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+        return self._constant_value_reaching_node(function_graph, node)
 
     def _profiled_process_pcode(
         self,
@@ -2493,6 +2562,10 @@ class SliceGraphBuilder:
             result = int(values[0]) >> int(values[1])
         elif opcode == "INT_SUB" and len(values) >= 2:
             result = int(values[0]) - int(values[1])
+        elif opcode == "INT_EQUAL" and len(values) >= 2:
+            result = 1 if int(values[0]) == int(values[1]) else 0
+        elif opcode == "INT_NOTEQUAL" and len(values) >= 2:
+            result = 1 if int(values[0]) != int(values[1]) else 0
         elif opcode == "INT_NEGATE" and values:
             result = ~int(values[0])
         if result is None:
@@ -2708,12 +2781,18 @@ class SliceGraphBuilder:
                 return self.memory_model.unknown_key(f"register:{register_identity}", size)
             return self.memory_model.global_key(f"{int(expr.get('value') or 0):x}", size)
         if expr and expr.get("kind") == "register":
+            const_address = self._constant_address_for_pointer_expression(fg, expr)
+            if const_address is not None:
+                return self.memory_model.global_key(f"{const_address:x}", size)
             identity = self._loaded_pointer_identity_for_expression(fg, expr)
             return self.memory_model.unknown_key(
                 f"register:{identity or expr.get('key') or 'unknown_register'}",
                 size,
             )
         if expr and expr.get("kind") == "register_offset":
+            const_address = self._constant_address_for_pointer_expression(fg, expr)
+            if const_address is not None:
+                return self.memory_model.global_key(f"{const_address:x}", size)
             identity = self._loaded_pointer_identity_for_expression(fg, expr)
             base = str(identity or expr.get("base") or "unknown_register")
             offset = int(expr.get("offset") or 0)
@@ -2792,6 +2871,80 @@ class SliceGraphBuilder:
                     stack.append(pred)
         return found[0] if len(found) == 1 else None
 
+    def _constant_address_for_pointer_expression(self, fg: FunctionGraph, expr: dict) -> int | None:
+        node = expr.get("node") or expr.get("base_node")
+        if not isinstance(node, ValueId):
+            return None
+        base_value = self._single_constant_value_reaching_node(fg, node)
+        if base_value is None:
+            return None
+        try:
+            offset = int(expr.get("offset") or 0) if expr.get("kind") == "register_offset" else 0
+        except (TypeError, ValueError):
+            return None
+        value = base_value + offset
+        return value if value >= 0 else None
+
+    def _single_constant_value_reaching_node(
+        self,
+        fg: FunctionGraph,
+        node: ValueId,
+        seen: set[ValueId] | None = None,
+    ) -> int | None:
+        seen = seen or set()
+        if node in seen or len(seen) > 96:
+            return None
+        seen.add(node)
+        attrs = fg.slice_graph.nodes.get(node, {})
+        if attrs.get("kind") == "constant":
+            return parse_int(attrs.get("storage"))
+        preds = [
+            pred
+            for pred in fg.slice_graph.predecessors(node)
+            if fg.slice_graph.edges[pred, node].get("kind") in {"data", "memory"}
+        ]
+        if not preds:
+            return None
+        values = [
+            self._single_constant_value_reaching_node(fg, pred, set(seen))
+            for pred in preds
+        ]
+        if any(value is None for value in values):
+            return None
+        int_values = [int(value) for value in values if value is not None]
+        opcode = attrs.get("opcode")
+        if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE"} and len(int_values) == 1:
+            return int_values[0]
+        if opcode in {"PHI", "MULTIEQUAL"}:
+            return int_values[0] if int_values and all(value == int_values[0] for value in int_values) else None
+        if opcode == "INT_ADD":
+            return sum(int_values)
+        if opcode == "INT_SUB" and len(int_values) >= 2:
+            result = int_values[0]
+            for value in int_values[1:]:
+                result -= value
+            return result
+        if opcode == "INT_MULT" and int_values:
+            result = 1
+            for value in int_values:
+                result *= value
+            return result
+        if opcode == "INT_AND" and int_values:
+            result = int_values[0]
+            for value in int_values[1:]:
+                result &= value
+            return result
+        if opcode == "INT_OR" and int_values:
+            result = int_values[0]
+            for value in int_values[1:]:
+                result |= value
+            return result
+        if opcode == "INT_LEFT" and len(int_values) >= 2:
+            return int_values[0] << int_values[1]
+        if opcode in {"INT_RIGHT", "INT_SRIGHT"} and len(int_values) >= 2:
+            return int_values[0] >> int_values[1]
+        return None
+
     def _observed_pointer_identity_for_address(
         self,
         fg: FunctionGraph,
@@ -2867,7 +3020,7 @@ class SliceGraphBuilder:
             size = self._parse_memory_size(parts[1])
             if size is None:
                 return None
-            return MemoryRange(identity=parts[0], start=0, size=size)
+            return MemoryRange(identity=self._normalized_global_identity(parts[0]), start=0, size=size)
 
         if mem_key.startswith("heap:allocsite:") and ":offset:" in mem_key:
             prefix, rest = mem_key.split(":offset:", 1)
@@ -2895,6 +3048,15 @@ class SliceGraphBuilder:
         if size <= 0:
             return None
         return size
+
+    def _normalized_global_identity(self, identity: str) -> str:
+        if not identity.startswith("global:"):
+            return identity
+        address = identity.removeprefix("global:")
+        try:
+            return f"global:{int(address, 16):x}"
+        except ValueError:
+            return identity
 
     def _data_ref_memory_key(self, instr: dict, access: str, size: int | None) -> str | None:
         for ref in instr.get("refs_from", []):

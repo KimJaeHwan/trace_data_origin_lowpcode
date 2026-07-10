@@ -72,19 +72,25 @@ class DataFlowBenchBoundaryProvider:
 
     def metadata_source_pointer_markers(self, program: Any) -> list[str]:
         indices = (getattr(program, "data", {}) or {}).get("indices") or {}
-        markers: list[tuple[int, str]] = []
+        pointer_markers: list[tuple[int, str]] = []
+        source_name_markers: list[tuple[int, str]] = []
         for address, symbols in (indices.get("symbols_by_address") or {}).items():
             for symbol in symbols or []:
                 name = str(symbol.get("name") or "")
-                if not name.startswith("PTR_"):
-                    continue
-                match = re.search(r"(dfb_source_[A-Za-z0-9_]+?)(?:_[0-9A-Fa-f]+)?$", name)
+                match = None
+                if name.startswith("PTR_"):
+                    match = re.search(r"(dfb_source_[A-Za-z0-9_]+?)(?:_[0-9A-Fa-f]+)?$", name)
+                    bucket = pointer_markers
+                else:
+                    match = re.fullmatch(r"s__?(dfb_source_[A-Za-z0-9_]+?)(?:_[0-9A-Fa-f]+)?", name)
+                    bucket = source_name_markers
                 if match:
                     try:
                         sort_address = int(str(address), 16)
                     except ValueError:
                         sort_address = 0
-                    markers.append((sort_address, match.group(1)))
+                    bucket.append((sort_address, match.group(1)))
+        markers = pointer_markers or source_name_markers
         ordered: list[str] = []
         for _, marker in sorted(markers):
             if marker not in ordered:

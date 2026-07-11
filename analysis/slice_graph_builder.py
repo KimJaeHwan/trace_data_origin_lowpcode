@@ -977,6 +977,10 @@ class SliceGraphBuilder:
 
         input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
         out_node = self._new_value(fg, state, output, instr, opcode)
+        if input_nodes[0] is not None:
+            fg.slice_graph.nodes[out_node]["value_input"] = input_nodes[0]
+        if input_nodes[1] is not None:
+            fg.slice_graph.nodes[out_node]["shift_input"] = input_nodes[1]
         expr = self._expression_for(fg, opcode, input_nodes, state, output)
         bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
         bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)

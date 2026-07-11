@@ -1832,6 +1832,149 @@ in the phase-specific files.
   function-pointer cases 9/9, all Suite10 P1 x86 C++ cases 51/51 with control
   validation, and UE scoped Development plus DebugGame sweeps 37/37 each.
 
+- 2026-07-11: Repaired Suite09/10 cycle 1 direct pointer-field read misses in
+  fused C++ and UE scoped cases. The interprocedural summary layer now resolves
+  callee primary outputs that are loaded through observed input pointers,
+  branch-selected stack-resident pointers, and nested indexed pointer reads
+  when callsite low-pcode constants make the selected storage unique. Affine
+  address tracing now follows explicit stack spills used in address
+  expressions, and pre-call memory lookup can consume a source-bearing prior
+  summary write whose materialized memory node is anchored by a later observed
+  read, provided no overlapping write intervenes before the current call. The
+  repair uses observed low-pcode storage, memory ranges, graph reachability,
+  and architecture storage sizes; it does not rely on ABI parameter/return
+  roles, helper names, case IDs, source labels as rules, or fixed offsets.
+- Bumped the summary cache schema for the new summary behavior. Verified with
+  `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; all 7 pre-regression failures from the
+  cycle report now produce exactly `dfb_source_B.ret` in focused local probes.
+  The documented V8 Phase 1 gate for DFB001/DFB002 also passes across the
+  checked-in sample architecture roots.
+
+- 2026-07-11: Repaired Suite09/10 cycle 2 regressions from the direct
+  pointer-field summary work. Prior summary-write lookup no longer treats an
+  unparseable or wildcard memory key as a match-all range; when a requested
+  range cannot be parsed, lookup and intervening-write checks require exact
+  materialized storage identity. This preserves the intended prior-summary
+  reuse for concrete byte ranges while preventing broad stack-frame matches
+  from poisoning single-source thread/runtime evidence or UE direct field-read
+  precision.
+- Bumped the summary cache schema for the tightened memory lookup behavior.
+  Verified with `py_compile`, focused DFB092 across all eight checked-in
+  variants, the scoped UE DebugGame TV2R301 probe producing only
+  `dfb_source_C.ret`, and the documented DFB001/DFB002 phase gate across the
+  checked-in sample architecture roots.
+
+- 2026-07-11: Repaired Suite09/10 cycle 1 fused computed-call and UE indexed
+  field-read regressions without introducing ABI return/argument semantics.
+  Unresolved computed calls whose target is source-clean and loaded from
+  observed memory can now connect a single sink-reaching post register to the
+  earliest uniquely ordered source-bearing call-pre storage, pruning only
+  conflicting summary predecessors. Auto summaries now prefer direct observed
+  address-base storage over transitive index contributors, trace a single
+  consistent affine value through multi-predecessor `INT_LEFT` nodes, and can
+  use prior same-base summary memory writes for indexed reads when exact byte
+  offsets are under-specified but the selected prior field has one source
+  label. These paths are gated by observed low-pcode storage, graph
+  reachability, memory ranges, and architecture sizes; they do not use
+  case/helper/source names, fixed offsets, ABI roles, or signature metadata as
+  semantics.
+- Bumped the summary cache schema for the new summary and fallback edges.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py`; focused
+  reruns of TV2C640 across x86/x64/armv7/aarch64 and TV2R315 UE Development
+  plus DebugGame now produce exactly `dfb_source_A.ret`; the documented
+  DFB001/DFB002 phase gate also passes across the checked-in sample roots.
+
+- 2026-07-11: Tightened the unresolved computed loaded-target fallback after
+  Suite09/10 cycle 2 exposed false-positive source selection on stack and
+  generic register-relative computed calls. The fallback now applies only when
+  the computed target memory is heap-backed, either directly by storage identity
+  or through the actual target-value address chain reaching heap allocation
+  storage. Stack/table and non-heap register-relative targets continue to rely
+  on more precise function-pointer, memory-write, and summary evidence instead
+  of label ordering. This keeps the heap closure/lambda repair while avoiding
+  broad earliest-source propagation across fused callback fields.
+- Bumped the summary cache schema for the tightened fallback. Verified with
+  `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; all 17 reported cycle-2 regressions
+  passed in focused probes, and guard probes for TV2C640 x86/x64/armv7/aarch64
+  plus TV2R315 Development/DebugGame still produce exactly `dfb_source_A.ret`.
+  The documented DFB001/DFB002 phase gate passed across the checked-in sample
+  architecture roots.
+
+- 2026-07-11: Tightened source-to-memory summary application for callees whose
+  pointer-field writes merge through branch-controlled memory PHIs. When a
+  callsite provides constant observed inputs, summary application now reuses the
+  existing Low-Pcode constant executor to compute reachable callee instruction
+  addresses and narrows source-to-memory edges only to source boundaries that
+  reach concrete `STORE_VAL` writes for the same output memory range on those
+  reachable paths. If constant evaluation or concrete write evidence is absent,
+  the existing conservative summary union is preserved. This remains
+  convention-free: it uses observed call-pre storage, architecture-aware
+  register overlap, low-pcode execution, and memory ranges, not ABI roles,
+  helper names, source labels as rules, case IDs, or fixed offsets.
+- Bumped the summary cache schema for the callsite-feasible summary behavior.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py`; focused
+  expected-validator probes for the reported stack-field branch overwrite case
+  now pass on x86, x64, armv7, and aarch64 with only `dfb_source_A.ret`. The
+  documented DFB001/DFB002 phase gate also passes across the checked-in sample
+  architecture roots.
+
+- 2026-07-11: Repaired Suite09/10 cycle 1 fused pointer-field and indexed heap
+  lane misses without adding ABI return/argument semantics. Interprocedural
+  memory-read summary application can now recover callee address expressions
+  that become affine only after callsite constants are folded, including masked
+  indexed selectors, and affine tracing preserves in-place scaled unique values
+  instead of falling back to an earlier narrowed bit-range source. For scaled
+  field reads whose selector is not constant, a narrow fallback uses the
+  callee's observed base-plus-stride address expression and selects a same-object
+  aligned field only when the zero slot is source-clean and the stride slot has
+  one source-bearing value. The repair is based on Low-Pcode graph reachability,
+  observed storage, byte ranges, and architecture sizes; it does not depend on
+  case IDs, helper names, expected labels as rules, fixed test offsets, or
+  signature/ABI roles.
+- Bumped the summary cache schema for the new callsite-resolved indexed-read
+  behavior. Verified with `py_compile` for
+  `analysis/interprocedural_summary.py`; focused probes for the reported
+  TV2C642 x86/x64 and TV2R317 Development/DebugGame failures now pass with only
+  `dfb_source_A.ret`.
+
+- 2026-07-11: Repaired Suite09/10 cycle 2 fused ARMv7 callback false
+  positives by tightening affine tracing for reused Low-Pcode temporaries. For
+  `INT_LEFT`, explicit bit-range operands now take precedence over the
+  previous-version fallback; the fallback is used only when no explicit value
+  operand can be resolved. This preserves the in-place shift recovery path while
+  avoiding stale unique-temp terms that under-scale indexed memory writes and
+  cause prior field values to be preserved across real overwrites. The repair
+  is based on Low-Pcode edge evidence, observed storage, callsite constants,
+  and byte ranges; it does not depend on case IDs, helper names, source labels,
+  fixed offsets, ABI roles, or signature metadata.
+- Bumped the summary cache schema for the corrected affine summaries. Verified
+  with `py_compile` for the touched engine modules, a focused TV2C606/TV2C607
+  probe producing only `dfb_source_A.ret`, the full Suite10 P1 ARMv7 C++ sweep
+  at 55/55 PASS, and the documented DFB001/DFB002 phase gate across the
+  checked-in sample architecture roots.
+
+- 2026-07-11: Repaired the Suite10 cycle 3 indexed heap-lane false positive
+  by preserving the actual Low-Pcode shift value/shift operands as node
+  metadata and using those operands for affine memory-address recovery. This
+  prevents source-slice bit-range edges from replacing the numeric operand of
+  destructive/in-place shifts when a reused unique temporary carries additional
+  arithmetic context such as `selector + 1`. Callsite-resolved affine recovery
+  now also follows stack spill/load pairs and is preferred when caller constants
+  make the indexed address concrete, so masked or overwritten selectors select
+  the observed lane instead of falling back to the base field. The repair uses
+  Low-Pcode operand identity, observed storage, stack/memory graph edges, and
+  byte ranges; it does not use case IDs, helper names, expected source labels,
+  fixed offsets, ABI roles, or signature metadata as semantics.
+- Bumped the summary cache schema for the shift-operand affine behavior.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py` and
+  `analysis/slice_graph_builder.py`; scoped TV2R317 Development and DebugGame
+  now pass with only `dfb_source_A.ret`. Guard probes for TV2C606/TV2C607
+  ARMv7 and TV2C642 x86/x64 still produce only `dfb_source_A.ret`, and the
+  documented DFB001/DFB002 phase gate passes across the checked-in sample
+  architecture roots.
+
 ## Current Focus
 
 Phase 6 external summary resolution.

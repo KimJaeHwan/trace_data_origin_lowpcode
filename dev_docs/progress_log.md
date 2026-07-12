@@ -1977,6 +1977,105 @@ in the phase-specific files.
 
 ## Current Focus
 
+- 2026-07-11: Repaired Suite10 cycle 1 remaining callback/heap overwrite
+  false positives by refining observed-memory write summaries around terminal
+  writers. Auto summaries now remove earlier observed-input writes to the same
+  address/range only when Low-Pcode evidence identifies a later surviving
+  writer: straight-line storage versions select the latest writer, and PHI
+  outputs are collapsed only when the PHI control condition is locally proven
+  by Low-Pcode value facts such as a nonzero `INT_OR` feeding an equality test.
+  General summary injection and thunk scalar-pointer-field injection both
+  consult the same callee-local survivor predicate, so specialized fused
+  callback paths cannot resurrect overwritten fields. The repair uses
+  observed storage, Low-Pcode graph edges, memory ranges, storage overlap, and
+  local control/value facts; it does not use case IDs, helper names, expected
+  labels, fixed test offsets, ABI roles, or signature metadata as semantics.
+- Bumped the summary cache schema for terminal observed-memory write pruning.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py`, the
+  five reported repros TV2C647 on x86/x64/armv7/aarch64 plus TV2R322
+  DebugGame, the adjacent C++ TV2C645-TV2C647 cluster across all four P0
+  architecture roots, and exact UE TV2R321/TV2R322 DebugGame repros. A small
+  Suite09 smoke was attempted but skipped because the expected Suite09 sample
+  root was not present in this workspace path.
+
+- 2026-07-11: Repaired the Suite10 cycle 2 ARMv7 optimized
+  loaded-pointer callback overwrite false positive without adding ABI
+  return/argument semantics. When a nested loaded-pointer memory summary has
+  been normalized to `deref:<observed storage>` plus a field output, summary
+  output selection now recovers the original callee Low-Pcode memory address,
+  resolves affine/index terms with callsite constants, and applies the write
+  to the exact caller memory range before stale preservation can carry an older
+  value. The repair uses Low-Pcode address expressions, observed storage,
+  architecture-aware memory ranges, and callsite constants; it does not use
+  case IDs, helper names, expected labels, fixed offsets, ABI roles, or
+  signature metadata as semantics.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`, the
+  focused TV2C607 P1 ARMv7 repro, the P1 ARMv7 callback cluster TV2C605-C608
+  and TV2C611-C614, TV2C607 across all eight Tier0 variants, full P1 ARMv7
+  cpp-like Suite10 local cases (59/59 PASS), and Suite09 smoke DFB001/DFB005/
+  DFB066 across the checked-in sample architecture roots.
+
+- 2026-07-11: Repaired Suite10 post-apply cycle 1 fused heap/lambda and UE
+  computed-dispatch false positives without adding ABI return/argument
+  semantics. Summary refresh now rebuilds function summaries from the composed
+  local graph so nested call effects are visible to wrapper summaries. Nested
+  loaded-pointer memory summaries are normalized into dereferenced observed
+  storage, including explicit offset-zero fields, and summary memory range/key
+  parsing now handles `summary:field` and nested offset-zero identities. The
+  unresolved computed-field overwrite pass now also runs after late overlap
+  evidence, accepts computed calls whose target was materialized by Low-Pcode
+  evidence, bounds ambiguous callback wrapper pairs, and redirects stale
+  cancelled-operation consumers only when a precise post-call memory overwrite
+  replaces the old source-bearing memory. The repair uses Low-Pcode graph
+  edges, observed storage, architecture-aware ranges, callsite materialization,
+  and byte offsets; it does not use case IDs, helper names, expected labels,
+  fixed test offsets, ABI roles, or signature metadata as semantics.
+- Bumped the summary cache schema for nested loaded-pointer and computed-field
+  overwrite behavior. Verified with `py_compile` for
+  `analysis/interprocedural_summary.py` and focused repros for TV2C646 on
+  x86/x64/armv7/aarch64 plus TV2R321 Development/DebugGame; all six now match
+  their expected source sets with no forbidden sources.
+
+- 2026-07-11: Repaired Suite10 post-apply cycle 1 split-lane and heap-select
+  misses without introducing ABI return/argument semantics. Callsite-resolved
+  affine tracing now treats observed memory as a valid base, follows direct
+  observed-memory loads and overlap stack reloads, and uses explicit PHI
+  control plus small callsite constants to select adjacent field/lane terms.
+  Pointer expression recovery now follows short data chains through summary
+  edges and stack spills, preferring concrete heap/stack expressions over
+  synthetic unknown-register identities. A narrow callsite-resolved pointer
+  identity edge is added only when callee Low-Pcode proves `output = input + 0`
+  for exactly one pointer-valued observed input at that callsite. This repair
+  is based on Low-Pcode graph edges, observed storage, callsite constants,
+  architecture-aware storage, and byte ranges; it does not use case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, or signature metadata as
+  semantics.
+- Bumped the summary cache schema for the callsite affine/identity behavior.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py` and a
+  focused six-case probe covering TV2C645 on x86/x64/armv7/aarch64 plus
+  TV2R320 Development/DebugGame; all six now slice to only
+  `dfb_source_B.ret`.
+
+- 2026-07-12: Repaired the negative-only and live field-overwrite frontier
+  failures without adding ABI return/argument semantics. Auto summaries now
+  record concrete pointer-memory stores whose stored value tree is source-empty
+  and observed-input-empty, and summary application materializes those stores
+  as no-source overwrite barriers before redirecting later consumers. Memory
+  preservation across calls now selects the latest unambiguous source-bearing
+  memory node for the same caller range before the call, so later disjoint
+  writes preserve the live post-call field value instead of resurrecting an
+  older store. The repair is based on Low-Pcode store/value trees, observed
+  storage, callsite expressions, and architecture-aware memory ranges; it does
+  not use case IDs, helper names, expected labels, fixed offsets, ABI roles, or
+  signature metadata as semantics.
+- Bumped the summary cache schema for source-empty overwrite summaries.
+  Verified with `py_compile` for `analysis/interprocedural_summary.py`; all
+  six reported repro variants pass: TV2C648 P1 x86/x64/armv7/aarch64 now
+  produces no sources, and TV2R323 UE Development/DebugGame now produces only
+  `dfb_source_C.ret`. A wider C64x P1 probe was interrupted after 30 adjacent
+  cases had passed, including TV2C648 through x86/x64/armv7 and the first
+  three aarch64 adjacent cases.
+
 Phase 6 external summary resolution.
 
 Next engineering step:

@@ -2076,6 +2076,78 @@ in the phase-specific files.
   cases had passed, including TV2C648 through x86/x64/armv7 and the first
   three aarch64 adjacent cases.
 
+- 2026-07-12: Tightened late thunk scalar post-memory fallback for fused
+  overwrite cases without adding ABI return/argument semantics. When a
+  post-call observed memory field already has a source-bearing summary write
+  for the same output range with a different source label, the late thunk
+  scalar materialization now yields instead of adding a competing carry edge
+  from the pre-call field. This keeps later preservation through observed
+  storage transitions, but prevents older field contents from being resurrected
+  after a precise source-marker or summary overwrite. The repair is based on
+  post-call memory storage, summary edge provenance, source labels already
+  reaching predecessor nodes, and architecture-aware range overlap; it does
+  not use case IDs, helper names, expected labels, fixed offsets, ABI roles, or
+  signature metadata as semantics.
+- Bumped the summary cache schema for the guarded late thunk fallback.
+  Verified with a focused local probe for TV2C649 P0 x86/x64/armv7/aarch64;
+  all four variants now produce only `dfb_source_A.ret`. An adjacent x86/x64
+  C646-C649 sweep preserved C646=`dfb_source_A.ret`,
+  C647=`dfb_source_B.ret`, C648=no sources, and
+  C649=`dfb_source_A.ret`.
+
+- 2026-07-12: Rebalanced metadata source-pointer marker writes as fallback
+  evidence instead of letting them dominate observed callsite dataflow. For
+  computed calls, marker writes now yield when a latest source-bearing register
+  scalar prepared for that same callsite has a different label, but
+  source-bearing memory snapshots do not suppress marker writes because those
+  snapshots are precisely the field contents a marker-backed write may
+  overwrite. Marker write opcodes are also treated as fallback when deciding
+  whether later precise computed-memory writes may replace an existing
+  post-call memory input. This repairs fused callback/write cases where an
+  older marker source was resurrected after a later scalar field write, while
+  preserving virtual field overwrite cases where marker evidence is the
+  precise observed storage transition. The repair uses callsite storage,
+  source labels, register-vs-memory observed storage class, and
+  architecture-aware memory overlap; it does not use case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, or signature metadata as
+  semantics.
+- Bumped the summary cache schema for metadata marker fallback rebalancing.
+  Verified with `py_compile`, a focused probe covering TV2C621 P0/P1 x64,
+  TV2R305 UE DebugGame, TV2R323 UE DebugGame, and TV2C649 P0
+  x86/x64/armv7/aarch64, and an adjacent C646-C649 sweep across P0/P1
+  x86/x64/armv7/aarch64; all 32 adjacent cases passed.
+
+- 2026-07-12: Refined computed-call fallback writes around materialized
+  observed memory transitions. Metadata source-pointer marker writes may now
+  materialize a concrete prior memory target even when a different
+  source-bearing selector scalar is prepared for the same computed call; that
+  selector conflict still suppresses ordinary post-call marker writes. The
+  late adjacent-source field-write pass also requires `CALL_POST_OBSERVED_MEMORY`
+  candidates to belong to the same callsite it is summarizing, so an earlier
+  unresolved callback cannot claim a later callback's post-state merely because
+  both use the same concrete base pointer. The repair is based on low-pcode
+  callsite storage, observed post-memory identity, source reachability, and
+  architecture-aware memory ranges; it does not use case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, or signature metadata as
+  semantics.
+- Bumped the summary cache schema for the computed-call fallback refinement.
+
+- 2026-07-12: Added affine observed-address matching for direct helper
+  field/lane reads backed by prior helper writes. When a callee load address
+  and an earlier callee store address are both affine over observed callsite
+  storage, the direct pointer-field read resolver now maps those terms into
+  caller expressions, requires the non-source address terms to match, and uses
+  the latest single-label source-bearing value input from the matching writer.
+  This covers register, stack, widened register-carrier, and indexed lane
+  forms without adding ABI argument/return semantics or helper/case-specific
+  names. The guard stays narrow: ambiguous labels, source-tainted address
+  terms, non-matching affine expressions, and mismatched observed input widths
+  are rejected.
+- Verified with `py_compile`; focused TV2C652 probes across P0 x86/armv7 and
+  P1 x86/armv7/aarch64 all produce `dfb_source_C.ret`; expected validation
+  passes for TV2C652 x86 and P1 aarch64; adjacent x86 checks for TV2C650 and
+  TV2C648 preserved their prior source sets; DFB001 PE_x64 remains PASS.
+
 Phase 6 external summary resolution.
 
 Next engineering step:

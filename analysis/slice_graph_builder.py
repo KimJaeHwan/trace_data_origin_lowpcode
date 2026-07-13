@@ -97,8 +97,10 @@ class SliceGraphBuilder:
         self.call_boundary_mapper = CallBoundaryMapper()
         self.memory_model = MemoryModel()
         self.profile_opcodes = profile_opcodes
+        self._function_pointer_targets_by_entry: dict[int, dict] = {}
 
     def build(self, program: LowPcodeProgram) -> FunctionGraph:
+        self._function_pointer_targets_by_entry = self._function_pointer_targets_from_program(program)
         instructions = program.instructions
         function_graph = FunctionGraph(
             function_name=program.function_name,
@@ -630,12 +632,21 @@ class SliceGraphBuilder:
         out_node = self._new_value(fg, state, output, instr, opcode)
         zero_expr = self._zero_idiom_expression(opcode, inputs, output)
         if zero_expr is not None:
+            fg.slice_graph.nodes[out_node]["constant_value"] = 0
             state.expressions[out_node] = zero_expr
             return
         for source in inputs:
             if source is not None:
                 fg.slice_graph.add_edge(source, out_node, kind="data", opcode=opcode)
         state.expressions[out_node] = self._expression_for(fg, opcode, inputs, state, output)
+        function_pointer_expr = self._function_pointer_ref_expression(instr, output)
+        if function_pointer_expr is not None:
+            state.expressions[out_node] = function_pointer_expr
+            fg.slice_graph.nodes[out_node]["points_to_function"] = {
+                "address": function_pointer_expr.get("address"),
+                "name": function_pointer_expr.get("name"),
+                "confidence": function_pointer_expr.get("confidence"),
+            }
 
     def _zero_idiom_expression(
         self,
@@ -869,6 +880,7 @@ class SliceGraphBuilder:
                 "bit_expr": {"op": "const", "value": 0, "size": int(output.get("size") or 0) * 8},
             }
         if zero_expr is not None:
+            fg.slice_graph.nodes[out_node]["constant_value"] = 0
             state.expressions[out_node] = zero_expr
             return
         expr = self._expression_for(fg, "INT_XOR", input_nodes, state, output)
@@ -1737,6 +1749,11 @@ class SliceGraphBuilder:
         seen.add(node)
         graph = fg.slice_graph
         attrs = graph.nodes[node]
+        if "constant_value" in attrs:
+            try:
+                return int(attrs.get("constant_value"))
+            except (TypeError, ValueError):
+                return None
         if attrs.get("kind") == "constant":
             return parse_int(attrs.get("storage"))
         opcode = attrs.get("opcode")
@@ -1817,6 +1834,11 @@ class SliceGraphBuilder:
         seen.add(node)
         graph = fg.slice_graph
         attrs = graph.nodes[node]
+        if "constant_value" in attrs:
+            try:
+                return {int(attrs.get("constant_value"))}
+            except (TypeError, ValueError):
+                return set()
         if attrs.get("kind") == "constant":
             value = parse_int(attrs.get("storage"))
             return {value} if value is not None else set()
@@ -1893,6 +1915,19 @@ class SliceGraphBuilder:
             return max(exact_ranges, key=lambda item: item.size)
         if not ranges:
             return None
+        identities = {item.identity for item in ranges}
+        if len(identities) == 1:
+            ordered = sorted(ranges, key=lambda item: (item.start, item.end))
+            union_start = ordered[0].start
+            union_end = ordered[0].end
+            contiguous = True
+            for item in ordered[1:]:
+                if item.start > union_end:
+                    contiguous = False
+                    break
+                union_end = max(union_end, item.end)
+            if contiguous and union_end > union_start and union_end - union_start <= 64:
+                return MemoryRange(ordered[0].identity, union_start, union_end - union_start)
         return max(ranges, key=lambda item: item.size)
 
     def _register_byte_range(self, storage: str) -> tuple[str, int, int] | None:
@@ -2136,6 +2171,46 @@ class SliceGraphBuilder:
             "data_address": str(target.get("data_address") or ""),
             "source_symbol": str(target.get("source_symbol") or ""),
             "confidence": str(target.get("confidence") or "ghidra_data_pointer_symbol"),
+        }
+
+    def _function_pointer_targets_from_program(self, program: LowPcodeProgram) -> dict[int, dict]:
+        targets: dict[int, dict] = {}
+        functions = (program.data.get("indices") or {}).get("functions_by_entry") or {}
+        for entry_text, info in functions.items():
+            entry = parse_int(entry_text)
+            name = str((info or {}).get("name") or "")
+            if entry is None or not name:
+                continue
+            targets[entry] = {
+                "name": name,
+                "address": str((info or {}).get("entry") or entry_text),
+            }
+        return targets
+
+    def _function_pointer_ref_expression(self, instr: dict, output: dict | None = None) -> dict | None:
+        if output is not None and (
+            not output.get("is_register") or int(output.get("size") or 0) not in {4, 8}
+        ):
+            return None
+        candidates: dict[int, dict] = {}
+        for ref in instr.get("refs_from") or []:
+            if ref.get("is_flow") or ref.get("is_call") or ref.get("is_jump"):
+                continue
+            entry = parse_int(ref.get("to"))
+            target = self._function_pointer_targets_by_entry.get(entry) if entry is not None else None
+            if not target:
+                continue
+            candidates[entry] = target
+        if len(candidates) != 1:
+            return None
+        entry, target = next(iter(candidates.items()))
+        return {
+            "kind": "function_ptr",
+            "name": str(target.get("name") or ""),
+            "address": str(target.get("address") or f"{entry:08x}"),
+            "data_address": str(instr.get("address") or ""),
+            "source_symbol": "",
+            "confidence": "ghidra_data_ref_function_entry",
         }
 
     def _merged_function_pointer_expression(self, state: BuildState, nodes: list[ValueId]) -> dict | None:
@@ -2552,6 +2627,8 @@ class SliceGraphBuilder:
         result: int | None = None
         if opcode == "INT_AND" and len(values) >= 2:
             result = int(values[0]) & int(values[1])
+        elif opcode == "INT_ADD" and len(values) >= 2:
+            result = sum(int(value) for value in values)
         elif opcode == "INT_OR" and len(values) >= 2:
             result = int(values[0]) | int(values[1])
         elif opcode == "INT_XOR" and len(values) >= 2:
@@ -2900,6 +2977,11 @@ class SliceGraphBuilder:
             return None
         seen.add(node)
         attrs = fg.slice_graph.nodes.get(node, {})
+        if "constant_value" in attrs:
+            try:
+                return int(attrs.get("constant_value"))
+            except (TypeError, ValueError):
+                return None
         if attrs.get("kind") == "constant":
             return parse_int(attrs.get("storage"))
         preds = [

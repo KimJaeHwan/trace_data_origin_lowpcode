@@ -17,7 +17,17 @@ class LowPcodeProgram:
 
     @property
     def function_name(self) -> str:
-        return self.data.get("function_name") or self.path.stem.replace("_low_pcode", "")
+        raw_name = self.data.get("function_name") or self.path.stem.replace("_low_pcode", "")
+        entry = str(self.data.get("start_address") or "")
+        if raw_name and entry:
+            functions_by_entry = (self.data.get("indices") or {}).get("functions_by_entry") or {}
+            duplicate_count = 0
+            for function in functions_by_entry.values():
+                if str((function or {}).get("name") or "") == raw_name:
+                    duplicate_count += 1
+            if duplicate_count > 1:
+                return f"{raw_name}_{entry}"
+        return raw_name
 
     @property
     def instructions(self) -> list[dict]:
@@ -61,19 +71,22 @@ class LowPcodeLoader:
 
         names_by_address: dict[str, list[str]] = {}
         function_entry_by_name: dict[str, str] = {}
+        identity_by_entry = self._function_identity_by_entry(functions_by_entry)
         for address, symbols in symbols_by_address.items():
             for symbol in symbols or []:
                 name = symbol.get("name")
                 if name and name not in names_by_address.setdefault(str(address), []):
                     names_by_address[str(address)].append(str(name))
         for address, function in functions_by_entry.items():
-            name = function.get("name")
+            raw_name = str(function.get("name") or "")
+            name = identity_by_entry.get(str(address), raw_name)
             if name and name not in names_by_address.setdefault(str(address), []):
                 names_by_address[str(address)].append(str(name))
             if name:
                 function_entry_by_name.setdefault(str(name), str(address))
 
         for instr in data.get("instructions", []):
+            self._rewrite_call_target_names(instr, identity_by_entry)
             names: list[str] = []
             targets = list(instr.get("flow_targets") or [])
             for ref in instr.get("refs_from") or []:
@@ -95,6 +108,33 @@ class LowPcodeLoader:
             )
             if pointer_reads:
                 instr["function_pointer_reads"] = pointer_reads
+
+    def _function_identity_by_entry(self, functions_by_entry: dict) -> dict[str, str]:
+        counts: dict[str, int] = {}
+        for function in functions_by_entry.values():
+            name = str((function or {}).get("name") or "")
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+        identities: dict[str, str] = {}
+        for entry, function in functions_by_entry.items():
+            name = str((function or {}).get("name") or "")
+            if not name:
+                continue
+            entry_text = str(entry)
+            identities[entry_text] = f"{name}_{entry_text}" if counts.get(name, 0) > 1 else name
+        return identities
+
+    def _rewrite_call_target_names(self, instr: dict, identity_by_entry: dict[str, str]) -> None:
+        for key in ("call_targets", "inferred_call_targets"):
+            for target in instr.get(key) or []:
+                entry = str(target.get("entry") or target.get("address") or "")
+                identity = identity_by_entry.get(entry)
+                if not identity:
+                    continue
+                raw_name = target.get("function_name")
+                if raw_name and raw_name != identity and not target.get("raw_function_name"):
+                    target["raw_function_name"] = raw_name
+                target["function_name"] = identity
 
     def _function_pointer_reads(
         self,

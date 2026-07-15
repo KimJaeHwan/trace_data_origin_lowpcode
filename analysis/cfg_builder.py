@@ -45,15 +45,17 @@ class CFGBuilder:
         fallthrough = instr.get("fallthrough")
         targets = [target for target in instr.get("flow_targets", []) if target in addr_to_instr]
 
-        if "CALL" in flow_type or mnemonic in {"CALL", "BL"}:
+        if "CALL" in flow_type or (not flow_type and mnemonic in {"CALL", "BL"}):
             return [fallthrough] if fallthrough in addr_to_instr else []
         if flow_type == "CONDITIONAL_JUMP" or mnemonic in {"JZ", "JNZ", "CBRANCH", "B.EQ", "B.NE"}:
             successors = list(targets)
             if fallthrough in addr_to_instr:
                 successors.append(fallthrough)
             return successors
-        if flow_type in {"UNCONDITIONAL_JUMP", "COMPUTED_JUMP"} or mnemonic in {"JMP", "B", "BRANCHIND"}:
+        if flow_type in {"UNCONDITIONAL_JUMP", "COMPUTED_JUMP"} or (
+            not flow_type and mnemonic in {"JMP", "B", "BRANCHIND"}
+        ):
             return targets
-        if mnemonic in {"RET", "RETURN"} or flow_type == "TERMINATOR":
+        if flow_type == "TERMINATOR" or (not flow_type and mnemonic in {"RET", "RETURN"}):
             return []
         return [fallthrough] if fallthrough in addr_to_instr else []

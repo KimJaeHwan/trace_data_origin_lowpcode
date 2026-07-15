@@ -27,6 +27,8 @@ def parse_int(value) -> int | None:
     if value is None:
         return None
     text = str(value).replace("L", "")
+    if text.startswith("0x-0x"):
+        text = "-" + text.removeprefix("0x-")
     try:
         return int(text, 16)
     except ValueError:
@@ -635,6 +637,15 @@ class SliceGraphBuilder:
             fg.slice_graph.nodes[out_node]["constant_value"] = 0
             state.expressions[out_node] = zero_expr
             return
+        zero_product_indexes = self._zero_constant_input_indexes(pcode.get("inputs", [])) if opcode == "INT_MULT" else []
+        if zero_product_indexes:
+            output_bits = int(output.get("size") or 0) * 8
+            fg.slice_graph.nodes[out_node]["constant_value"] = 0
+            for index in zero_product_indexes:
+                if index < len(inputs) and inputs[index] is not None:
+                    fg.slice_graph.add_edge(inputs[index], out_node, kind="data", opcode="INT_MULT_ZERO")
+            state.expressions[out_node] = self._zero_constant_expression(output_bits)
+            return
         for source in inputs:
             if source is not None:
                 fg.slice_graph.add_edge(source, out_node, kind="data", opcode=opcode)
@@ -755,9 +766,13 @@ class SliceGraphBuilder:
                 state,
                 selected_sources,
             ) or {"kind": "value"}
+            if addr_node is not None:
+                fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
             fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
             state.expressions[out_node] = dict(state.expressions.get(mem_node) or {"kind": "value"})
         elif memory_nodes:
+            if addr_node is not None:
+                fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD_ADDRESS")
             for mem_node in memory_nodes:
                 opcode = "LOAD" if fg.slice_graph.nodes[mem_node].get("storage") == f"mem:{mem_key}" else "LOAD_OVERLAP"
                 fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode=opcode)
@@ -799,18 +814,6 @@ class SliceGraphBuilder:
         source = self._value_for_input(fg, state, inputs[0], instr, pcode)
         offset_node = self._value_for_input(fg, state, inputs[1], instr, pcode)
         out_node = self._new_value(fg, state, output, instr, "SUBPIECE")
-        narrowed = self._narrowed_sources_for_byte_range(
-            fg,
-            source,
-            parse_int(inputs[1].get("offset")) or 0,
-            int(output.get("size") or 0),
-        )
-        if narrowed:
-            self._add_narrowed_edges(fg, narrowed, out_node, "SUBPIECE_RANGE")
-        elif source is not None:
-            fg.slice_graph.add_edge(source, out_node, kind="data", opcode="SUBPIECE")
-        if offset_node is not None:
-            fg.slice_graph.add_edge(offset_node, out_node, kind="data", opcode="SUBPIECE_OFFSET")
         expr = dict(state.expressions.get(source) or {"kind": "value"})
         source_expr = self._bit_expr_for_node(source, state, int(inputs[0].get("size") or 0) * 8)
         if source_expr is not None:
@@ -819,6 +822,22 @@ class SliceGraphBuilder:
                 "value": source_expr,
                 "offset": (parse_int(inputs[1].get("offset")) or 0) * 8,
             }
+        bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
+        bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
+        narrowed = self._narrowed_sources_for_byte_range(
+            fg,
+            source,
+            parse_int(inputs[1].get("offset")) or 0,
+            int(output.get("size") or 0),
+        )
+        if bit_sources:
+            self._add_narrowed_edges(fg, bit_sources, out_node, "SUBPIECE_BIT_RANGE")
+        elif narrowed:
+            self._add_narrowed_edges(fg, narrowed, out_node, "SUBPIECE_RANGE")
+        elif source is not None:
+            fg.slice_graph.add_edge(source, out_node, kind="data", opcode="SUBPIECE")
+        if offset_node is not None:
+            fg.slice_graph.add_edge(offset_node, out_node, kind="data", opcode="SUBPIECE_OFFSET")
         state.expressions[out_node] = expr
 
     def _process_int_and(self, fg: FunctionGraph, state: BuildState, instr: dict, pcode: dict) -> None:
@@ -829,9 +848,31 @@ class SliceGraphBuilder:
 
         input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
         out_node = self._new_value(fg, state, output, instr, "INT_AND")
+        if input_nodes[0] is not None:
+            fg.slice_graph.nodes[out_node]["left_input"] = input_nodes[0]
+        if input_nodes[1] is not None:
+            fg.slice_graph.nodes[out_node]["right_input"] = input_nodes[1]
         mask_index = self._constant_input_index(inputs)
         value_index = 1 - mask_index if mask_index in (0, 1) else None
+        if value_index is not None and input_nodes[value_index] is not None:
+            fg.slice_graph.nodes[out_node]["value_input"] = input_nodes[value_index]
+        if mask_index is not None and input_nodes[mask_index] is not None:
+            fg.slice_graph.nodes[out_node]["mask_input"] = input_nodes[mask_index]
         expr = self._expression_for(fg, "INT_AND", input_nodes, state, output)
+        zero_mask_indexes = self._zero_constant_input_indexes(inputs)
+        zero_mask_indexes.extend(
+            index
+            for index, node in enumerate(input_nodes)
+            if index not in zero_mask_indexes and self._node_is_source_empty_zero(fg, state, node, output)
+        )
+        if zero_mask_indexes:
+            output_bits = int(output.get("size") or 0) * 8
+            fg.slice_graph.nodes[out_node]["constant_value"] = 0
+            for index in zero_mask_indexes:
+                if input_nodes[index] is not None:
+                    fg.slice_graph.add_edge(input_nodes[index], out_node, kind="data", opcode="INT_AND_ZERO_MASK")
+            state.expressions[out_node] = self._zero_constant_expression(output_bits)
+            return
         bit_ranges = self._bit_source_ranges_for_output(expr, int(output.get("size") or 0) * 8)
         bit_sources = self._expand_bit_source_ranges(fg, state, bit_ranges)
         narrowed: list[ValueId] = []
@@ -869,6 +910,10 @@ class SliceGraphBuilder:
 
         input_nodes = [self._value_for_input(fg, state, inp, instr, pcode) for inp in inputs]
         out_node = self._new_value(fg, state, output, instr, "INT_XOR")
+        if input_nodes[0] is not None:
+            fg.slice_graph.nodes[out_node]["left_input"] = input_nodes[0]
+        if input_nodes[1] is not None:
+            fg.slice_graph.nodes[out_node]["right_input"] = input_nodes[1]
         zero_expr = self._zero_idiom_expression("INT_XOR", input_nodes, output)
         input_sizes = [int(inp.get("size") or 0) * 8 for inp in inputs[:2]]
         if zero_expr is None and self._xor_inputs_have_same_observed_value(fg, input_nodes[:2], input_sizes):
@@ -889,6 +934,12 @@ class SliceGraphBuilder:
         if bit_sources:
             for source in bit_sources:
                 fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_XOR_CANCELLED")
+            for source in input_nodes:
+                if source is None:
+                    continue
+                source_attrs = fg.slice_graph.nodes.get(source, {})
+                if source_attrs.get("kind") == "constant" or source_attrs.get("opcode") == "CONST":
+                    fg.slice_graph.add_edge(source, out_node, kind="data", opcode="INT_XOR_CONST")
         else:
             for source in input_nodes:
                 if source is not None:
@@ -1325,6 +1376,39 @@ class SliceGraphBuilder:
                 return index
         return None
 
+    def _zero_constant_input_indexes(self, inputs: list[dict]) -> list[int]:
+        indexes: list[int] = []
+        for index, varnode in enumerate(inputs):
+            if not varnode.get("is_constant"):
+                continue
+            value = parse_int(varnode.get("offset") or varnode.get("address"))
+            if value == 0:
+                indexes.append(index)
+        return indexes
+
+    def _zero_constant_expression(self, size_bits: int) -> dict:
+        return {
+            "kind": "const",
+            "value": 0,
+            "unsigned_value": 0,
+            "size_bits": size_bits,
+            "bit_expr": {"op": "const", "value": 0, "size": size_bits},
+        }
+
+    def _node_is_source_empty_zero(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        node: ValueId | None,
+        output: dict,
+    ) -> bool:
+        if node is None:
+            return False
+        output_bits = int(output.get("size") or 0) * 8
+        if self._const_expr_value(state.expressions.get(node), output_bits) == 0:
+            return True
+        return self._constant_value_reaching_node(fg, node) == 0
+
     def _low_mask_byte_size(self, mask: int) -> int:
         if mask <= 0:
             return 0
@@ -1683,6 +1767,7 @@ class SliceGraphBuilder:
             pred
             for pred in graph.predecessors(node)
             if graph.edges[pred, node].get("kind") in {"data", "memory"}
+            and graph.edges[pred, node].get("opcode") != "SUBPIECE_OFFSET"
         ]
         if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
             return any(
@@ -1761,6 +1846,7 @@ class SliceGraphBuilder:
             pred
             for pred in graph.predecessors(node)
             if graph.edges[pred, node].get("kind") in {"data", "memory"}
+            and graph.edges[pred, node].get("opcode") != "SUBPIECE_OFFSET"
         ]
         if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
             values = [
@@ -1847,6 +1933,7 @@ class SliceGraphBuilder:
             pred
             for pred in graph.predecessors(node)
             if graph.edges[pred, node].get("kind") in {"data", "memory"}
+            and graph.edges[pred, node].get("opcode") != "SUBPIECE_OFFSET"
         ]
         if opcode in {"COPY", "INT_ZEXT", "INT_SEXT", "SUBPIECE", "LOAD"}:
             values: set[int] = set()
@@ -2285,8 +2372,6 @@ class SliceGraphBuilder:
             expression = state.expressions.get(node)
             if expression and expression.get("kind") == "function_ptr":
                 return expression
-            if self._node_depends_on_memory_load(fg, node):
-                return self._unique_function_pointer_candidate_in_state(state)
         return None
 
     def _node_depends_on_memory_load(
@@ -3207,7 +3292,13 @@ class SliceGraphBuilder:
     def _is_call_instruction(self, instr: dict) -> bool:
         mnemonic = (instr.get("mnemonic") or "").upper()
         flow_type = (instr.get("flow_type") or "").upper()
-        return bool(instr.get("call_targets")) or "CALL" in flow_type or mnemonic in {"CALL", "BL", "BLR", "BLX"}
+        if instr.get("call_targets"):
+            return True
+        if "CALL" in flow_type:
+            return True
+        if flow_type and ("JUMP" in flow_type or "BRANCH" in flow_type or "TERMINATOR" in flow_type):
+            return False
+        return mnemonic in {"CALL", "BL", "BLR", "BLX"}
 
     def _is_address_copy(self, pcode: dict) -> bool:
         inputs = pcode.get("inputs", [])

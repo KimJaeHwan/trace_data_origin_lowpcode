@@ -12,9 +12,13 @@ import hashlib
 from ghidra.util.task import TaskMonitor
 
 
-DUMPER_SCHEMA_VERSION = 6
-DUMPER_NAME = "lowpcode_json_dumper_v7_address_taken_function_pointers"
+DUMPER_SCHEMA_VERSION = 8
+DUMPER_NAME = "lowpcode_json_dumper_v8_defined_data_scalars"
 REACHABLE_HELPER_MAX_DEPTH = 8
+
+_FUNCTION_POINTER_DATA_INDEX_CACHE = None
+_DEFINED_DATA_SCALAR_INDEX_CACHE = None
+_FUNCTION_NAME_COUNTS_CACHE = None
 
 
 def safe_str(value):
@@ -582,6 +586,203 @@ def get_function_index(program):
     return by_entry, imports_by_entry, thunks_by_entry, external_prototypes_by_entry, external_prototypes_by_name
 
 
+def address_offset(addr):
+    if addr is None:
+        return None
+    offset = safe_call(None, addr.getOffset)
+    try:
+        return int(offset)
+    except Exception:
+        return None
+
+
+def address_from_offset(program, value):
+    try:
+        factory = program.getAddressFactory()
+        default_space = factory.getDefaultAddressSpace()
+        max_addr = safe_call(None, default_space.getMaxAddress)
+        max_offset = address_offset(max_addr)
+        if max_offset is not None and (value < 0 or value > max_offset):
+            return None
+        return default_space.getAddress(value)
+    except Exception:
+        return None
+
+
+def scalar_to_int(value):
+    if value is None:
+        return None
+    for method_name in ("getUnsignedValue", "getValue"):
+        method = safe_call(None, getattr, value, method_name)
+        if method is None:
+            continue
+        parsed = safe_call(None, method)
+        if parsed is None:
+            continue
+        try:
+            return int(parsed)
+        except Exception:
+            pass
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def function_from_pointer_like_value(program, value):
+    target_func = safe_call(None, getFunctionAt, value)
+    if target_func is None:
+        target_func = safe_call(None, getFunctionContaining, value)
+    if target_func is not None:
+        return target_func
+
+    scalar = scalar_to_int(value)
+    if scalar is None:
+        return None
+
+    image_base = address_offset(safe_call(None, program.getImageBase)) or 0
+    pointer_size = int(safe_call(0, program.getDefaultPointerSize) or 0)
+    pointer_mask = (1 << (pointer_size * 8)) - 1 if pointer_size > 0 else None
+    candidates = [scalar, scalar + image_base]
+    if pointer_mask is not None:
+        masked = scalar & pointer_mask
+        candidates.extend([masked, masked + image_base])
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        addr = address_from_offset(program, candidate)
+        if addr is None:
+            continue
+        target_func = safe_call(None, getFunctionAt, addr)
+        if target_func is None:
+            target_func = safe_call(None, getFunctionContaining, addr)
+        if target_func is not None:
+            return target_func
+    return None
+
+
+def function_from_entry_text(entry_text):
+    text = safe_str(entry_text)
+    if not text:
+        return None
+    tail = text.split(":")[-1]
+    if tail.startswith("0x") or tail.startswith("0X"):
+        tail = tail[2:]
+    try:
+        offset = int(tail, 16)
+    except Exception:
+        return None
+    addr = address_from_offset(currentProgram, offset)
+    if addr is None:
+        return None
+    target_func = safe_call(None, getFunctionAt, addr)
+    if target_func is None:
+        target_func = safe_call(None, getFunctionContaining, addr)
+    return target_func
+
+
+def get_function_pointer_data_index(program, functions_by_entry):
+    global _FUNCTION_POINTER_DATA_INDEX_CACHE
+    if _FUNCTION_POINTER_DATA_INDEX_CACHE is not None:
+        return _FUNCTION_POINTER_DATA_INDEX_CACHE
+
+    by_data_address = {}
+    by_entry = {}
+    try:
+        pointer_size = int(safe_call(0, program.getDefaultPointerSize) or 0)
+    except Exception:
+        pointer_size = 0
+    if pointer_size <= 0:
+        _FUNCTION_POINTER_DATA_INDEX_CACHE = (by_data_address, by_entry)
+        return _FUNCTION_POINTER_DATA_INDEX_CACHE
+
+    valid_entries = set(functions_by_entry.keys())
+    try:
+        memory = program.getMemory()
+        listing = program.getListing()
+        data_iter = listing.getDefinedData(True)
+        while data_iter.hasNext():
+            data = data_iter.next()
+            length = int(safe_call(0, data.getLength) or 0)
+            if length != pointer_size:
+                continue
+            data_addr = safe_call(None, data.getMinAddress)
+            block = safe_call(None, memory.getBlock, data_addr)
+            if block is None:
+                continue
+            if safe_bool_method(block, "isExecute") or not safe_bool_method(block, "isRead"):
+                continue
+            if safe_bool_method(block, "isExternal") or safe_bool_method(block, "isOverlay"):
+                continue
+            target_func = function_from_pointer_like_value(program, safe_call(None, data.getValue))
+            if target_func is None or not is_followable_internal_function(target_func):
+                continue
+            entry = safe_str(target_func.getEntryPoint())
+            if entry not in valid_entries:
+                continue
+            record = {
+                "data_address": safe_str(data_addr),
+                "target_entry": entry,
+                "target_name": target_func.getName(),
+                "length": length,
+                "data_type": safe_str(safe_call(None, data.getDataType)),
+                "source": "ghidra_defined_data_value",
+            }
+            by_data_address[record["data_address"]] = record
+            by_entry.setdefault(entry, []).append(record)
+    except Exception as e:
+        print("[-] function pointer data index 추출 실패: %s" % str(e))
+
+    _FUNCTION_POINTER_DATA_INDEX_CACHE = (by_data_address, by_entry)
+    return _FUNCTION_POINTER_DATA_INDEX_CACHE
+
+
+def get_defined_data_scalar_index(program):
+    global _DEFINED_DATA_SCALAR_INDEX_CACHE
+    if _DEFINED_DATA_SCALAR_INDEX_CACHE is not None:
+        return _DEFINED_DATA_SCALAR_INDEX_CACHE
+
+    by_address = {}
+    try:
+        memory = program.getMemory()
+        listing = program.getListing()
+        data_iter = listing.getDefinedData(True)
+        while data_iter.hasNext():
+            data = data_iter.next()
+            length = int(safe_call(0, data.getLength) or 0)
+            if length <= 0 or length > 16:
+                continue
+            data_addr = safe_call(None, data.getMinAddress)
+            block = safe_call(None, memory.getBlock, data_addr)
+            if block is None:
+                continue
+            if not safe_bool_method(block, "isRead"):
+                continue
+            if safe_bool_method(block, "isExternal") or safe_bool_method(block, "isOverlay"):
+                continue
+            value = scalar_to_int(safe_call(None, data.getValue))
+            if value is None:
+                continue
+            bit_length = length * 8
+            mask = (1 << bit_length) - 1 if bit_length > 0 else None
+            record = {
+                "data_address": safe_str(data_addr),
+                "value": value,
+                "unsigned_value": value & mask if mask is not None else value,
+                "length": length,
+                "data_type": safe_str(safe_call(None, data.getDataType)),
+                "source": "ghidra_defined_data_scalar",
+            }
+            by_address[record["data_address"]] = record
+    except Exception as e:
+        print("[-] defined data scalar index 추출 실패: %s" % str(e))
+
+    _DEFINED_DATA_SCALAR_INDEX_CACHE = by_address
+    return _DEFINED_DATA_SCALAR_INDEX_CACHE
+
+
 def get_instruction_data_refs(instructions):
     by_from = {}
     for instr_data in instructions:
@@ -604,9 +805,17 @@ def build_indices(program, instructions):
         external_prototypes_by_entry,
         external_prototypes_by_name,
     ) = get_function_index(program)
+    function_pointers_by_data_address, address_taken_functions_by_entry = get_function_pointer_data_index(
+        program,
+        functions_by_entry,
+    )
+    defined_data_scalars_by_address = get_defined_data_scalar_index(program)
     return {
         "symbols_by_address": symbols_by_address,
         "functions_by_entry": functions_by_entry,
+        "function_pointers_by_data_address": function_pointers_by_data_address,
+        "address_taken_functions_by_entry": address_taken_functions_by_entry,
+        "defined_data_scalars_by_address": defined_data_scalars_by_address,
         "data_refs_by_from": get_instruction_data_refs(instructions),
         "imports_by_address": symbol_imports_by_address,
         "imports_by_entry": imports_by_entry,
@@ -630,6 +839,9 @@ def build_metadata_identity(program_hints, indices):
         "indices_hash": stable_hash({
             "symbols_by_address": indices.get("symbols_by_address"),
             "functions_by_entry": indices.get("functions_by_entry"),
+            "function_pointers_by_data_address": indices.get("function_pointers_by_data_address"),
+            "address_taken_functions_by_entry": indices.get("address_taken_functions_by_entry"),
+            "defined_data_scalars_by_address": indices.get("defined_data_scalars_by_address"),
             "imports_by_address": indices.get("imports_by_address"),
             "imports_by_entry": indices.get("imports_by_entry"),
             "thunks_by_entry": indices.get("thunks_by_entry"),
@@ -681,6 +893,64 @@ def build_function_name_index():
     except Exception as e:
         print("[-] 함수 이름 index 생성 실패: %s" % str(e))
     return index
+
+
+def build_function_entry_index():
+    index = {}
+    try:
+        fm = currentProgram.getFunctionManager()
+        it = fm.getFunctions(True)
+        while it.hasNext():
+            func = it.next()
+            entry = safe_str(safe_call(None, func.getEntryPoint))
+            if entry:
+                index[entry] = func
+    except Exception as e:
+        print("[-] 함수 entry index 생성 실패: %s" % str(e))
+    return index
+
+
+def build_function_name_counts():
+    counts = {}
+    try:
+        fm = currentProgram.getFunctionManager()
+        it = fm.getFunctions(True)
+        while it.hasNext():
+            func = it.next()
+            name = func.getName()
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+    except Exception as e:
+        print("[-] 함수 이름 count 생성 실패: %s" % str(e))
+    return counts
+
+
+def get_function_name_counts():
+    global _FUNCTION_NAME_COUNTS_CACHE
+    if _FUNCTION_NAME_COUNTS_CACHE is None:
+        _FUNCTION_NAME_COUNTS_CACHE = build_function_name_counts()
+    return _FUNCTION_NAME_COUNTS_CACHE
+
+
+def safe_filename_token(value):
+    text = safe_str(value) or "unknown"
+    cleaned = []
+    for ch in text:
+        if ch.isalnum() or ch in ("_", "-", "."):
+            cleaned.append(ch)
+        else:
+            cleaned.append("_")
+    token = "".join(cleaned).strip("_")
+    return token or "unknown"
+
+
+def function_output_filename(func):
+    name = safe_filename_token(func.getName())
+    counts = get_function_name_counts()
+    if counts.get(func.getName(), 0) <= 1:
+        return name + "_low_pcode.json"
+    entry = safe_call(None, func.getEntryPoint)
+    return "%s_%s_low_pcode.json" % (name, safe_filename_token(entry))
 
 
 def iter_java_items(value):
@@ -851,6 +1121,70 @@ def is_followable_internal_function(func):
     return True
 
 
+def unresolved_callind_addresses(func):
+    addresses = []
+    try:
+        listing = currentProgram.getListing()
+        instructions = listing.getInstructions(func.getBody(), True)
+        while instructions.hasNext():
+            instr = instructions.next()
+            has_callind = False
+            try:
+                for op in instr.getPcode():
+                    if op.getMnemonic() == "CALLIND":
+                        has_callind = True
+                        break
+            except Exception:
+                pass
+            flow_type = safe_call(None, instr.getFlowType)
+            if not has_callind and flow_type is not None:
+                if safe_bool_method(flow_type, "isComputed") and safe_bool_method(flow_type, "isCall"):
+                    has_callind = True
+                flow_text = safe_str(flow_type) or ""
+                if "COMPUTED" in flow_text.upper() and "CALL" in flow_text.upper():
+                    has_callind = True
+            if not has_callind:
+                continue
+            has_resolved_target = False
+            for ref in instr.getReferencesFrom():
+                ref_type = ref.getReferenceType()
+                if ref_type.isCall():
+                    has_resolved_target = True
+                    break
+            if not has_resolved_target:
+                addresses.append(safe_str(instr.getAddress()))
+    except Exception:
+        pass
+    return addresses
+
+
+def address_taken_internal_functions(function_name_index):
+    (
+        functions_by_entry,
+        _imports_by_entry,
+        _thunks_by_entry,
+        _external_prototypes_by_entry,
+        _external_prototypes_by_name,
+    ) = get_function_index(currentProgram)
+    _by_data_address, by_entry = get_function_pointer_data_index(currentProgram, functions_by_entry)
+    function_entry_index = build_function_entry_index()
+    results = []
+    seen = set()
+    for entry, records in by_entry.items():
+        func_record = functions_by_entry.get(entry) or {}
+        func = function_entry_index.get(entry)
+        if func is None:
+            func = function_from_entry_text(entry)
+        if func is None:
+            func = function_name_index.get(func_record.get("name"))
+        key = function_key(func)
+        if func is None or key in seen or not is_followable_internal_function(func):
+            continue
+        seen.add(key)
+        results.append((func, records or []))
+    return results
+
+
 def resolve_called_functions(func, function_name_index):
     called = []
     seen = set()
@@ -901,6 +1235,7 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
     edges = []
     skipped = []
     function_name_index = build_function_name_index()
+    address_taken_funcs = address_taken_internal_functions(function_name_index)
 
     for func in seed_funcs:
         key = function_key(func)
@@ -913,6 +1248,25 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
         func, depth, root = queue.pop(0)
         if depth >= max_depth:
             continue
+        for callind_addr in unresolved_callind_addresses(func):
+            for target_func, records in address_taken_funcs:
+                edge = {
+                    "from_function": func.getName(),
+                    "from_addr": callind_addr,
+                    "to_addr": safe_str(target_func.getEntryPoint()),
+                    "to_function": target_func.getName(),
+                    "root": root,
+                    "depth": depth + 1,
+                    "reference_kind": "address_taken_indirect_candidate",
+                }
+                if records:
+                    edge["data_addr"] = records[0].get("data_address")
+                edges.append(edge)
+                key = function_key(target_func)
+                if key and key not in seen:
+                    seen.add(key)
+                    ordered.append(target_func)
+                    queue.append((target_func, depth + 1, root))
         for call in resolve_called_functions(func, function_name_index):
             target_func = call["to_function"]
             edge = {
@@ -958,8 +1312,16 @@ def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
         external_prototypes_by_entry,
         external_prototypes_by_name,
     ) = get_function_index(currentProgram)
+    function_pointers_by_data_address, address_taken_functions_by_entry = get_function_pointer_data_index(
+        currentProgram,
+        functions_by_entry,
+    )
+    defined_data_scalars_by_address = get_defined_data_scalar_index(currentProgram)
     manifest_indices = {
         "functions_by_entry": functions_by_entry,
+        "function_pointers_by_data_address": function_pointers_by_data_address,
+        "address_taken_functions_by_entry": address_taken_functions_by_entry,
+        "defined_data_scalars_by_address": defined_data_scalars_by_address,
         "imports_by_entry": imports_by_entry,
         "thunks_by_entry": thunks_by_entry,
         "external_prototypes_by_entry": external_prototypes_by_entry,
@@ -986,7 +1348,7 @@ def write_manifest_file(base_path, seed_funcs, funcs, edges, skipped):
 
 def write_json_file(base_path, func):
     result_json = dump_low_pcode_and_flow(func)
-    output_path = make_output_path(base_path, func.getName() + "_low_pcode.json")
+    output_path = make_output_path(base_path, function_output_filename(func))
     with open(output_path, "w") as json_file:
         json_file.write(json.dumps(result_json, indent=2, ensure_ascii=False))
     return output_path

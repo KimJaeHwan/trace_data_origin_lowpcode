@@ -3,6 +3,381 @@
 This log records implementation progress by phase. Detailed task checklists live
 in the phase-specific files.
 
+## 2026-07-14
+
+- Cycle 2 Suite09/10 repair: recovered the regression set without adding
+  case-specific semantics. Source-empty concrete-store pruning now requires
+  summary evidence to be no later than the concrete store, so earlier
+  zero-initializers no longer erase later external out-parameter writes.
+  Computed metadata source-pointer marker writes now treat overlapping
+  concrete `STORE_VAL` nodes as real source-bearing evidence before applying a
+  weak marker overwrite, preventing stale callback-field sources from
+  surviving a later concrete field kill. Packed byte/subrange lowering now
+  resolves `SUBPIECE` through bit-expression sources before falling back to
+  stale memory-byte narrowing, and constant recovery ignores the
+  `SUBPIECE_OFFSET` operand as a value. Finally, non-overlap pruning preserves
+  single-source `LOAD_OVERLAP` evidence into sink-reaching register-backed
+  dynamic reads when the unresolved register storage is anchored to the same
+  concrete memory identity. These repairs use low-pcode dataflow,
+  architecture-aware storage ranges, observed source reachability, call/order
+  evidence, and storage identity only; they do not use case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, parameter names, or signatures as
+  semantics.
+- Bumped the summary cache schema for the ordering and register-backed overlap
+  changes. Verified with `py_compile`, `compileall -q analysis core frontend
+  query report tools`, and fresh-cache focused validation of the 11 reported
+  cycle-02 pre-regression failures: DFB131 across the reported PE/Linux
+  architectures, DFB034/DFB035 armv7, TV2C626 x86/x64/aarch64, and TV2R001
+  UE DebugGame all now pass with expected sources and no forbidden sources.
+
+- Cycle 1 Suite09/10 follow-up repair: fixed multi-sink field-overwrite and
+  heap selected-node false positives without adding case-specific source
+  semantics. Constant-annihilator handling now treats `INT_AND` with a literal
+  or propagated source-empty zero, and `INT_MULT` with a literal zero, as
+  source-empty values instead of retaining the killed operand. Source-empty
+  pointer-memory overwrite pruning now recognizes stale summary read/carry
+  edges into the overwritten target, filters wide `LOAD_OVERLAP` carriers by
+  exact observed source slot when a later source-empty overwrite kills one
+  field, and prunes stale packed-subrange reads after the overwrite. Concrete
+  local source-empty stores now shadow older source-bearing summary inputs to
+  the same `STORE_VAL` memory version, covering heap payload constant
+  overwrites as well as stack fields. The repair uses Low P-code graph facts,
+  source labels, summary provenance, architecture-aware ranges, and exact
+  observed storage slots; it does not use case IDs, helper names, expected
+  labels, fixed offsets, ABI roles, parameter names, or signatures as
+  semantics.
+- Verified with `py_compile`, targeted expected validation of the eight
+  reported failing scopes (TV2C675 across the reported tier0 variants and
+  TV2R340 UE Development), and the in-repo V8 sample gate for
+  DFB001/DFB002/DFB004/DFB005 across included sample architectures. All checked
+  scopes now validate with expected sources and no forbidden sources.
+
+- Cycle 1 Suite09/10 repair: tightened summary-backed observed storage and
+  memory version selection for fused multi-sink and heap alias reload cases.
+  Program-level source reachability now follows expression-held ValueIds when
+  deciding whether source-bearing non-primary register storage can be preserved
+  across a call whose low-pcode body does not write that storage, and
+  provider-recognized sink marker calls without scoped bodies can preserve
+  unrelated source-bearing observed registers for subsequent code. Precise
+  observed-memory read materialization also prefers the latest source-bearing
+  program memory version for the same resolved range, so source-empty
+  initialization does not mask later summary writes while later same-range
+  overwrites still win. The repair is based on low-pcode summaries,
+  program-level graph reachability, observed storage, call ordering, and
+  architecture-aware memory ranges only; it does not use case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures as semantics.
+- Bumped the summary cache schema for the observed storage/memory version
+  selection changes. Verified with `py_compile`, `compileall -q analysis core
+  frontend query report tools`, fresh-cache focused validation of the five
+  supplied failing scoped roots (TV2C673 P1 x86/x64/armv7/aarch64 and TV2R339
+  UE DebugGame), and checked-in DFB001/002/034 smoke across sample
+  architectures (`PASS 18/18`).
+
+- Cycle 3 Suite09/10 repair: added late pruning for secondary weak metadata
+  source-pointer marker writes when the sink-reaching field address is itself
+  recovered through a memory-loaded pointer alias. These fallback writes now
+  remain available for direct observed fields, but they no longer prove that a
+  later alias reload survived unavailable helper-private field kills without
+  independent low-pcode or summary evidence. The repair uses weak marker edge
+  provenance, observed memory address origins, sink reachability, field order,
+  and architecture-aware memory ranges only; it does not use case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures as semantics.
+- Bumped the summary cache schema for the alias-loaded metadata-marker pruning.
+  Verified with `py_compile`, `compileall -q analysis core frontend query
+  report tools`, fresh-cache focused replay of TV2C670, TV2C666, and TV2R335,
+  and a checked-in DFB001/002/034 smoke across sample architectures (`PASS
+  18/18`).
+
+- Cycle 1 Suite09/10 repair: tightened fused field/alias handling around
+  source-empty overwrites, weak metadata marker writes, and call-post pointer
+  expressions. Call-post register storage can now preserve an address
+  expression from the matching call-pre storage only when the call summary does
+  not provide a real output for that storage, so later selected reloads can
+  resolve their address without inventing return-value semantics. Source-empty
+  memory overwrite materialization now prefers exact-width output ranges and
+  refuses broad non-zero-offset projections that would erase sibling fields;
+  explicit source-empty overwrite evidence also prunes conflicting source-bearing
+  summary-memory inputs to the same target. For thunk-like helpers with no body
+  output evidence, weak ordered metadata marker field writes are invalidated
+  when a later same-pointer call can shadow the selected field before the sink.
+  These repairs use low-pcode dataflow, observed call-pre/post storage, pointer
+  expressions, source-empty provenance, weak metadata marker provenance, call
+  ordering, and architecture-aware memory ranges only; no case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures were added as semantics.
+- Verified with `py_compile`, `compileall -q analysis core frontend query
+  report tools`, fresh-cache focused replay of the five supplied Suite10
+  failing scoped roots, and a checked-in DFB001/002/034 smoke across sample
+  architectures (`PASS 18/18`).
+
+- Cycle 4 regression repair: tightened precise summary-memory overwrite
+  selection and dereferenced computed write projection for Suite09/10 weak
+  frontier cases. Summary observed-memory writes with precise observed output
+  ranges can now shadow stale prior memory even when the summary edge does not
+  carry an explicit relative offset, and packed primary subrange stores are
+  treated as precise only when their packed store range covers the target
+  range. Dereferenced memory-valued summary addresses now resolve through the
+  caller's loaded pointer value plus the callee's callsite-resolved affine
+  field offset; the resolver no longer falls back to treating the pointer slot
+  address itself as the pointee for `deref:mem...` summaries. The repair uses
+  Low P-code graph facts, observed call-pre/post storage, architecture-aware
+  memory ranges, and source reachability; it does not use case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures as semantics.
+- Bumped the summary cache schema for the precise-write and dereferenced
+  affine summary semantics. Verified with `py_compile`, `compileall`, and
+  fresh-cache focused validation of the eight reported cycle-04 failing
+  scopes: TV2C664 P0 x64/armv7/aarch64, TV2C661 P0 aarch64, TV2C607 P1 x86,
+  TV2C660 P1 x86, and TV2C664 P1 x64/aarch64. All eight now validate with
+  expected sources and no forbidden sources.
+
+- Cycle 2 regression repair: tightened post-call memory carry semantics after
+  the Suite09/10 pre-regression run exposed stale adjacent-field and empty
+  placeholder propagation. Later post-call memory-to-read edges are now treated
+  as weak carry evidence during cleanup, precise read ranges no longer inherit
+  wider predecessor ranges when deciding overlap, and empty call-post memory
+  placeholders lose to real prior memory versions when resolving loaded pointer
+  slots. Dereferenced summary output resolution also now handles missing
+  caller input nodes without crashing. The repair is based on low-pcode storage
+  ranges, observed call-pre/post memory versions, and source reachability; it
+  does not use case IDs, helper names, expected labels, fixed offsets, ABI
+  roles, parameter names, or signatures as semantics.
+- Verified by replaying all 13 reported cycle-02 Suite09/10 non-PASS scoped
+  roots with fresh builders; all now validate with expected sources and no
+  forbidden sources. Also ran `py_compile` and the repository compile sweep.
+
+- Cycle 1 Suite09/10 repair: added convention-free interprocedural memory
+  bridging for fused field/alias cases where a call writes source-bearing memory
+  and a later sink observes a selected reload rather than a direct call result.
+  Summary materialization now projects dereferenced pointer outputs through the
+  caller's observed pointer expression, can connect a latest single-source
+  post-call memory version to a later overlapping read when no intervening
+  conflicting write exists, and can derive selected pointer-output offsets from
+  callee low-pcode loads before resolving them against caller memory ranges.
+  The repair also follows exact spill/reload memory stores when deriving
+  constant pointer offsets, which keeps stale field copies and noise overwrites
+  from masking the selected payload. The implementation uses low-pcode dataflow,
+  observed storage, source labels, call ordering, and architecture-aware ranges
+  only; it does not use case IDs, helper names, expected labels, fixed offsets,
+  ABI roles, parameter names, or signatures as semantics.
+- Verified with `py_compile` for `analysis/interprocedural_summary.py`, a
+  repository Python compile sweep, and fresh-cache focused replay of the four
+  supplied Suite09/10 non-PASS scopes: TV2C668 x86/armv7 and TV2R335 UE
+  Development/DebugGame. All four now report the expected source labels at the
+  sink. A small Phase 1 smoke run passed the selected DFB001/DFB002 cases across
+  the normal roots but exited nonzero because the PE no-binary entries still
+  emit two legacy `ERROR: None` rows.
+
+- Cycle 5 Suite09/10 repair: tightened unresolved computed adjacent-source
+  field writes so dispatch/selector scalars are not reclassified as callback
+  payload writes. The adjacent-source fallback now skips callsites with local
+  concrete function-pointer evidence and rejects any candidate scalar whose
+  observed storage contributes to the computed target through low-pcode
+  data/address dependencies. This preserves payload-style unresolved callback
+  writes while avoiding stale selector/decoy sources in fused callback-table
+  field cases. The repair uses observed low-pcode storage, call-pre expression
+  facts, and architecture-aware storage overlap only; no case IDs, helper
+  names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures were added as semantics.
+
+- Cycle 2 Suite09/10 repair: reclassified loaded-pointer expression repair
+  edges as weak fallback evidence when a later low-pcode proof resolves the
+  same sink-facing memory to a precise source. Exact dynamic wide-store
+  subrange and dynamic-base subrange repairs can now displace stale loaded
+  pointer/prior-overlap inputs, which restores fused realloc and live-tail
+  payload reads without treating unresolved register-backed writes as final
+  evidence. Post-call memory redirection is also scoped to the caller function
+  when matching equivalent same-storage memory nodes, preventing recursive
+  helper snapshots from stealing caller global reloads. The validator now reads
+  whole source-label tokens from `expected_flow` entries that explicitly target
+  a sink, so multi-sink oracles can express distinct per-sink sources without
+  relying on placeholder flat expected-source arrays. These changes use
+  low-pcode storage, expression, source reachability, and oracle structure only;
+  no case IDs, helper names, expected labels, fixed offsets, ABI roles, or
+  signature metadata were added as semantics.
+- Verified with `.venv/bin/python -m py_compile
+  analysis/interprocedural_summary.py report/expected_validator.py
+  tools/pcode_slicegraph_v8_phase1.py`, `.venv/bin/python -m compileall -q
+  analysis core frontend query report tools`, and fresh-cache focused replay of
+  all 13 supplied cycle-02 Suite09/10 non-PASS roots (`remaining 0`).
+
+- Cycle 1 Suite09/10 core repair: generalized latest-write shadowing for
+  observed-memory summary writes and source-empty global overwrites. Plain
+  observed-memory reads now participate in the same precise summary-write
+  pruning used for load ranges and call-post memory snapshots, so later
+  same-field writes displace older conflicting summary inputs. Observed global
+  writes now redirect later global consumers even when the written value is
+  source-empty, preserving no-source overwrites instead of keeping stale prior
+  global state. UE loaded-pointer reads also get a late expression-resolved
+  memory bridge: when a sink-reaching observed-memory address resolves to a
+  concrete stack/heap/register memory expression, the matching single-source
+  memory node is connected and weak prior-context sources are removed. These
+  changes use low-pcode storage, expression, and source reachability only; no
+  case IDs, helper names, expected labels, fixed offsets, ABI roles, or
+  signature metadata were added as semantics.
+- Verified with `py_compile`, `compileall -q analysis core frontend query
+  report tools`, replay of all 17 reported Suite09/10 failing scoped roots with
+  fresh `/tmp` caches, and checked-in DFB001/002/034 smoke across sample
+  architectures (`PASS 18/18`).
+
+- Cycle 2 UE repair: treated packed primary subrange store/load edges as weak
+  fill evidence when a later precise dynamic memory write reaches the same
+  sink-facing target. Packed edges now record the wide store range used to
+  justify the selected lane, invalid packed edges are pruned against that range,
+  and later precise overwrite logic may displace packed-fill predecessors just
+  like load-overlap/prior-overlap evidence. This removes stale reindexed-field
+  sources while preserving struct-return lane rewrites; it uses low-pcode
+  storage ranges and source reachability only, with no case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, or signature metadata as semantics.
+- Verified with `py_compile`, `compileall -q analysis core frontend query
+  report tools`, focused TV2R301/TV2R329/TV2R311 DebugGame and Development
+  scoped roots, all TV2C658 struct-return lane scoped roots retaining
+  `dfb_source_A.ret`, and checked-in DFB001/002/034/048/053 smoke across sample
+  architectures (`PASS 30/30`).
+- Cycle 1 Engine11 repair: tightened interprocedural memory summaries for fused
+  slot/lane writes. Concrete callee memory writes are now filtered by their
+  callsite-resolved relative store offset before summary outputs are applied,
+  observed-to-memory writes use the same feasible-write guard, and precise
+  post-call memory subranges can feed later wider sink-reaching reads. Packed
+  subrange repairs now prune conflicting weak overlap predecessors after a
+  single selected source is proven. x86 address recovery also handles
+  same-instruction multiply/subpiece lowering, and call-boundary detection now
+  treats jump-class low-pcode flow metadata as authoritative over `CALL`
+  mnemonic text so get-PC branches do not manufacture clobbering call-post
+  registers. These changes are driven by low-pcode storage/dataflow only; no
+  case IDs, helper names, source labels, ABI parameter/return roles, or fixed
+  test offsets were added as semantics.
+- Verified with `py_compile`, `compileall -q analysis core frontend query
+  report tools`, focused replay of the four reported TV2C661 P0/P1 variants
+  with fresh `/tmp` summary caches (all slice only to `dfb_source_A.ret`), and
+  checked-in DFB001/002/034/048/053 smoke across sample architectures
+  (`PASS 30/30`).
+- Cycle 3 validation repair: no-oracle scoped dependency roots that belong to a
+  known expected case family and produce no data/control source evidence now
+  validate as PASS with an explicit dependency/no-flow reason instead of
+  failing as `NO_EXPECTED`. Exact expected entries, unknown no-oracle functions,
+  and no-oracle functions with any observed source evidence still keep their
+  previous behavior. The repo runner also passes `sink_count` into validation
+  for local no-target roots. This is a report-layer harness classification
+  change only; it does not infer sources, ABI roles, helper semantics, or
+  source/sink markers in Engine11 core.
+- Verified with `py_compile`, `compileall -q report tools`, harness-style
+  validator probes for the TV2C658/TV2R330 dependency roots, unknown/no-oracle
+  negative probes, and exact wrapper probes for TV2C658 and TV2R330.
+- Cycle 2 repair follow-up: constrained late source-fill repairs so they do not
+  add a distinct source to a target that already has graph-real precise source
+  input. Packed primary subrange store/load edges now also require observable
+  target memory ranges to be contained by the packed store range, while
+  expression-only packed facts can still materialize the selected lane. This
+  removes stale adjacent-field and latest-unique false positives without case
+  IDs, helper names, expected labels, fixed offsets, ABI roles, or signature
+  metadata as semantics.
+- Verified with `py_compile`, `compileall`, replay of all 13 supplied
+  cycle-02 non-PASS entries with fresh `/tmp` caches (3 now PASS, 10 remain
+  source-empty `NO_EXPECTED` helper roots), all eight TV2C658 lane-rewrite
+  scoped variants, and a checked-in DFB001/002/034/048/053 smoke across sample
+  architectures.
+
+## 2026-07-13
+
+- Cycle 3 repair: refined late dynamic wide-store displacement after the cycle
+  2 guard proved too strict for fused TArray swap/remove flows. Later
+  register-backed dynamic writes may now replace stale exact/prior-overlap
+  inputs when the later write is the latest same-base candidate, its narrowed
+  subrange carries one source, and either exact address terms match or the
+  observed dynamic storage identity and offset already match. This restores
+  reindexed/live-tail payload reads without case IDs, helper names, source-label
+  rules, ABI roles, or fixed offsets.
+- Verified `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py`, `.venv/bin/python -m compileall -q analysis
+  core frontend query report tools`, and scoped replay of the four reported
+  TV2R301/TV2R329 development/debuggame roots with fresh `/tmp` summary caches;
+  all four now slice only to `dfb_source_C.ret`. The adjacent TV2R311
+  development/debuggame scoped roots also still pass.
+- Cycle 2 repair: narrowed later call-pre memory snapshot repair to the
+  overlapping memory lane before adding read edges, and prevented broad
+  latest-dynamic writes from displacing conflicting exact subrange proofs
+  unless their address terms exactly match the target. This removes stale
+  adjacent-lane sources in callback/field-kill and TArray realloc cases without
+  case IDs, helper names, source-label rules, ABI roles, or fixed offsets.
+- Verified `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py`, `.venv/bin/python -m compileall -q analysis
+  core frontend query report tools`, replayed all 24 cycle-02 pre-regression
+  failures with `remaining_fail 0`, checked all eight TV2C657 scoped variants,
+  and ran a 30-root DFB001/002/034/043/048 smoke across checked-in samples.
+- Cycle 1 repair: tightened register-backed observed-memory read repair for
+  fused swap/remove flows. Later dynamic writes may now supersede earlier
+  exact-dynamic fallback edges for register-backed observed reads, and a later
+  call-pre memory snapshot can repair an unresolved observed read only when the
+  snapshot overlaps the read, carries a single source, is not downstream of the
+  read, and no intervening write touches the range. This removes stale prior
+  overlap sources without case IDs, helper names, source-label rules, ABI
+  roles, or fixed offsets.
+- Verified the three reported scoped Suite10 roots; each now slices only to
+  `dfb_source_C.ret`. Also ran py_compile, compileall, and a DFB001/002/034
+  smoke over checked-in architecture samples.
+- Cycle 5 repair: added a late exact dynamic wide-store subrange bridge for
+  register-backed observed reads. The bridge requires exact address-term
+  equality, matching pointer-slot provenance, and a single narrowed source
+  label before replacing stale dynamic unique-object fallback edges. This
+  restores fused TArray element/field reads without helper-name, case-id,
+  source-label, ABI role, or fixed-offset rules.
+- Extended low-pcode numeric recovery for callsite-resolved address terms:
+  recorded INT_AND/XOR operands are preserved, constant-only bitwise/right-shift
+  and complement/two's-complement sequences can fold through known call-pre
+  constants, and normal affine shift recovery may use a single constant
+  bit-range fallback only when the recorded operand is unresolved. Wide-load
+  subrange tracing now computes byte lanes across overlapping memory inputs so
+  low 32-bit reads select the correct source cell.
+- Verified `.venv/bin/python -m py_compile analysis/interprocedural_summary.py
+  analysis/slice_graph_builder.py`, `.venv/bin/python -m compileall -q analysis
+  core frontend query tools`, and scoped replay of TV2R001, TV2R202, and
+  TV2R315 with fresh `/tmp` output/cache directories; all three now slice only
+  to `dfb_source_A.ret`.
+- Cycle 4 follow-up: fixed numeric address recovery for narrowed bit-provenance
+  shift edges. Affine and constant evaluators now prefer the recorded low-pcode
+  operand node for operations such as `INT_LEFT`, using `*_BIT_RANGE` edges only
+  as fallback provenance. This preserves source-carrying bit slices while
+  preventing masked lane expressions like `index ^ const` from being treated as
+  the unmasked index during exact store/load matching.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`; replayed the three reported scoped Suite10 failures with a
+  fresh `/tmp` summary cache, all slicing to only `dfb_source_A.ret`; and ran a
+  30-root DFB smoke set covering DFB001/002/034/043/048 across checked-in
+  architectures with zero failures.
+- Repaired fused masked-alias copy/kill propagation without adding case,
+  helper, source-label, or ABI-specific rules. Late exact-affine store/load
+  repair now acts as an alias-identity bridge: same-storage stack spill/reload
+  rewrites are allowed only when the stored value already depends on a
+  cross-identity exact bridge. This preserves the generated masked-alias case
+  while avoiding stale same-stack history that caused negative-only false
+  positives.
+- Constrained source-empty primary constant summaries to leaf functions. This
+  keeps useful low-pcode constants from simple selector helpers, but prevents
+  PIC/call-helper constants in functions with nested calls from overriding
+  observed interprocedural source flow.
+- Hardened low-pcode expression recovery for negative hex constants,
+  source-preserving XOR/shift bit-range edges, and loads whose observed memory
+  predecessor carries the address calculation. These changes keep low p-code as
+  source of truth and do not introduce argument/return semantics or ABI
+  parameter conventions.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`; replayed all 111 pre-repair failures from cycle 02 with
+  `remaining_fail 0`; and checked all eight TV2C657 scoped variants, each
+  slicing to `dfb_source_A.ret`.
+- Repaired shift-derived observed-address recovery by keeping explicit
+  low-pcode operand attributes on shift nodes while using narrowed bit-range
+  edges as provenance. This restores exact affine stack-to-observed-memory
+  overlap proofs in fused array/struct cases and prevents later stale
+  unique-memory fallbacks from suppressing the true prior source, without using
+  ABI return/argument semantics, helper names, case IDs, source labels, or
+  fixed offsets as rules.
+- Verified `.venv/bin/python -m compileall -q analysis core frontend query
+  report tools`; the two reported UE scoped roots now both slice to only
+  `dfb_source_A.ret`.
+
 ## 2026-07-11
 
 - Repaired computed callback field-read propagation through direct wrappers and
@@ -2147,6 +2522,297 @@ in the phase-specific files.
   P1 x86/armv7/aarch64 all produce `dfb_source_C.ret`; expected validation
   passes for TV2C652 x86 and P1 aarch64; adjacent x86 checks for TV2C650 and
   TV2C648 preserved their prior source sets; DFB001 PE_x64 remains PASS.
+
+- 2026-07-14: Refined dynamic register-backed memory overwrite handling for
+  fused TArray-style stores and later indexed reads. Latest same-base dynamic
+  stores may displace stale exact-subrange edges only when their value
+  subrange maps back to the sink-sized read and no same-base zero write proves
+  a disjoint neighbor field. Wide dynamic subrange propagation now rejects
+  same-instruction store nodes that carry conflicting observed address terms,
+  but it does not require exact affine-constant equality once Low P-code has
+  resolved the same dynamic storage identity and the extracted value subrange
+  has a single source label. This keeps neighbor-field writes from leaking
+  through realloc paths while preserving fused/indexed overwrites where the
+  resolved pointer slot, source subrange, and observed storage transition are
+  precise. The repair is based on low-pcode address expressions, observed
+  memory storage identities, source-label reachability, and architecture-aware
+  ranges; it does not use case IDs, helper names, expected labels, fixed
+  offsets, ABI roles, or signature metadata as semantics.
+- Bumped the summary cache schema for the dynamic overwrite refinement.
+  Verified with `compileall` and a fresh-cache scoped UE probe covering
+  TV2R202, TV2R301, TV2R329, TV2R315, and TV2R311 in DebugGame and
+  Development; all ten focused checks passed.
+
+- 2026-07-14: Added packed observed-storage subrange summaries for fused
+  aggregate-producing helpers. Auto summaries now preserve byte lanes when a
+  primary observed output is assembled from multiple observed inputs, and
+  caller-side repair materializes only the requested lane through exact affine
+  store/load relations or byte-aligned register extraction shifts. This
+  restores struct-return lane rewrites without treating the whole output
+  storage as tainted by every packed input, and without case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, or signature metadata as
+  semantics.
+- Bumped the summary cache schema for packed observed-storage subranges.
+  Verified with `py_compile`, `compileall`, the four reported TV2C658 P0/P1
+  x64/aarch64 scoped roots, adjacent TV2C658 P0/P1 x86/armv7 scoped roots,
+  and a checked-in DFB001/002/034/048/053 smoke across sample architectures.
+
+- 2026-07-14: Added late pruning for stale wide load inputs shadowed by
+  loop-carried narrow stores. Sink-reaching loads now drop older conflicting
+  whole-range memory predecessors when a later same-object narrow store is
+  carried through a loop whose observed bound covers the loaded width. This
+  handles bytewise payload copies that overwrite decoy words without treating
+  every partial write as a full overwrite. The guard requires matching
+  architecture-aware memory identity, a single source label on the narrow
+  overwrite, a CFG backedge, and a loop-body bound matching the load width; it
+  does not use case IDs, helper names, expected labels, fixed offsets, ABI
+  roles, or signature metadata as semantics.
+- Verified with `compileall`, the four reported TV2C659 P0 scoped roots across
+  x86/x64/armv7/aarch64, and a checked-in DFB001/002/080 smoke across sample
+  architectures.
+
+- 2026-07-14: Added late pruning for shadowed memory inputs after a precise
+  selected-field summary write. When a sink-reaching load-range or call-post
+  observed memory snapshot has a latest single-label summary memory write that
+  directly covers the target byte range, older conflicting load-overlap and
+  summary-memory predecessors for that same observed memory target are removed.
+  This handles fused aggregate-copy followed by selected-field overwrite forms
+  without treating whole aggregates as overwritten and without using case IDs,
+  helper names, expected labels, fixed offsets, ABI roles, or signature
+  metadata as semantics.
+- Verified with `py_compile`, the reported TV2C660 P1 x86 and armv7 scoped
+  roots (`dfb_source_A.ret` only), and a checked-in DFB001/002 smoke across
+  sample architectures.
+
+- 2026-07-14: Refined metadata source-pointer fallback writes for unavailable
+  thunk/helper bodies. When boundary metadata exposes multiple source markers
+  and Low P-code shows multiple disjoint sink-reaching field reads under the
+  same observed pointer storage, the fallback now maps markers to fields by
+  observed byte-lane order instead of applying the first marker to every field.
+  Broad fallback writes are split into exact sink-reaching subranges when those
+  subranges contiguously cover the observed container, and later metadata
+  fallback writes are blocked from overwriting already sourced overlapping
+  memory. This preserves convention-free behavior: the repair uses discovered
+  boundary-provider markers, observed memory ranges, sink reachability, and
+  architecture-aware storage sizes, not ABI roles, parameter names, case IDs,
+  helper names, expected labels, or fixed offsets.
+- Bumped the summary cache schema for metadata source-pointer subrange
+  fallback semantics. Verified with `py_compile`, `compileall`, and the
+  reported TV2C666 P0/P1 x64 scoped roots; both roots now produce
+  `dfb_source_A.ret` and `dfb_source_B.ret` with no `dfb_source_C.ret`.
+
+- 2026-07-14: Tightened computed-call and post-call memory handling after the
+  Suite09/10 cycle-02 regression report. Indirect call resolution no longer
+  promotes a memory-loaded target to the only stack function-pointer-looking
+  value unless that function pointer is actually carried on the target value;
+  unresolved computed calls therefore fall back to observed dataflow summaries
+  instead of optional metadata. Source-bearing memory preservation across an
+  empty call-post placeholder is disabled because an empty post-call memory
+  node is not evidence that prior source storage survived the call. Added a
+  same-object/latest-source fallback for unresolved computed field readers and
+  a late consistency pass that propagates source-bearing summary facts across
+  duplicate synthetic `LOAD_RANGE` versions with identical address and storage.
+  The repair uses Low P-code graph facts, architecture-aware storage ranges,
+  source labels from boundary providers, and sink reachability; it does not use
+  case IDs, helper names, fixed offsets, ABI roles, parameter names, or expected
+  source labels as semantics.
+- Verified with `compileall` and fresh-cache focused validation of the seven
+  reported cycle-02 failing scopes: TV2C606 x86, TV2C624 armv7/aarch64,
+  TV2C636 aarch64, TV2C632 x86, TV2C611 x64, and TV2R303 aarch64. All seven
+  now validate with only `dfb_source_A.ret` and no reported forbidden sources.
+  Bumped the summary cache schema for the computed-call and call-post memory
+  semantics change.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-03 regression cluster in computed
+  call and post-call memory summaries. Post-call memory redirection now refuses
+  to carry a prior source version across an intervening non-boundary call that
+  observed overlapping memory, preventing stale virtual/field values from
+  bypassing later calls. Late unresolved computed pointer writes now require
+  narrowed callee/write support instead of using a latest-source fallback, which
+  avoids stack callback false positives. Redirected summary memory reads can
+  attach the precise source-bearing memory version when a later summary register
+  read consumes an otherwise empty post-call memory snapshot. Default unresolved
+  adjacent-source field writes remain gated for stack-like cases, but are
+  allowed for source-clean function-pointer table dispatch into a concrete heap
+  allocsite when observed call-pre storage, source labels, pointer identity, and
+  sink-reaching memory ranges select a single field. The repair uses Low P-code
+  graph facts, architecture-aware storage ranges, boundary-provider source
+  labels, and optional function-pointer metadata only as a dispatch-context
+  hint; it does not use case IDs, helper names, expected labels, fixed offsets,
+  ABI roles, parameter names, or signatures as semantics.
+- Bumped the summary cache schema for the computed-call/post-call memory
+  semantics change. Verified with `py_compile`, `compileall`, and fresh-cache
+  focused validation of the ten reported cycle-03 non-PASS roots: TV2C649
+  x86/armv7/aarch64 P0, TV2C604/TV2C614/TV2C615 aarch64 P0, TV2C664
+  x86/armv7 P1, TV2C622 aarch64 P1, and TV2R321 UE DebugGame. All ten now
+  validate with the expected sources and no forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-04 computed callback/field
+  overwrite regression cluster without adding case-specific semantics. Carry
+  post-memory snapshots now include redirected prior-source edges in the carry
+  class, and late cleanup repairs carry-only post-call field snapshots and
+  summary field reads when a latest prior precise summary write covers the same
+  storage range with no intervening write. Unresolved adjacent-source callback
+  writes now skip calls with concrete function-pointer callee evidence, but can
+  materialize a later unresolved overwrite from observed pointer/source/write
+  facts and redirect consumers to the newer post-call field. Ambiguous
+  function-pointer target sets no longer overwrite an existing precise field
+  write with a conflicting source unless the overwrite is uniquely supported.
+  ARM/Thumb function constants are normalized before selector evaluation. The
+  repair remains convention-free: it uses Low P-code dataflow, source labels,
+  architecture-aware memory ranges, and optional function-pointer constants as
+  dispatch hints only, not ABI roles, parameter names, case IDs, helper names,
+  expected labels, or fixed offsets.
+- Bumped the summary cache schema for the carry-snapshot and ambiguous-target
+  summary semantics. Verified with `py_compile`, `compileall`, and fresh-cache
+  focused validation of the seven reported cycle-04 failing scopes: TV2C622
+  P0 x86, TV2C633 P0 x86/P1 x86/P1 x64/P1 armv7, TV2R305 UE DebugGame, and
+  TV2R310 UE DebugGame. All seven now validate with expected sources and no
+  forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-03 stale post-call memory
+  regression cluster without adding test-specific source semantics. Observed
+  summary memory write/copy edges that connect caller-local storage are now
+  mirrored into the caller function graph as well as the composed program graph,
+  so later caller-local read selection sees source-bearing post-call memory
+  versions instead of falling back to older pre-call stores. Redirected summary
+  memory reads now prune the stale predecessor edge when the replacement memory
+  version has a non-carry source-bearing summary input, covers the same
+  architecture-aware range, and the old labels conflict with the replacement
+  labels. Selected-pointer output memory reads are also treated as precise
+  same-call inputs when their selected storage/range covers the target, allowing
+  them to shadow generic loaded-pointer expression reads without widening whole
+  aggregates. The repair uses Low P-code graph facts, observed storage ranges,
+  summary provenance, and boundary-provider source labels; it does not use case
+  IDs, helper names, expected labels, fixed offsets, ABI roles, parameter names,
+  or signatures as semantics.
+- Bumped the summary cache schema for the caller-local summary edge and stale
+  redirected-read semantics. Verified with `py_compile`, `compileall`, a
+  checked-in fresh-cache DFB001/DFB002/DFB040/DFB053/DFB092 smoke, and
+  fresh-cache focused validation of the eleven reported failing scopes:
+  TV2C618 P0/P1 across x86/x64/armv7/aarch64, TV2C652 P0 aarch64, TV2R335 UE
+  Development, and TV2R305 UE DebugGame. All eleven now validate with expected
+  sources and no forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-02 fused stale-copy/selected-field
+  regressions without adding case-specific source semantics. Later metadata
+  marker calls may now refresh an existing same-label fallback marker on the
+  same concrete observed field when the prior source-bearing inputs are only
+  earlier metadata fallback writes; this preserves the latest observed write
+  through later same-pointer cleanup instead of leaving only a stale earlier
+  marker. Source-empty pointer-memory overwrites no longer shadow source-bearing
+  summary memory writes solely because the concrete output size matches after
+  both map to the same caller slot; cross-identity shadowing now requires
+  shared observed-address identity or overlapping observed outputs. The repair
+  uses Low P-code storage/dataflow facts, architecture-aware ranges, and
+  boundary-provider labels only, and does not use case IDs, helper names,
+  expected labels, fixed offsets, ABI roles, parameter names, or signatures as
+  semantics.
+- Bumped the summary cache schema for the metadata marker refresh and
+  source-empty overwrite pruning semantics. Verified with `py_compile`,
+  `compileall`, fresh-cache focused validation of the two reported failing
+  scopes (TV2C666 P1 x64 and TV2R335 UE Development), and a fresh-cache
+  16-scope family check covering all TV2C666 arch/config variants plus
+  TV2R332/TV2R334/TV2R335/TV2R336 UE Development and DebugGame. All checked
+  scopes now validate with expected sources and no forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-03 fused computed-dispatch,
+  indexed-helper, and source-empty overwrite regression cluster without adding
+  case-specific source semantics. Unresolved computed callback field writes now
+  allow exact stack/frame object fields when a single concrete pointer, a
+  single adjacent source scalar, and a sink-reaching target field identify the
+  overwrite; register reuse in computed-call target checks is treated as
+  versioned graph identity instead of storage-name dependency. Ambiguous field
+  candidates now prefer the unique sink-reaching memory version before using
+  relative-offset tie breakers, which lets later callback overwrites displace
+  stale fields. Materialized computed-call metadata marker post-memory targets
+  may overwrite an older source-bearing field rather than being blocked by the
+  stale overlap itself. Callsite affine recovery now runs same-instruction
+  scaled `SUBPIECE` repair before generic pass-through, fixing masked/indexed
+  helper field offsets when a stale memory predecessor is also present. Concrete
+  source-empty `STORE_VAL` nodes now prune cross-function summary source
+  predecessors attached to that same store, so later loaded-pointer reads see
+  the observed overwrite. The repair remains convention-free: it uses Low
+  P-code storage/dataflow, architecture-aware ranges, boundary-provider labels,
+  and optional metadata markers as boundary facts only; it does not use case IDs,
+  helper names, expected labels, fixed offsets, ABI roles, parameter names, or
+  signatures as semantics.
+- Bumped the summary cache schema for the computed callback, affine subpiece,
+  metadata marker overwrite, and source-empty pruning semantics. Verified with
+  `py_compile` and fresh-cache focused validation of the eleven reported
+  failing scopes: TV2C649 P0 x86/x64/armv7/aarch64, TV2C661 P0 x86, TV2C624 P0
+  armv7/aarch64, TV2C614 P0 aarch64, TV2C636 P0 aarch64, TV2R340 UE
+  Development, and TV2R305 UE DebugGame. All eleven now validate with expected
+  sources and no forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-04 callback field false-positive
+  cluster without adding case-specific semantics. Metadata source-pointer
+  fallback writes now stand down when a computed call has concrete local
+  function-pointer evidence whose selected callback summary does not write the
+  same sink-reaching field; selected callback write support includes both
+  observed scalar-to-memory writes and source-bearing source-to-memory writes
+  matched by relative memory ranges. Unresolved adjacent-source computed-call
+  field synthesis now stands down when concrete local function-pointer summary
+  evidence is available, and also refuses to add a conflicting source beside an
+  existing metadata marker on the same target field. Post-call memory to later
+  read propagation now requires containment or same-start subrange compatibility
+  instead of any overlap, avoiding sibling-field bleed from wider stack slots.
+  The repair uses Low P-code dataflow, observed storage ranges, selected
+  function-pointer summary facts, and boundary-provider marker facts only; it
+  does not use case IDs, helper names, expected labels, fixed offsets, ABI
+  roles, parameter names, or signatures as semantics.
+- Bumped the summary cache schema for the metadata marker, adjacent computed
+  field, and post-call memory range semantics. Verified with `py_compile`,
+  `compileall`, and focused direct validation of the twelve reported failing
+  Suite10 scopes: TV2C604 P0 x86/x64, TV2C615 P0 x86/x64/armv7 and P1
+  x86/armv7, TV2C626 P0 x86/x64/aarch64, and TV2C638 P0/P1 aarch64. All twelve
+  now validate with expected sources and no forbidden sources.
+
+- 2026-07-14: Repaired the Suite09/10 cycle-05 computed callback field
+  overwrite regression cluster. Unresolved computed-call adjacent-source field
+  synthesis no longer treats unrelated local function-pointer evidence as a
+  veto; only evidence tied to the indirect target storage suppresses the
+  fallback. Precise same-call post-memory overwrites may now displace
+  conflicting metadata source-pointer fallback markers. Resolved callback
+  wrapper calls now materialize source-scalar-to-field post-memory writes when
+  the callee low-pcode contains a computed callback wrapper, the caller has a
+  concrete object pointer, a single sink-reaching field can be selected, and a
+  single source label maps through either the selected callback summary tied to
+  the wrapper's actual target origin or the observed adjacent-source fallback.
+  The selected-summary path composes callback input/address storage through the
+  wrapper's inner computed call or tail jump and excludes global/static summary
+  inputs from argument-source composition, leaving global storage flows to their
+  dedicated machinery. The repair uses Low P-code storage/dataflow,
+  architecture-aware ranges, and optional metadata only as target-origin hints;
+  it does not use case IDs, helper names, expected labels, fixed offsets, ABI
+  roles, parameter names, or signatures as semantics.
+- Verified with `py_compile`, `git diff --check`, and focused direct validation
+  of the nine reported failing scopes: TV2C613 P0 x86/armv7/aarch64 and P1
+  armv7/aarch64, TV2C624 P0 armv7/aarch64, TV2C636 P0 aarch64, and TV2R305 UE
+  DebugGame. All nine now validate with expected sources and no forbidden
+  sources.
+
+- 2026-07-15: Repaired the Suite10 cycle-09 computed-call scope/completeness
+  cluster without adding case-specific semantics. The Ghidra dumper now keeps
+  duplicate helper entries address-aware and recognizes computed-call flow
+  evidence for unresolved indirect calls. The loader preserves internal
+  function identity for duplicate raw names, and the harness case-scope closure
+  includes only nearby function-pointer-table targets referenced by the current
+  closure instead of every address-taken function. Expected-source validation
+  canonicalizes entry-suffixed generated source labels back to their stable
+  boundary label. These changes use Low P-code references, function entry
+  identity, structured metadata, and observed closure locality as completeness
+  facts only; they do not use case IDs, helper names, expected labels, fixed
+  offsets, ABI roles, parameter names, or signatures as core semantics.
+- Verified with `py_compile`, `harness.design_lint`, `git diff --check`, and
+  focused no-cache validation of the cycle-09 repair targets:
+  TV2C649 P0 aarch64, TV2C675 across all tier0 P0/P1 x86/x64/armv7/aarch64
+  variants, and TV2R340 across UE DebugGame/Development. All targeted repair
+  scopes now validate with expected sources and no forbidden sources. A full
+  no-cache Suite09/10 run with proposed regressions is not yet globally green:
+  Suite09 reports PASS 472 / FAIL 16 / FP 0, and Suite10 reports PASS 763 /
+  FAIL 79 / FP 34. Those remaining failures are recorded as residual frontier
+  clusters for follow-up rather than treated as cycle-09 repair blockers.
 
 Phase 6 external summary resolution.
 

@@ -68,6 +68,7 @@ def run_one(
         function_graph.function_name,
         actual_sources,
         actual_control_sources,
+        sink_count=len(function_graph.sink_index),
     )
 
     case_out = case_output_dir(json_path, input_root, output_dir)

@@ -148,6 +148,10 @@ def main() -> int:
     parser.add_argument("output_dir", nargs="?", default=str(REPO_ROOT / "output" / "v8_phase1"))
     parser.add_argument("expected_path", nargs="?", default=str(DEFAULT_EXPECTED_PATH))
     parser.add_argument("--cases", nargs="*", default=["case_DFB001", "case_DFB002"])
+    parser.add_argument("--parsed-cache", action="store_true")
+    parser.add_argument("--function-build-jobs", type=int, default=1)
+    parser.add_argument("--graph-backend", choices=["networkx", "rustworkx"], default="networkx")
+    parser.add_argument("--demand-closure", action="store_true")
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
@@ -156,7 +160,12 @@ def main() -> int:
     case_filter = set(args.cases) if args.cases else None
 
     results = []
-    program_builder = ProgramSliceGraphBuilder()
+    program_builder = ProgramSliceGraphBuilder(
+        parsed_cache=args.parsed_cache,
+        function_build_jobs=args.function_build_jobs,
+        graph_backend=args.graph_backend,
+        demand_closure=args.demand_closure,
+    )
     for json_path in iter_json_inputs(input_dir, case_filter):
         try:
             result = run_one(json_path, input_dir, output_dir, expected_path, program_builder)

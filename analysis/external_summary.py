@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from frontend.external_prototype import ExternalParameter, ExternalPrototype
@@ -25,7 +26,7 @@ class KnownExternalEffect:
         if not self.libraries:
             return True
         library = (prototype.library or "").lower()
-        return any(fnmatch.fnmatch(library, pattern.lower()) for pattern in self.libraries)
+        return _matches_any_lowered((library,), self.libraries)
 
 
 @dataclass(frozen=True)
@@ -163,11 +164,29 @@ def effect_to_dict(effect: KnownExternalEffect) -> dict:
 
 def _matches_any_name(prototype: ExternalPrototype, patterns: tuple[str, ...]) -> bool:
     names = tuple(name.lower() for name in prototype.canonical_names)
+    return _matches_any_lowered(names, patterns)
+
+
+def _matches_any_lowered(names: tuple[str, ...], patterns: tuple[str, ...]) -> bool:
+    if not names:
+        return False
+    name_set = set(names)
     for pattern in patterns:
         lowered = pattern.lower()
-        if any(fnmatch.fnmatch(name, lowered) for name in names):
+        if lowered in name_set:
+            return True
+        if _has_glob_meta(lowered) and any(_fnmatch_cached(name, lowered) for name in names):
             return True
     return False
+
+
+def _has_glob_meta(pattern: str) -> bool:
+    return any(char in pattern for char in "*?[")
+
+
+@lru_cache(maxsize=65536)
+def _fnmatch_cached(name: str, pattern: str) -> bool:
+    return fnmatch.fnmatchcase(name, pattern)
 
 
 def _bind_parameter(prototype: ExternalPrototype, binding: int | str) -> ExternalParameter | None:

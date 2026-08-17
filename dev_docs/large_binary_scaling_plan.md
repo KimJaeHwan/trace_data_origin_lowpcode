@@ -1,6 +1,6 @@
 # Large Binary Scaling Plan
 
-Status: active design, 2026-07-09
+Status: first scaling layer implemented and regression-validated, 2026-08-17
 
 This document records the scaling strategy for Engine11 before testing real
 game-sized binaries. The current Suite09/Suite10 engine is intentionally a
@@ -31,8 +31,9 @@ binary without benchmark source/sink naming conventions.
   the analysis core.
 - Do not make OLLVM symbolic deobfuscation part of the core backward-slice
   optimization pass. OLLVM remains a later adversarial layer.
-- Do not replace NetworkX with rustworkx until the graph operation boundary and
-  performance baseline are clear.
+- Do not expose backend-specific graph semantics. NetworkX remains the
+  reference representation while rustworkx is an opt-in traversal backend
+  behind the graph operation boundary.
 - Do not accept false positives as a speed tradeoff.
 
 ## Current Evidence
@@ -52,6 +53,33 @@ This points toward structural scaling work: avoid unnecessary whole-program
 work, reuse parsed/indexed artifacts, parallelize independent function builds,
 and isolate graph backend choices.
 
+## Implemented Scaling Layer
+
+The first scaling layer is now available behind explicit options:
+
+- content-addressed persistent parsed/index cache with schema validation and
+  atomic writes
+- conservative target-root function closure with whole-program fallback for
+  unresolved indirect control flow
+- deterministic process-based independent `FunctionGraph` construction with a
+  serial fallback
+- NetworkX/rustworkx traversal adapter with deterministic predecessor order
+- case-level harness process parallelism with stable result ordering
+- run-level scale profiles covering input size, function/pcode/graph counts,
+  callsites, cache activity, closure decisions, and available RSS data
+
+The implementation does not infer arguments, returns, or calling conventions.
+It only changes which structurally required program regions are loaded, how
+independent work is scheduled, and which traversal implementation visits the
+same graph.
+
+Case-scoped regression also uncovered a path-identity defect: resolving the
+target symlink before selecting its parent changed a 13-file case closure back
+into the original 172-file UE sample directory. Target paths now preserve the
+case-scope directory while individual JSON files are still resolved by the
+loader. This is both a correctness fix and the largest measured regression
+speed improvement in this pass.
+
 ## Scaling Invariants
 
 - Boundary providers may identify requested source/sink roots, but core graph
@@ -66,6 +94,8 @@ and isolate graph backend choices.
 ## Optimization Tracks
 
 ### 1. Scale Telemetry
+
+Implemented.
 
 Before changing more algorithms, collect stable scale metrics in each harness
 run:
@@ -86,6 +116,9 @@ large runs.
 
 ### 2. Demand-Driven Program Closure
 
+Implemented as an opt-in conservative planner. Any unresolved indirect call or
+branch that prevents a trustworthy closure selects the full-program fallback.
+
 For game-scale binaries, building every function for every query will not
 scale. Add a planner that can build a conservative function closure from query
 roots:
@@ -99,6 +132,9 @@ This remains convention-free because the planner selects code regions, not
 argument or return semantics.
 
 ### 3. Persistent Parsed/Index Cache
+
+Implemented as an opt-in, schema-versioned content-addressed cache. Cache
+telemetry distinguishes memory hits, disk hits, misses, and source bytes.
 
 Large low-pcode JSON parsing and metadata indexing should be cached by content
 hash:
@@ -115,6 +151,11 @@ the dumper or engine schema changes.
 
 ### 4. Parallel FunctionGraph Build
 
+Implemented as an opt-in deterministic process pool with serial fallback.
+Case-level harness parallelism is preferred for full regression matrices;
+nested function-level parallelism is automatically disabled in that mode to
+avoid process and memory oversubscription.
+
 FunctionGraph construction is mostly independent before program composition.
 Add a deterministic parallel build path:
 
@@ -128,6 +169,10 @@ The first target is reducing cold build wall time without changing graph
 semantics.
 
 ### 5. Graph Backend Boundary
+
+Implemented for backward predecessor traversal. NetworkX remains the graph
+construction and reference backend; rustworkx conversion is cached per graph
+and is invisible to output ordering and validation.
 
 NetworkX has been useful for correctness and iteration speed, but game-scale
 graphs may require a faster backend. Introduce a narrow graph adapter only
@@ -155,12 +200,16 @@ Possible later work:
 
 ## Phase Order
 
-1. Add scale-profile aggregation to harness reports.
+1. Add scale-profile aggregation to harness reports. Complete.
 2. Run full Suite09/Suite10 with scale-profile enabled and record baseline.
-3. Add persistent parsed/index cache behind an opt-in flag.
+   Complete.
+3. Add persistent parsed/index cache behind an opt-in flag. Complete.
 4. Add deterministic parallel FunctionGraph build behind an opt-in flag.
-5. Compare NetworkX and rustworkx behind a graph adapter prototype.
+   Complete.
+5. Compare NetworkX and rustworkx behind a graph adapter prototype. Complete
+   for backward traversal.
 6. Add demand-driven function-closure planning with full-program fallback.
+   Complete.
 7. Revisit lazy call-boundary materialization only after the above is stable.
 8. Bring Suite12/OLLVM back as an adversarial overlay, not as the core
    performance design driver.
@@ -181,13 +230,19 @@ calling convention behavior.
 
 ## Immediate Next Implementation
 
-The next concrete patch should be scale telemetry, not another semantic
-fallback:
+The next optimization pass should be guided by game-scale evidence rather than
+another broad backend rewrite:
 
-1. aggregate existing build-profile fields into a per-run scale summary
-2. include top stage totals and hot function families
-3. make the report cheap when profiling is disabled
-4. verify Suite09/Suite10 remains green
+1. persist a directory-level function/call adjacency index so repeated closure
+   planning does not reopen every JSON file
+2. profile giant single functions and add block or instruction indexes only at
+   measured hot operations
+3. add memory-aware scheduling and largest-first case ordering for large
+   regression matrices
+4. periodically compare the optimized rustworkx path with the NetworkX
+   reference path
+5. consider lazy heavy-edge materialization only after those measurements
 
-After that baseline exists, decide between persistent parsed/index cache and
-parallel FunctionGraph build based on measured large-run costs.
+Suite09/Suite10 case-author robustness runs should continue between scaling
+patches. Suite12/OLLVM stays a later adversarial layer and must not drive ABI or
+architecture-specific semantics into the core.

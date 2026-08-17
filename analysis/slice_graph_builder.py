@@ -2223,7 +2223,11 @@ class SliceGraphBuilder:
             if observed.storage_key in primary_post_storages or not preserve_current:
                 state.current[observed.storage_key] = post_node
 
-        allocator_expr = self._allocator_expression(resolved.name, callsite_key, state)
+        allocator_expr = self._allocator_expression(
+            resolved.thunk_target_name or resolved.name,
+            callsite_key,
+            state,
+        )
         if allocator_expr:
             for storage_key in self._source_observed_storage_keys(fg):
                 post_node = state.current.get(storage_key)
@@ -2449,6 +2453,7 @@ class SliceGraphBuilder:
             fg.slice_graph.add_edge(mem_node, pre_node, kind="data", opcode=pre_kind)
 
     def _allocator_expression(self, target_name: str | None, callsite_key: str, state: BuildState) -> dict | None:
+        target_name = self._external_boundary_name(target_name)
         if target_name in {"malloc", "calloc", "operator.new", "operator.new[]"}:
             return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
         if target_name == "realloc":
@@ -2465,6 +2470,15 @@ class SliceGraphBuilder:
                     return preserved
             return {"kind": "heap_ptr", "allocsite": callsite_key, "offset": 0}
         return None
+
+    def _external_boundary_name(self, target_name: str | None) -> str | None:
+        if not target_name:
+            return None
+        normalized = target_name.lower().lstrip("_")
+        head, sep, tail = normalized.rpartition("_")
+        if sep and len(tail) >= 4 and all(ch in "0123456789abcdef" for ch in tail):
+            return head
+        return normalized
 
     def _pc_thunk_expression(self, target_name: str | None, instr: dict) -> dict | None:
         if not target_name or not target_name.startswith("__x86.get_pc_thunk."):

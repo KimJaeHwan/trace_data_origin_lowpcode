@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from core.edge import DATA_SLICE_EDGES
 from core.graph import FunctionGraph
+from core.graph_backend import traversal_for
 from core.value_id import ValueId
 
 
@@ -26,16 +27,16 @@ class BackwardSliceQuery:
         result = SliceResult(target=target, mode=self.mode)
         stack = [target]
         graph = self.function_graph.slice_graph
+        traversal = traversal_for(graph, self.function_graph.graph_backend)
         while stack:
             node = stack.pop()
             if node in result.visited:
                 continue
             result.visited.add(node)
-            attrs = graph.nodes[node]
+            attrs = traversal.node_attributes(node)
             if attrs.get("kind") == "source_boundary" and attrs.get("source_label"):
                 result.source_labels.add(attrs["source_label"])
-            for pred in graph.predecessors(node):
-                edge_attrs = graph.edges[pred, node]
+            for pred, edge_attrs in traversal.predecessor_edges(node):
                 kind = edge_attrs.get("kind")
                 if kind not in self.edge_policy:
                     continue

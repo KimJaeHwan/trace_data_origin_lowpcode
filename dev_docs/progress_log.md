@@ -2830,3 +2830,41 @@ setjmp/longjmp, C++ exception, obfuscated state-machine, and remaining
 unresolved call-boundary cases while keeping trusted external semantics outside
 the core graph model and recording provenance on every summary edge.
 ```
+
+- 2026-08-17: Implemented and regression-validated the first large-binary
+  scaling layer without changing backward-slice semantics. The loader now has
+  an opt-in schema-versioned, content-addressed parsed/index cache with atomic
+  persistence and cache telemetry. Program construction supports conservative
+  target-root function closure with full-program fallback, deterministic
+  process-based independent function builds, and detailed scale profiles.
+  Backward traversal now goes through a graph-backend boundary with an opt-in
+  rustworkx implementation while NetworkX remains the construction/reference
+  representation. The harness can schedule independent cases in processes,
+  preserve deterministic report order, and avoid nested process-pool
+  oversubscription.
+- Repaired a case-scope path-identity defect found by the scale run. Resolving
+  the target symlink before deriving its parent silently changed a scoped UE
+  target back to the original full sample directory. For TV2R301 this meant
+  analyzing 172 files (about 1.13 GB) instead of the intended 13 files (about
+  85.7 MB), causing severe runtime inflation and unrelated graph context.
+  Program construction now preserves the case-scope directory while the loader
+  resolves individual JSON links. The same target then built in about 15.6
+  seconds and returned the expected source.
+- Verified `compileall`, harness design lint, and full optimized no-result-cache
+  regression with the persistent parsed cache, rustworkx traversal, demand
+  closure, and case-level process scheduling. Suite09 passed 488/488 across its
+  six variants; Suite10 tier0 passed 712/712 across P0/P1 x86, x64, armv7, and
+  aarch64; local UE 5.8 passed 130/130 across DebugGame and Development. The
+  combined result is PASS 1330 / FAIL 0 / ERROR 0 / FP 0. Reports are saved as
+  `scaling_full_09_scope_fixed`, `scaling_full_10_tier0_scope_fixed`, and
+  `scaling_full_10_ue_scope_fixed` under the Suite10 harness output directory.
+- Repeated the entire 1,330-case matrix through the uncached NetworkX
+  full-program reference path. It produced the same PASS 1330 / FAIL 0 /
+  ERROR 0 / FP 0 result, saved as `scaling_full_09_10_networkx_reference`.
+  This verifies that persistent parsing, rustworkx traversal, and demand
+  closure are performance choices rather than alternate analysis semantics.
+- The scaling layer remains no-arg/no-ret and convention-free: it does not use
+  ABI roles, parameter/return signatures, case IDs, helper names, expected
+  labels, or fixed offsets as core semantics. Boundary providers still own
+  source/sink interpretation, and unresolved closure evidence expands analysis
+  rather than guessing a calling convention.

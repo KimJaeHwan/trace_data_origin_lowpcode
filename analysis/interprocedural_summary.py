@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,16 +15,29 @@ from analysis.call_boundary_mapper import CallBoundaryMapper
 from analysis.call_resolver import CallResolver
 from analysis.external_summary import ExternalSummaryResolver, ResolvedExternalSummary
 from analysis.memory_model import MemoryModel
+from analysis.program_closure import (
+    PROGRAM_CLOSURE_SCHEMA_VERSION,
+    ConservativeProgramClosurePlanner,
+)
 from analysis.slice_graph_builder import MemoryRange, SliceGraphBuilder, parse_int, parse_signed
 from core.architecture import ArchitectureSpec
 from core.edge import DATA_SLICE_EDGES
 from core.graph import FunctionGraph, ProgramSliceGraph
+from core.graph_backend import normalize_graph_backend
 from core.value_id import ValueId
 from frontend.external_prototype import ExternalParameter
 from frontend.low_pcode_loader import LowPcodeLoader, LowPcodeProgram
 
 
-SUMMARY_CACHE_SCHEMA_VERSION = 140
+SUMMARY_CACHE_SCHEMA_VERSION = 146
+
+
+def _build_function_graph_worker(payload: tuple[LowPcodeProgram, BoundaryProvider, bool]) -> FunctionGraph:
+    program, boundary_provider, profile_opcodes = payload
+    return SliceGraphBuilder(
+        boundary_provider=boundary_provider,
+        profile_opcodes=profile_opcodes,
+    ).build(program)
 
 
 @dataclass
@@ -1208,9 +1223,16 @@ class ProgramSliceGraphBuilder:
         self,
         boundary_provider: BoundaryProvider | None = None,
         profile_opcodes: bool = False,
+        parsed_cache: bool = False,
+        parsed_cache_dir: str | Path | None = None,
+        function_build_jobs: int = 1,
+        graph_backend: str = "networkx",
+        demand_closure: bool = False,
     ):
-        self.loader = LowPcodeLoader()
+        cache_dir = Path(parsed_cache_dir) if parsed_cache_dir is not None else Path("output/.parsed_cache")
+        self.loader = LowPcodeLoader(cache_dir=cache_dir if parsed_cache else None)
         self.boundary_provider = boundary_provider or DataFlowBenchBoundaryProvider()
+        self.profile_opcodes = profile_opcodes
         self.function_builder = SliceGraphBuilder(
             boundary_provider=self.boundary_provider,
             profile_opcodes=profile_opcodes,
@@ -1222,12 +1244,18 @@ class ProgramSliceGraphBuilder:
         self.call_boundary_mapper = CallBoundaryMapper()
         self.memory_model = MemoryModel()
         self.summary_cache_dir = Path("output/.summary_cache")
-        self._cache: dict[tuple[Path, str], ProgramSliceGraph] = {}
+        self.function_build_jobs = max(1, int(function_build_jobs))
+        self.graph_backend = normalize_graph_backend(graph_backend)
+        self.demand_closure = bool(demand_closure)
+        self.closure_planner = ConservativeProgramClosurePlanner()
+        self._cache: dict[tuple[Path, str, str], ProgramSliceGraph] = {}
         self._fingerprint_cache: dict[Path, tuple[str, str]] = {}
 
     def build_for_target(self, target_path: str | Path) -> FunctionGraph:
-        target = Path(target_path)
-        program_graph = self._build_directory(target.parent)
+        # Preserve the caller-selected composition directory. Case scopes use
+        # symlinks whose resolved file lives in the full sample directory.
+        target = Path(target_path).absolute()
+        program_graph = self._build_directory(target.parent, target)
         target_function_name = program_graph.function_name_by_path.get(str(target.resolve()))
         if target_function_name is None:
             target_function_name = self.loader.load(target).function_name
@@ -1246,6 +1274,7 @@ class ProgramSliceGraphBuilder:
             callsite_index=dict(target_graph.callsite_index),
             warnings=list(target_graph.warnings),
             build_profile=dict(program_graph.build_profile),
+            graph_backend=self.graph_backend,
         )
         return composed
 
@@ -1264,22 +1293,26 @@ class ProgramSliceGraphBuilder:
         program_graph.reachable_sink_index_cache[function_name] = dict(sinks)
         return dict(sinks)
 
-    def _build_directory(self, directory: Path) -> ProgramSliceGraph:
+    def _build_directory(self, directory: Path, target_path: Path | None = None) -> ProgramSliceGraph:
         directory = directory.resolve()
         programs: list[LowPcodeProgram] | None = None
         profile: dict[str, float | int | str] = {}
         paths = sorted(directory.glob("*_low_pcode.json"))
+        profile["input_file_count"] = len(paths)
+        profile["input_bytes"] = sum(path.stat().st_size for path in paths)
+        loader_stats_before = dict(self.loader.cache_stats)
         stat_key = self._directory_stat_cache_key(paths)
         cached_fingerprint = self._fingerprint_cache.get(directory)
         if cached_fingerprint is not None and cached_fingerprint[0] == stat_key:
-            fingerprint = cached_fingerprint[1]
+            directory_fingerprint = cached_fingerprint[1]
         else:
             load_start = time.perf_counter()
             programs = [self.loader.load(path) for path in paths]
             profile["load_seconds"] = time.perf_counter() - load_start
-            fingerprint = self._directory_cache_fingerprint_from_programs(programs)
-            self._fingerprint_cache[directory] = (stat_key, fingerprint)
-        cache_key = (directory, fingerprint)
+            directory_fingerprint = self._directory_cache_fingerprint_from_programs(programs)
+            self._fingerprint_cache[directory] = (stat_key, directory_fingerprint)
+        root_cache_key = str(target_path.resolve()) if self.demand_closure and target_path is not None else "full"
+        cache_key = (directory, directory_fingerprint, root_cache_key)
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1288,14 +1321,40 @@ class ProgramSliceGraphBuilder:
             load_start = time.perf_counter()
             programs = [self.loader.load(path) for path in paths]
             profile["load_seconds"] = time.perf_counter() - load_start
+
+        if self.demand_closure:
+            resolved_target = target_path.resolve() if target_path is not None else None
+            target_program = next(
+                (program for program in programs if resolved_target is not None and program.path.resolve() == resolved_target),
+                None,
+            )
+            closure_plan = self.closure_planner.plan(programs, target_program)
+            programs = list(closure_plan.programs)
+            profile["closure_mode"] = closure_plan.mode
+            profile["closure_trusted"] = int(closure_plan.trusted)
+            profile["closure_fallback_reason"] = closure_plan.fallback_reason
+        else:
+            profile["closure_mode"] = "full"
+            profile["closure_trusted"] = 1
+            profile["closure_fallback_reason"] = ""
+
+        fingerprint = self._analysis_fingerprint(
+            directory_fingerprint,
+            programs,
+            root_cache_key,
+        )
         profile["file_count"] = len(programs)
         function_build_start = time.perf_counter()
-        functions = {program.function_name: self.function_builder.build(program) for program in programs}
+        functions, function_build_mode, function_build_fallback = self._build_functions(programs)
         profile["function_build_seconds"] = time.perf_counter() - function_build_start
+        profile["function_build_jobs"] = self.function_build_jobs
+        profile["function_build_mode"] = function_build_mode
+        profile["function_build_fallback"] = function_build_fallback
         profile["function_build_top"] = self._top_function_build_profiles(functions)
         summary_cache_start = time.perf_counter()
         summaries = self._load_summary_cache(fingerprint, functions)
         profile["summary_cache_load_seconds"] = time.perf_counter() - summary_cache_start
+        profile["summary_cache_hit"] = int(summaries is not None)
         if summaries is None:
             summary_build_start = time.perf_counter()
             summaries = {
@@ -1319,6 +1378,7 @@ class ProgramSliceGraphBuilder:
             function_name_by_path={str(program.path.resolve()): program.function_name for program in programs},
             source_index=self._merged_source_index(functions),
             build_profile=profile,
+            graph_backend=self.graph_backend,
         )
         self._time_build_stage(program_graph, "record_direct_calls", self._record_direct_calls, program_graph, programs)
         self._time_build_stage(program_graph, "inject_fused_tail_branch_edges", self._inject_fused_tail_branch_edges, program_graph, programs)
@@ -1378,7 +1438,7 @@ class ProgramSliceGraphBuilder:
         self._time_build_stage(program_graph, "inject_prior_indexed_thunk_field_read_edges_2", self._inject_prior_indexed_thunk_field_read_edges, program_graph, programs)
         self._time_build_stage(program_graph, "prune_ambiguous_stack_phi_backedges", self._prune_ambiguous_stack_phi_backedges, program_graph)
         self._time_build_stage(program_graph, "inject_prior_observed_memory_overlap_edges_2", self._inject_prior_observed_memory_overlap_edges, program_graph)
-        final_programs = [self.loader.load(path) for path in paths]
+        final_programs = programs
         self._time_build_stage(program_graph, "inject_unresolved_computed_adjacent_source_field_write_edges_2", self._inject_unresolved_computed_adjacent_source_field_write_edges, program_graph, final_programs)
         self._time_build_stage(program_graph, "inject_resolved_callback_wrapper_adjacent_source_field_write_edges", self._inject_resolved_callback_wrapper_adjacent_source_field_write_edges, program_graph, final_programs, summaries)
         self._time_build_stage(program_graph, "normalize_resolved_identity_summary_expressions", self._normalize_resolved_identity_summary_expressions, program_graph)
@@ -1397,6 +1457,9 @@ class ProgramSliceGraphBuilder:
         self._time_build_stage(program_graph, "inject_dynamic_base_wide_store_subrange_edges", self._inject_dynamic_base_wide_store_subrange_edges, program_graph)
         self._time_build_stage(program_graph, "propagate_summary_edges_across_equivalent_memory_range_versions", self._propagate_summary_edges_across_equivalent_memory_range_versions, program_graph)
         self._time_build_stage(program_graph, "repair_carry_snapshot_post_memory_with_latest_precise_writes", self._repair_carry_snapshot_post_memory_with_latest_precise_writes, program_graph)
+        self._time_build_stage(program_graph, "inject_late_observed_pointer_passthrough_edges", self._inject_observed_pointer_passthrough_edges, program_graph, final_programs)
+        self._time_build_stage(program_graph, "inject_late_observed_runtime_register_restore_edges", self._inject_observed_runtime_register_restore_edges, program_graph, final_programs)
+        self._time_build_stage(program_graph, "inject_late_observed_thread_callback_sink_edges", self._inject_observed_thread_callback_sink_edges, program_graph, final_programs)
         self._time_build_stage(program_graph, "prune_carry_snapshot_summary_field_reads_shadowed_by_precise_writes", self._prune_carry_snapshot_summary_field_reads_shadowed_by_precise_writes, program_graph)
         self._time_build_stage(program_graph, "prune_stale_summary_memory_reads_after_redirected_version", self._prune_stale_summary_memory_reads_after_redirected_version, program_graph)
         self._time_build_stage(program_graph, "prune_shadowed_memory_inputs_after_precise_summary_write", self._prune_shadowed_memory_inputs_after_precise_summary_write, program_graph)
@@ -1409,8 +1472,114 @@ class ProgramSliceGraphBuilder:
         self._time_build_stage(program_graph, "prune_summary_inputs_shadowed_by_concrete_source_empty_store", self._prune_summary_inputs_shadowed_by_concrete_source_empty_store, program_graph)
         self._time_build_stage(program_graph, "prune_nonoverlapping_load_overlap_edges", self._prune_nonoverlapping_load_overlap_edges, program_graph)
         self._time_build_stage(program_graph, "record_sccs", self._record_sccs, program_graph)
+        self._finalize_scale_profile(program_graph, functions, loader_stats_before)
         self._cache[cache_key] = program_graph
         return program_graph
+
+    def _analysis_fingerprint(
+        self,
+        directory_fingerprint: str,
+        programs: list[LowPcodeProgram],
+        root_cache_key: str,
+    ) -> str:
+        if not self.demand_closure:
+            return directory_fingerprint
+        payload = {
+            "directory_fingerprint": directory_fingerprint,
+            "closure_schema": PROGRAM_CLOSURE_SCHEMA_VERSION,
+            "root": root_cache_key,
+            "functions": sorted(program.function_name for program in programs),
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _build_functions(
+        self,
+        programs: list[LowPcodeProgram],
+    ) -> tuple[dict[str, FunctionGraph], str, str]:
+        ordered_programs = sorted(programs, key=lambda item: (item.function_name, str(item.path)))
+        if self.function_build_jobs <= 1 or len(ordered_programs) <= 1:
+            functions = {
+                program.function_name: self.function_builder.build(program)
+                for program in ordered_programs
+            }
+            for function_graph in functions.values():
+                function_graph.graph_backend = self.graph_backend
+            return functions, "serial", ""
+
+        worker_count = min(self.function_build_jobs, len(ordered_programs))
+        built: dict[str, FunctionGraph] = {}
+        try:
+            with ProcessPoolExecutor(max_workers=worker_count) as executor:
+                futures = {
+                    executor.submit(
+                        _build_function_graph_worker,
+                        (program, self.boundary_provider, self.profile_opcodes),
+                    ): program.function_name
+                    for program in ordered_programs
+                }
+                for future in as_completed(futures):
+                    function_graph = future.result()
+                    built[function_graph.function_name] = function_graph
+            functions = {
+                program.function_name: built[program.function_name]
+                for program in ordered_programs
+            }
+            for function_graph in functions.values():
+                function_graph.graph_backend = self.graph_backend
+            return functions, "process_pool", ""
+        except Exception as exc:
+            functions = {
+                program.function_name: self.function_builder.build(program)
+                for program in ordered_programs
+            }
+            for function_graph in functions.values():
+                function_graph.graph_backend = self.graph_backend
+            fallback = f"{type(exc).__name__}:{exc}"
+            return functions, "serial_fallback", fallback[:512]
+
+    def _finalize_scale_profile(
+        self,
+        program_graph: ProgramSliceGraph,
+        functions: dict[str, FunctionGraph],
+        loader_stats_before: dict[str, int],
+    ) -> None:
+        profile = program_graph.build_profile
+        profile["function_count"] = len(functions)
+        profile["instruction_count"] = sum(
+            int(function_graph.build_profile.get("instruction_count") or 0)
+            for function_graph in functions.values()
+        )
+        profile["pcode_count"] = sum(
+            int(function_graph.build_profile.get("pcode_count") or 0)
+            for function_graph in functions.values()
+        )
+        profile["local_node_count"] = sum(
+            function_graph.slice_graph.number_of_nodes()
+            for function_graph in functions.values()
+        )
+        profile["local_edge_count"] = sum(
+            function_graph.slice_graph.number_of_edges()
+            for function_graph in functions.values()
+        )
+        profile["graph_node_count"] = program_graph.slice_graph.number_of_nodes()
+        profile["graph_edge_count"] = program_graph.slice_graph.number_of_edges()
+        profile["callsite_count"] = len(program_graph.callsites)
+        profile["graph_backend"] = self.graph_backend
+        for key, current in self.loader.cache_stats.items():
+            profile[f"parsed_cache_{key}"] = int(current) - int(loader_stats_before.get(key, 0))
+        peak_rss = self._peak_rss_bytes()
+        if peak_rss is not None:
+            profile["peak_rss_bytes"] = peak_rss
+
+    def _peak_rss_bytes(self) -> int | None:
+        try:
+            import resource
+
+            value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+            return value if sys.platform == "darwin" else value * 1024
+        except (ImportError, OSError, ValueError):
+            return None
 
     def _top_function_build_profiles(self, functions: dict[str, FunctionGraph], limit: int = 8) -> list[dict]:
         rows = []
@@ -2664,6 +2833,8 @@ class ProgramSliceGraphBuilder:
                         )
                         ):
                         continue
+                    if self._target_has_precise_summary_memory_write(program_graph, target_node):
+                        continue
                     allow_same_label_marker_refresh = self._can_refresh_same_label_metadata_marker(
                         program_graph,
                         composed_caller,
@@ -3084,6 +3255,25 @@ class ProgramSliceGraphBuilder:
                 return False
             saw_prior_marker = True
         return saw_prior_marker
+
+    def _target_has_precise_summary_memory_write(
+        self,
+        program_graph: ProgramSliceGraph,
+        target_node: ValueId,
+    ) -> bool:
+        if not program_graph.slice_graph.has_node(target_node):
+            return False
+        fallback_opcodes = self._fallback_metadata_source_pointer_marker_opcodes()
+        for pred in program_graph.slice_graph.predecessors(target_node):
+            edge_attrs = program_graph.slice_graph.edges[pred, target_node]
+            if edge_attrs.get("kind") not in {"call_out_mem", "summary_memory"}:
+                continue
+            opcode = edge_attrs.get("opcode") or ""
+            if opcode in fallback_opcodes:
+                continue
+            if edge_attrs.get("summary_kind") == "summary_memory" or opcode.startswith("SUMMARY_"):
+                return True
+        return False
 
     def _ordered_metadata_marker_indices_for_field_targets(
         self,
@@ -12576,7 +12766,13 @@ class ProgramSliceGraphBuilder:
                 stack_inputs,
                 output_storage,
             )
-            output_values &= all_constants
+            output_values = {
+                value if value in names_by_entry else value & ~1
+                for value in output_values
+                if value in names_by_entry or (value & ~1) in names_by_entry
+            }
+            if all_constants:
+                output_values &= all_constants
             if output_values:
                 constants = output_values
         if not constants or constants == all_constants:
@@ -13366,6 +13562,10 @@ class ProgramSliceGraphBuilder:
         mask = (1 << size_bits) - 1 if size_bits > 0 else None
         if opcode == "INT_ADD":
             result = int(values[0]) + int(values[1])
+        elif opcode == "INT_NEGATE":
+            result = ~int(values[0])
+        elif opcode == "INT_2COMP":
+            result = -int(values[0])
         elif opcode == "INT_SUB":
             result = int(values[0]) - int(values[1])
         elif opcode == "INT_MULT":
@@ -13821,12 +14021,7 @@ class ProgramSliceGraphBuilder:
                     )
                     candidate_callees.update(slot_candidate_callees)
                 if not candidate_callees:
-                    candidate_callees.update(
-                        self._address_taken_function_pointer_candidate_callees(
-                            program_graph,
-                            program,
-                        )
-                    )
+                    continue
                 candidate_callees = {
                     callee_name
                     for callee_name in candidate_callees
@@ -13842,35 +14037,13 @@ class ProgramSliceGraphBuilder:
                     candidate_callees,
                 )
                 if len(selected_callees) != 1:
-                    if (
+                    if not (
                         not selected_callees
-                        and slot_candidate_callees
-                        and len(slot_candidate_callees) <= 8
+                        and len(slot_candidate_callees) == 1
+                        and slot_candidate_callees == candidate_callees
                     ):
-                        for candidate_name in sorted(slot_candidate_callees):
-                            candidate_summary = summaries.get(candidate_name)
-                            if self._summary_source_to_memory_has_program_source_labels(
-                                program_graph,
-                                candidate_summary,
-                            ):
-                                self._inject_selected_computed_summary_memory_edges(
-                                    program_graph,
-                                    caller_graph,
-                                    callsite_key,
-                                    candidate_name,
-                                    summaries,
-                                )
-                            self._inject_selected_computed_observed_memory_edges(
-                                program_graph,
-                                caller_graph,
-                                callsite_key,
-                                candidate_name,
-                                candidate_summary,
-                                program_graph.functions.get(candidate_name),
-                                programs_by_name.get(candidate_name),
-                                names_by_entry,
-                            )
-                    continue
+                        continue
+                    selected_callees = set(slot_candidate_callees)
                 selected_name = next(iter(selected_callees))
                 selected_summary = summaries.get(selected_name)
                 if self._summary_source_to_memory_has_program_source_labels(
@@ -14042,6 +14215,7 @@ class ProgramSliceGraphBuilder:
         programs: list[LowPcodeProgram],
         summaries: dict[str, AutoFunctionSummary],
     ) -> None:
+        programs_by_name = {program.function_name: program for program in programs}
         names_by_entry = self._program_function_names_by_entry(program_graph, programs)
         for program in programs:
             caller_graph = program_graph.functions[program.function_name]
@@ -14067,6 +14241,19 @@ class ProgramSliceGraphBuilder:
                     )
                     if callee_name in program_graph.functions and summaries.get(callee_name) is not None
                 }
+                target_storage = composed_caller.slice_graph.nodes[target_value].get("storage") or ""
+                candidate_callees.update(
+                    callee_name
+                    for callee_name in self._function_pointer_candidate_callees_from_target(
+                        program_graph,
+                        programs_by_name,
+                        names_by_entry,
+                        composed_caller,
+                        target_value,
+                        target_storage,
+                    )
+                    if callee_name in program_graph.functions and summaries.get(callee_name) is not None
+                )
                 if not candidate_callees:
                     candidate_callees.update(
                         callee_name
@@ -15920,7 +16107,7 @@ class ProgramSliceGraphBuilder:
             for pred in graph.predecessors(current):
                 edge_kind = graph.edges[pred, current].get("kind")
                 if edge_kind in DATA_SLICE_EDGES or (
-                    attrs.get("opcode") == "LOAD" and edge_kind == "memory"
+                    attrs.get("opcode") in {"LOAD", "STORE_VAL"} and edge_kind == "memory"
                 ):
                     stack.append(pred)
         return memory_nodes
@@ -16036,13 +16223,6 @@ class ProgramSliceGraphBuilder:
                                 prior_target,
                             )
                         )
-                if not candidate_callees:
-                    candidate_callees.update(
-                        self._address_taken_function_pointer_candidate_callees(
-                            program_graph,
-                            program,
-                        )
-                    )
                 if not candidate_callees:
                     continue
                 pointer_nodes = self._concrete_non_source_pointer_pre_nodes(composed_caller, callsite_key)
@@ -16528,6 +16708,119 @@ class ProgramSliceGraphBuilder:
             for pcode in (instr.get("low_pcode") or [])
         )
 
+    def _local_computed_call_target_candidate_callees(
+        self,
+        program_graph: ProgramSliceGraph,
+        program: LowPcodeProgram,
+        programs_by_name: dict[str, LowPcodeProgram],
+        names_by_entry: dict[int, str],
+        caller_graph: FunctionGraph,
+        instr: dict,
+        target_node: ValueId | None,
+        target_storage: str,
+    ) -> set[str]:
+        candidate_callees = set(self._computed_call_resolved_target_names(instr))
+        if target_node is None or not caller_graph.slice_graph.has_node(target_node):
+            return {
+                callee_name
+                for callee_name in candidate_callees
+                if callee_name in program_graph.functions
+            }
+        if self._source_labels_reaching_node(caller_graph, target_node):
+            return {
+                callee_name
+                for callee_name in candidate_callees
+                if callee_name in program_graph.functions
+            }
+        observed_target_storage = (
+            target_storage
+            or caller_graph.slice_graph.nodes[target_node].get("observed_storage")
+            or caller_graph.slice_graph.nodes[target_node].get("storage")
+            or ""
+        )
+        if observed_target_storage:
+            candidate_callees.update(
+                self._function_pointer_candidate_callees_from_target(
+                    program_graph,
+                    programs_by_name,
+                    names_by_entry,
+                    caller_graph,
+                    target_node,
+                    observed_target_storage,
+                )
+            )
+        callsite_addr = parse_int(instr.get("address")) or 0
+        candidate_callees.update(
+            self._stored_function_pointer_candidate_callees_before_call(
+                program_graph,
+                program,
+                caller_graph,
+                names_by_entry,
+                target_node,
+                callsite_addr,
+            )
+        )
+        direct_targets = [target_node]
+        callind_target = self._callind_target_value_node(caller_graph, instr)
+        if callind_target is not None and callind_target not in direct_targets:
+            direct_targets.append(callind_target)
+        for direct_target in list(direct_targets):
+            if not caller_graph.slice_graph.has_node(direct_target):
+                continue
+            candidate_callees.update(
+                self._direct_table_function_pointer_callees_from_target(
+                    program,
+                    names_by_entry,
+                    caller_graph,
+                    direct_target,
+                )
+            )
+            candidate_callees.update(
+                self._function_pointer_table_slot_candidate_callees_from_target(
+                    program,
+                    names_by_entry,
+                    caller_graph,
+                    direct_target,
+                )
+            )
+            direct_attrs = caller_graph.slice_graph.nodes.get(direct_target, {})
+            direct_storage = direct_attrs.get("observed_storage") or direct_attrs.get("storage") or ""
+            prior_target = (
+                self._latest_explicit_storage_value_before_node(
+                    caller_graph,
+                    direct_target,
+                    direct_storage,
+                )
+                if direct_storage
+                else None
+            )
+            if prior_target is None or prior_target in direct_targets:
+                continue
+            direct_targets.append(prior_target)
+            if not caller_graph.slice_graph.has_node(prior_target):
+                continue
+            candidate_callees.update(
+                self._direct_table_function_pointer_callees_from_target(
+                    program,
+                    names_by_entry,
+                    caller_graph,
+                    prior_target,
+                )
+            )
+            candidate_callees.update(
+                self._function_pointer_table_slot_candidate_callees_from_target(
+                    program,
+                    names_by_entry,
+                    caller_graph,
+                    prior_target,
+                )
+            )
+        return {
+            callee_name
+            for callee_name in candidate_callees
+            if callee_name in program_graph.functions
+        }
+
     def _function_pointer_candidate_callees_from_target(
         self,
         program_graph: ProgramSliceGraph,
@@ -16544,33 +16837,38 @@ class ProgramSliceGraphBuilder:
             producer_name = self._callee_name_from_call_post_node(post_node)
             if not producer_name:
                 continue
-            producer_graph = program_graph.functions.get(producer_name)
-            if producer_graph is None:
-                continue
-            producer_program = programs_by_name.get(producer_name)
             producer_callsite = self._callsite_key_from_call_post_reg_node(post_node)
-            if producer_program is not None and producer_callsite:
-                selected = self._constant_selected_function_pointer_callees(
-                    program_graph,
+            for producer_candidate in self._function_and_internal_thunk_target_names(
+                program_graph,
+                programs_by_name,
+                producer_name,
+            ):
+                producer_graph = program_graph.functions.get(producer_candidate)
+                if producer_graph is None:
+                    continue
+                producer_program = programs_by_name.get(producer_candidate)
+                if producer_program is not None and producer_callsite:
+                    selected = self._constant_selected_function_pointer_callees(
+                        program_graph,
+                        producer_graph,
+                        producer_program,
+                        names_by_entry,
+                        caller_graph,
+                        producer_callsite,
+                        post_storage or target_storage,
+                    )
+                    if selected:
+                        candidate_names.update(selected)
+                        continue
+                for constant in self._function_address_constants_written_to_storage(
                     producer_graph,
                     producer_program,
                     names_by_entry,
-                    caller_graph,
-                    producer_callsite,
                     post_storage or target_storage,
-                )
-                if selected:
-                    candidate_names.update(selected)
-                    continue
-            for constant in self._function_address_constants_written_to_storage(
-                producer_graph,
-                producer_program,
-                names_by_entry,
-                post_storage or target_storage,
-            ):
-                callee_name = names_by_entry.get(constant)
-                if callee_name and callee_name in program_graph.functions:
-                    candidate_names.add(callee_name)
+                ):
+                    callee_name = names_by_entry.get(constant)
+                    if callee_name and callee_name in program_graph.functions:
+                        candidate_names.add(callee_name)
         if not candidate_names:
             prior_target = self._latest_explicit_storage_value_before_node(
                 caller_graph,
@@ -16587,6 +16885,110 @@ class ProgramSliceGraphBuilder:
                     target_storage,
                 )
         return candidate_names
+
+    def _function_and_internal_thunk_target_names(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs_by_name: dict[str, LowPcodeProgram],
+        function_name: str,
+    ) -> list[str]:
+        names = [function_name]
+        program = programs_by_name.get(function_name)
+        if program is None:
+            return names
+        function_records: list[dict] = []
+        hints = program.data.get("ghidra_hints") or {}
+        if isinstance(hints.get("function"), dict):
+            function_records.append(hints["function"])
+        functions_by_entry = (program.data.get("indices") or {}).get("functions_by_entry") or {}
+        start_address = str(program.data.get("start_address") or "")
+        if isinstance(functions_by_entry.get(start_address), dict):
+            function_records.append(functions_by_entry[start_address])
+        for record in function_records:
+            thunked = record.get("thunked_function") or record.get("thunk_target") or {}
+            if not isinstance(thunked, dict):
+                continue
+            entry = thunked.get("entry")
+            raw_name = str(thunked.get("name") or "")
+            identity = self._function_identity_for_entry(raw_name, entry, program_graph)
+            if identity and identity not in names:
+                names.append(identity)
+        return names
+
+    def _direct_call_summary_candidates(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs_by_name: dict[str, LowPcodeProgram],
+        instr: dict,
+        resolved: object,
+    ) -> list[str]:
+        resolved_name = getattr(resolved, "name", None)
+        if not resolved_name:
+            return []
+        candidates: list[str] = []
+
+        def add_candidate(name: str | None) -> None:
+            if name and name not in candidates:
+                candidates.append(name)
+
+        add_candidate(resolved_name)
+        for name in self._function_and_internal_thunk_target_names(
+            program_graph,
+            programs_by_name,
+            resolved_name,
+        ):
+            add_candidate(name)
+        for target in instr.get("call_targets") or []:
+            if target.get("function_name") and target.get("function_name") != resolved_name:
+                continue
+            target_names = [
+                (
+                    target.get("thunk_target_name")
+                    or ((target.get("external_prototype") or {}).get("thunk_target") or {}).get("name")
+                ),
+                ((target.get("external_prototype") or {}).get("thunk_target") or {}).get("name"),
+            ]
+            target_entries = [
+                target.get("thunk_target_entry"),
+                ((target.get("external_prototype") or {}).get("thunk_target") or {}).get("entry"),
+            ]
+            for raw_name, entry in zip(target_names, target_entries):
+                identity = self._function_identity_for_entry(str(raw_name or ""), entry, program_graph)
+                add_candidate(identity)
+                if identity:
+                    for name in self._function_and_internal_thunk_target_names(
+                        program_graph,
+                        programs_by_name,
+                        identity,
+                    ):
+                        add_candidate(name)
+        return candidates
+
+    def _select_direct_call_summary(
+        self,
+        program_graph: ProgramSliceGraph,
+        programs_by_name: dict[str, LowPcodeProgram],
+        instr: dict,
+        resolved: object,
+        summaries: dict[str, AutoFunctionSummary],
+    ) -> tuple[str | None, AutoFunctionSummary | None]:
+        fallback_name: str | None = None
+        fallback_summary: AutoFunctionSummary | None = None
+        for candidate_name in self._direct_call_summary_candidates(
+            program_graph,
+            programs_by_name,
+            instr,
+            resolved,
+        ):
+            summary = summaries.get(candidate_name)
+            if summary is None:
+                continue
+            if fallback_summary is None:
+                fallback_name = candidate_name
+                fallback_summary = summary
+            if self._summary_has_any_content(summary):
+                return candidate_name, summary
+        return fallback_name, fallback_summary
 
     def _latest_explicit_storage_value_before_node(
         self,
@@ -16896,6 +17298,28 @@ class ProgramSliceGraphBuilder:
             return inputs[0]
         if opcode == "BOOL_NEGATE" and inputs:
             return (0 if inputs[0] else 1) if isinstance(inputs[0], int) else None
+        if opcode == "INT_NEGATE" and inputs and isinstance(inputs[0], int):
+            output_size_bytes = int((pcode.get("output") or {}).get("size") or 0)
+            output_size_bits = output_size_bytes * 8
+            result = ~int(inputs[0])
+            return result & ((1 << output_size_bits) - 1) if output_size_bits > 0 else result
+        if opcode == "INT_2COMP" and inputs and isinstance(inputs[0], int):
+            output_size_bytes = int((pcode.get("output") or {}).get("size") or 0)
+            output_size_bits = output_size_bytes * 8
+            result = -int(inputs[0])
+            return result & ((1 << output_size_bits) - 1) if output_size_bits > 0 else result
+        if opcode == "BOOL_AND" and len(inputs) >= 2:
+            return (
+                int(bool(inputs[0]) and bool(inputs[1]))
+                if isinstance(inputs[0], int) and isinstance(inputs[1], int)
+                else None
+            )
+        if opcode == "BOOL_OR" and len(inputs) >= 2:
+            return (
+                int(bool(inputs[0]) or bool(inputs[1]))
+                if isinstance(inputs[0], int) and isinstance(inputs[1], int)
+                else None
+            )
         if opcode == "INT_AND" and len(inputs) >= 2:
             if isinstance(inputs[0], int) and isinstance(inputs[1], int):
                 return inputs[0] & inputs[1]
@@ -17017,7 +17441,10 @@ class ProgramSliceGraphBuilder:
                 if expression_node not in seen:
                     stack.append(expression_node)
             for pred in graph.predecessors(current):
-                if graph.edges[pred, current].get("kind") in DATA_SLICE_EDGES:
+                edge_kind = graph.edges[pred, current].get("kind")
+                if edge_kind in DATA_SLICE_EDGES or (
+                    attrs.get("opcode") in {"LOAD", "STORE_VAL"} and edge_kind == "memory"
+                ):
                     stack.append(pred)
         return nodes
 
@@ -17239,6 +17666,23 @@ class ProgramSliceGraphBuilder:
             or summary.observed_memory_to_memory
             or summary.observed_to_memory
             or summary.global_writes
+        )
+
+    def _summary_has_any_content(self, summary: AutoFunctionSummary) -> bool:
+        return bool(
+            summary.global_writes
+            or summary.global_reads_to_storage
+            or summary.source_to_primary
+            or summary.primary_constant_values
+            or summary.primary_observed_subranges
+            or summary.source_to_memory
+            or summary.source_empty_memory_overwrites
+            or summary.observed_to_primary
+            or summary.observed_to_global
+            or summary.observed_memory_to_primary
+            or summary.observed_memory_to_memory
+            or summary.observed_to_memory
+            or summary.observed_memory_to_sink
         )
 
     def _is_passthrough_register_input(self, caller_graph: FunctionGraph, node: ValueId) -> bool:
@@ -18168,7 +18612,9 @@ class ProgramSliceGraphBuilder:
                 resolved = self.call_resolver.resolve(instr)
                 if not self._is_pointer_passthrough_runtime_call(resolved.name):
                     continue
-                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                callsite_key = self._single_materialized_callsite_key(caller_graph, instr, resolved)
+                if callsite_key is None:
+                    continue
                 source_inputs = self._source_carrying_pointer_pre_nodes(caller_graph, callsite_key)
                 if not source_inputs:
                     continue
@@ -18245,7 +18691,9 @@ class ProgramSliceGraphBuilder:
                 resolved = self.call_resolver.resolve(instr)
                 if not self._is_thread_start_call(resolved.name):
                     continue
-                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                callsite_key = self._single_materialized_callsite_key(caller_graph, instr, resolved)
+                if callsite_key is None:
+                    continue
                 source_inputs = self._source_carrying_pointer_pre_nodes(caller_graph, callsite_key)
                 if not source_inputs:
                     continue
@@ -18298,7 +18746,9 @@ class ProgramSliceGraphBuilder:
                 resolved = self.call_resolver.resolve(instr)
                 if not self._is_pointer_passthrough_runtime_call(resolved.name):
                     continue
-                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                callsite_key = self._single_materialized_callsite_key(caller_graph, instr, resolved)
+                if callsite_key is None:
+                    continue
                 input_nodes = self._source_carrying_pre_nodes(
                     caller_graph,
                     callsite_key,
@@ -18361,7 +18811,14 @@ class ProgramSliceGraphBuilder:
     def _is_thread_start_call(self, name: str | None) -> bool:
         if not name:
             return False
-        return name.lower() in {"pthread_create", "createthread"}
+        return self._runtime_boundary_name(name) in {"pthread_create", "createthread"}
+
+    def _runtime_boundary_name(self, name: str | None) -> str:
+        normalized = (name or "").lower().lstrip("_")
+        head, sep, tail = normalized.rpartition("_")
+        if sep and len(tail) >= 4 and all(ch in "0123456789abcdef" for ch in tail):
+            return head
+        return normalized
 
     def _callsite_has_observed_code_pointer(
         self,
@@ -18423,7 +18880,7 @@ class ProgramSliceGraphBuilder:
     def _is_pointer_passthrough_runtime_call(self, name: str | None) -> bool:
         if not name:
             return False
-        normalized = name.lower()
+        normalized = self._runtime_boundary_name(name)
         exact_names = {
             "_setjmp",
             "setjmp",
@@ -18441,7 +18898,7 @@ class ProgramSliceGraphBuilder:
     def _is_thread_runtime_call(self, name: str | None) -> bool:
         if not name:
             return False
-        return name.lower() in {
+        return self._runtime_boundary_name(name) in {
             "pthread_create",
             "pthread_join",
             "createthread",
@@ -19247,11 +19704,13 @@ class ProgramSliceGraphBuilder:
                     continue
                 if self._source_labels_reaching_node(composed_caller, target_value_node):
                     continue
-                if self._function_pointer_candidate_callees_from_target(
+                if self._local_computed_call_target_candidate_callees(
                     program_graph,
+                    program,
                     programs_by_name,
                     names_by_entry,
                     composed_caller,
+                    instr,
                     target_value_node,
                     target_storage,
                 ):
@@ -19500,6 +19959,7 @@ class ProgramSliceGraphBuilder:
         source_storage = source_attrs.get("observed_storage") or source_attrs.get("storage") or ""
         if not source_storage:
             return False
+        source_labels = self._source_labels_reaching_node(caller_graph, source_node)
         graph = caller_graph.slice_graph
         seen: set[ValueId] = set()
         stack = [target_node]
@@ -19517,9 +19977,16 @@ class ProgramSliceGraphBuilder:
                         and self._storage_keys_overlap(storage, source_storage)
                     ):
                         return True
+                if source_labels and self._source_labels_reaching_node(caller_graph, current) & source_labels:
+                    return True
+            for expression_node in self._value_nodes_in_expression(attrs.get("expression") or {}):
+                if expression_node not in seen:
+                    stack.append(expression_node)
             for pred in graph.predecessors(current):
                 edge_kind = graph.edges[pred, current].get("kind")
-                if edge_kind in DATA_SLICE_EDGES or edge_kind == "address":
+                if edge_kind in DATA_SLICE_EDGES or edge_kind == "address" or (
+                    attrs.get("opcode") in {"LOAD", "STORE_VAL"} and edge_kind == "memory"
+                ):
                     stack.append(pred)
         return False
 
@@ -20578,7 +21045,9 @@ class ProgramSliceGraphBuilder:
                 direct_runtime_escape = self._is_runtime_escape_call(resolved.name, instr)
                 if not direct_runtime_escape and resolved.name not in runtime_escape_functions:
                     continue
-                callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
+                callsite_key = self._single_materialized_callsite_key(caller_graph, instr, resolved)
+                if callsite_key is None:
+                    continue
                 input_nodes: list[ValueId] = []
                 if direct_runtime_escape or resolved.name in runtime_escape_functions:
                     input_nodes.extend(
@@ -20682,7 +21151,7 @@ class ProgramSliceGraphBuilder:
         return labels
 
     def _is_runtime_escape_call(self, name: str | None, instr: dict) -> bool:
-        normalized = (name or "").lower().lstrip("_")
+        normalized = self._runtime_boundary_name(name)
         if normalized in {"cxa_throw"}:
             return True
         for target in instr.get("call_targets") or []:
@@ -21559,11 +22028,17 @@ class ProgramSliceGraphBuilder:
                         summaries,
                     )
                     continue
-                summary = summaries.get(resolved.name)
+                callee_name, summary = self._select_direct_call_summary(
+                    program_graph,
+                    programs_by_name,
+                    instr,
+                    resolved,
+                    summaries,
+                )
                 if summary is None:
                     continue
-                callee_graph = program_graph.functions.get(resolved.name)
-                callee_program = programs_by_name.get(resolved.name)
+                callee_graph = program_graph.functions.get(callee_name or "")
+                callee_program = programs_by_name.get(callee_name or "")
                 callsite_key = f"{instr.get('address')}:{resolved.name or resolved.address or 'unresolved'}"
 
                 for output_storage, source_nodes in sorted(summary.source_to_primary.items()):
@@ -21654,7 +22129,7 @@ class ProgramSliceGraphBuilder:
                             output_memory,
                             address_storage,
                             program_graph,
-                            program_graph.functions.get(resolved.name),
+                            callee_graph,
                         ):
                             post_memory_node = self._summary_observed_memory_post_node(
                                 program_graph,
@@ -25285,7 +25760,14 @@ class ProgramSliceGraphBuilder:
                 f"mem:{successor_attrs.get('observed_storage') or ''}"
             )
         elif successor_is_later_summary_memory:
-            successor_range = post_range
+            successor_range = self._memory_range_for_storage(successor_attrs.get("storage") or "")
+            if successor_range is None:
+                observed_output = edge_attrs.get("observed_output") or edge_attrs.get("observed_storage") or ""
+                successor_range = self._memory_range_for_storage(observed_output)
+            if successor_range is None and edge_attrs.get("kind") == "call_out_reg":
+                successor_range = post_range
+            if successor_range is None:
+                return
         else:
             successor_range = self._memory_range_for_storage(graph.nodes[successor].get("storage") or "")
         if post_range is not None and successor_range is not None and not self._ranges_overlap(

@@ -12,8 +12,8 @@ import hashlib
 from ghidra.util.task import TaskMonitor
 
 
-DUMPER_SCHEMA_VERSION = 8
-DUMPER_NAME = "lowpcode_json_dumper_v8_defined_data_scalars"
+DUMPER_SCHEMA_VERSION = 9
+DUMPER_NAME = "lowpcode_json_dumper_v9_raw_function_pointer_tables"
 REACHABLE_HELPER_MAX_DEPTH = 8
 
 _FUNCTION_POINTER_DATA_INDEX_CACHE = None
@@ -663,6 +663,95 @@ def function_from_pointer_like_value(program, value):
     return None
 
 
+def read_pointer_value_from_memory(program, memory, address, pointer_size):
+    if pointer_size <= 0:
+        return None
+    language = safe_call(None, program.getLanguage)
+    big_endian = bool(safe_call(False, language.isBigEndian)) if language else False
+    value = 0
+    for index in range(pointer_size):
+        byte_addr = safe_call(None, address.add, index)
+        if byte_addr is None:
+            return None
+        byte_value = safe_call(None, memory.getByte, byte_addr)
+        if byte_value is None:
+            return None
+        byte_value = int(byte_value) & 0xff
+        if big_endian:
+            value = (value << 8) | byte_value
+        else:
+            value |= byte_value << (index * 8)
+    return value
+
+
+def is_runtime_pointer_table_block(block):
+    if block is None:
+        return False
+    if not safe_bool_method(block, "isRead"):
+        return False
+    if safe_bool_method(block, "isExecute"):
+        return False
+    if safe_bool_method(block, "isExternal") or safe_bool_method(block, "isOverlay"):
+        return False
+    if not safe_bool_method(block, "isInitialized"):
+        return False
+    return True
+
+
+def iter_raw_function_pointer_records(program, functions_by_entry, pointer_size):
+    records = []
+    valid_entries = set(functions_by_entry.keys())
+    if pointer_size <= 0 or not valid_entries:
+        return records
+    try:
+        memory = program.getMemory()
+        for block in memory.getBlocks():
+            if not is_runtime_pointer_table_block(block):
+                continue
+            start = safe_call(None, block.getStart)
+            block_size = int(safe_call(0, block.getSize) or 0)
+            if start is None or block_size < pointer_size:
+                continue
+            start_offset = address_offset(start)
+            if start_offset is None:
+                continue
+            aligned_offset = start_offset
+            remainder = aligned_offset % pointer_size
+            if remainder:
+                aligned_offset += pointer_size - remainder
+            block_end = start_offset + block_size
+            while aligned_offset + pointer_size <= block_end:
+                data_addr = address_from_offset(program, aligned_offset)
+                if data_addr is None:
+                    aligned_offset += pointer_size
+                    continue
+                value = read_pointer_value_from_memory(program, memory, data_addr, pointer_size)
+                if value is None:
+                    aligned_offset += pointer_size
+                    continue
+                target_func = function_from_pointer_like_value(program, value)
+                if target_func is None or not is_followable_internal_function(target_func):
+                    aligned_offset += pointer_size
+                    continue
+                entry = safe_str(target_func.getEntryPoint())
+                if entry not in valid_entries:
+                    aligned_offset += pointer_size
+                    continue
+                records.append({
+                    "data_address": safe_str(data_addr),
+                    "target_entry": entry,
+                    "target_name": target_func.getName(),
+                    "length": pointer_size,
+                    "data_type": "pointer",
+                    "value": value,
+                    "source": "raw_memory_pointer_value",
+                })
+                aligned_offset += pointer_size
+    except Exception as e:
+        print("[-] raw function pointer table 추출 실패: %s" % str(e))
+    return records
+
+
 def function_from_entry_text(entry_text):
     text = safe_str(entry_text)
     if not text:
@@ -734,6 +823,14 @@ def get_function_pointer_data_index(program, functions_by_entry):
             by_entry.setdefault(entry, []).append(record)
     except Exception as e:
         print("[-] function pointer data index 추출 실패: %s" % str(e))
+
+    for record in iter_raw_function_pointer_records(program, functions_by_entry, pointer_size):
+        data_address = record.get("data_address")
+        entry = record.get("target_entry")
+        if not data_address or not entry or data_address in by_data_address:
+            continue
+        by_data_address[data_address] = record
+        by_entry.setdefault(entry, []).append(record)
 
     _FUNCTION_POINTER_DATA_INDEX_CACHE = (by_data_address, by_entry)
     return _FUNCTION_POINTER_DATA_INDEX_CACHE
@@ -1029,28 +1126,25 @@ def resolve_function_pointer_ref_targets(ref, function_name_index):
     direct_func = safe_call(None, getFunctionAt, data_addr)
     if direct_func is None:
         direct_func = safe_call(None, getFunctionContaining, data_addr)
-    key = function_key(direct_func)
-    if direct_func is not None and key not in seen:
-        seen.add(key)
-        targets.append({
-            "to_function": direct_func,
-            "reference_kind": "data_function_pointer_direct_address",
-            "via_symbol": None,
-            "data_addr": safe_str(data_addr),
-        })
+    add_resolved_target(
+        targets,
+        seen,
+        direct_func,
+        "data_function_pointer_direct_address",
+        data_addr=safe_str(data_addr),
+    )
 
     for symbol_name in get_symbol_names_at_address(data_addr):
         target_name = function_name_from_pointer_symbol(symbol_name, data_addr, function_name_index)
         target_func = function_name_index.get(target_name) if target_name else None
-        key = function_key(target_func)
-        if target_func is not None and key not in seen:
-            seen.add(key)
-            targets.append({
-                "to_function": target_func,
-                "reference_kind": "data_function_pointer_symbol",
-                "via_symbol": symbol_name,
-                "data_addr": safe_str(data_addr),
-            })
+        add_resolved_target(
+            targets,
+            seen,
+            target_func,
+            "data_function_pointer_symbol",
+            via_symbol=symbol_name,
+            data_addr=safe_str(data_addr),
+        )
 
     try:
         ref_manager = currentProgram.getReferenceManager()
@@ -1058,28 +1152,24 @@ def resolve_function_pointer_ref_targets(ref, function_name_index):
             target_func = getFunctionAt(pointer_ref.getToAddress())
             if not target_func:
                 target_func = getFunctionContaining(pointer_ref.getToAddress())
-            key = function_key(target_func)
-            if target_func is not None and key not in seen:
-                seen.add(key)
-                targets.append({
-                    "to_function": target_func,
-                    "reference_kind": "data_function_pointer_reference",
-                    "via_symbol": None,
-                    "data_addr": safe_str(data_addr),
-                })
+            add_resolved_target(
+                targets,
+                seen,
+                target_func,
+                "data_function_pointer_reference",
+                data_addr=safe_str(data_addr),
+            )
     except Exception:
         pass
 
     target_func = function_from_data_pointer_value(data_addr)
-    key = function_key(target_func)
-    if target_func is not None and key not in seen:
-        seen.add(key)
-        targets.append({
-            "to_function": target_func,
-            "reference_kind": "data_function_pointer_value",
-            "via_symbol": None,
-            "data_addr": safe_str(data_addr),
-        })
+    add_resolved_target(
+        targets,
+        seen,
+        target_func,
+        "data_function_pointer_value",
+        data_addr=safe_str(data_addr),
+    )
     return targets
 
 
@@ -1087,6 +1177,34 @@ def function_key(func):
     if func is None:
         return None
     return safe_str(safe_call(None, func.getEntryPoint))
+
+
+def internal_thunk_target(func):
+    if func is None:
+        return None
+    thunked = safe_call(None, func.getThunkedFunction, True)
+    if thunked is None or function_key(thunked) == function_key(func):
+        return None
+    return thunked
+
+
+def add_resolved_target(targets, seen, target_func, reference_kind, via_symbol=None, data_addr=None):
+    if target_func is None:
+        return
+    for candidate_func, candidate_kind in (
+        (target_func, reference_kind),
+        (internal_thunk_target(target_func), reference_kind + "_thunk_target"),
+    ):
+        key = function_key(candidate_func)
+        if candidate_func is None or key in seen:
+            continue
+        seen.add(key)
+        targets.append({
+            "to_function": candidate_func,
+            "reference_kind": candidate_kind,
+            "via_symbol": via_symbol,
+            "data_addr": data_addr,
+        })
 
 
 def function_record(func, depth=None, root=None):
@@ -1200,12 +1318,7 @@ def resolve_called_functions(func, function_name_index):
                     target_func = getFunctionAt(ref.getToAddress())
                     if not target_func:
                         target_func = getFunctionContaining(ref.getToAddress())
-                    targets.append({
-                        "to_function": target_func,
-                        "reference_kind": "direct_call",
-                        "via_symbol": None,
-                        "data_addr": None,
-                    })
+                    add_resolved_target(targets, set(), target_func, "direct_call")
                 elif ref_type.isData():
                     targets.extend(resolve_function_pointer_ref_targets(ref, function_name_index))
 
@@ -1248,6 +1361,32 @@ def collect_reachable_internal_functions(seed_funcs, max_depth):
         func, depth, root = queue.pop(0)
         if depth >= max_depth:
             continue
+        thunked = internal_thunk_target(func)
+        if thunked is not None:
+            edge = {
+                "from_function": func.getName(),
+                "from_addr": safe_str(safe_call(None, func.getEntryPoint)),
+                "to_addr": safe_str(safe_call(None, thunked.getEntryPoint)),
+                "to_function": thunked.getName(),
+                "root": root,
+                "depth": depth + 1,
+                "reference_kind": "thunk_target",
+            }
+            edges.append(edge)
+            if not is_followable_internal_function(thunked):
+                skipped.append({
+                    "name": thunked.getName(),
+                    "entry": safe_str(thunked.getEntryPoint()),
+                    "reason": "external_or_terminal_source_sink_or_empty_body",
+                    "referenced_from": func.getName(),
+                    "from_addr": edge["from_addr"],
+                })
+            else:
+                key = function_key(thunked)
+                if key and key not in seen:
+                    seen.add(key)
+                    ordered.append(thunked)
+                    queue.append((thunked, depth + 1, root))
         for callind_addr in unresolved_callind_addresses(func):
             for target_func, records in address_taken_funcs:
                 edge = {

@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import pickle
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from core.architecture import ArchitectureSpec
 from frontend.external_prototype import ExternalPrototype, load_external_prototypes
+
+
+PARSED_CACHE_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -56,13 +63,96 @@ class LowPcodeProgram:
 
 
 class LowPcodeLoader:
+    def __init__(self, cache_dir: str | Path | None = None):
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+        self._memory_cache: dict[tuple[str, int, int, str], LowPcodeProgram] = {}
+        self.cache_stats = {
+            "memory_hits": 0,
+            "disk_hits": 0,
+            "misses": 0,
+            "source_bytes": 0,
+        }
+
     def load(self, path: str | Path, arch_preset: str | None = None) -> LowPcodeProgram:
-        json_path = Path(path)
-        with json_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        self._annotate_flow_target_names(data)
+        json_path = Path(path).resolve()
+        stat = json_path.stat()
+        memory_key = (str(json_path), stat.st_mtime_ns, stat.st_size, arch_preset or "")
+        cached_program = self._memory_cache.get(memory_key)
+        if cached_program is not None:
+            self.cache_stats["memory_hits"] += 1
+            return cached_program
+
+        source_bytes = json_path.read_bytes()
+        self.cache_stats["source_bytes"] += len(source_bytes)
+        source_hash = hashlib.sha256(source_bytes).hexdigest()
+        data = self._load_parsed_cache(source_hash)
+        if data is None:
+            data = json.loads(source_bytes)
+            self._annotate_flow_target_names(data)
+            self._save_parsed_cache(source_hash, data)
+            self.cache_stats["misses"] += 1
+        else:
+            self.cache_stats["disk_hits"] += 1
         arch_name = arch_preset or self._infer_architecture(json_path, data)
-        return LowPcodeProgram(json_path, data, ArchitectureSpec.from_metadata(arch_name, data.get("program") or {}))
+        program = LowPcodeProgram(
+            json_path,
+            data,
+            ArchitectureSpec.from_metadata(arch_name, data.get("program") or {}),
+        )
+        self._memory_cache[memory_key] = program
+        return program
+
+    def _load_parsed_cache(self, source_hash: str) -> dict | None:
+        cache_path = self._parsed_cache_path(source_hash)
+        if cache_path is None or not cache_path.is_file():
+            return None
+        try:
+            with cache_path.open("rb") as f:
+                payload = pickle.load(f)
+            if not isinstance(payload, dict):
+                return None
+            if payload.get("schema_version") != PARSED_CACHE_SCHEMA_VERSION:
+                return None
+            if payload.get("source_hash") != source_hash:
+                return None
+            data = payload.get("data")
+            return data if isinstance(data, dict) else None
+        except (OSError, EOFError, pickle.PickleError, AttributeError, ValueError):
+            return None
+
+    def _save_parsed_cache(self, source_hash: str, data: dict) -> None:
+        cache_path = self._parsed_cache_path(source_hash)
+        if cache_path is None:
+            return
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            payload: dict[str, Any] = {
+                "schema_version": PARSED_CACHE_SCHEMA_VERSION,
+                "source_hash": source_hash,
+                "data": data,
+            }
+            fd, temporary_name = tempfile.mkstemp(
+                prefix=f".{source_hash}.",
+                suffix=".tmp",
+                dir=cache_path.parent,
+            )
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+                os.replace(temporary_name, cache_path)
+            except Exception:
+                try:
+                    os.unlink(temporary_name)
+                except OSError:
+                    pass
+                raise
+        except (OSError, pickle.PickleError):
+            return
+
+    def _parsed_cache_path(self, source_hash: str) -> Path | None:
+        if self.cache_dir is None:
+            return None
+        return self.cache_dir / f"v{PARSED_CACHE_SCHEMA_VERSION}" / source_hash[:2] / f"{source_hash}.pickle"
 
     def _annotate_flow_target_names(self, data: dict) -> None:
         indices = data.get("indices") or {}

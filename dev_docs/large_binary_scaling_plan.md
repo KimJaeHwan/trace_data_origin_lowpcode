@@ -34,7 +34,8 @@ binary without benchmark source/sink naming conventions.
 - Do not expose backend-specific graph semantics. NetworkX remains the
   reference representation while rustworkx is an opt-in traversal backend
   behind the graph operation boundary.
-- Do not accept false positives as a speed tradeoff.
+- Do not hide precision candidates as a speed tradeoff. Optimized and reference
+  paths must emit the same conservative candidate set.
 
 ## Current Evidence
 
@@ -220,7 +221,8 @@ Core optimization changes require:
 
 - Python compile check over engine packages
 - Suite09/Suite10 local-samples with proposed regressions included
-- zero false positives
+- zero missing expected sources and zero negative-control violations
+- precision-candidate counts recorded and compared with the reference backend
 - no new expected/manifest/generated-sample edits as a way to pass
 - before/after performance profile saved with the commit notes
 

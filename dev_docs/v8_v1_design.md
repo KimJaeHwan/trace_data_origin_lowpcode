@@ -1655,6 +1655,14 @@ SINK_ANCHOR(observed_storages=...)
 
 V8에서는 data/control/global source 구분을 지원해야 한다.
 
+Primary validation is recall-first. For positive cases, all expected sources
+must be included in the candidate set; forbidden hits are preserved as
+`REFINEMENT_PENDING` precision evidence and do not fail the backward-slice
+core. An explicit `expected_no_sources: true` case remains strict: any observed
+data or control source fails the negative control. The authoritative policy and
+future refiner boundary are defined in
+`dev_docs/recall_first_candidate_refinement.md`.
+
 ```json
 {
   "expected_data_sources": [],
@@ -1662,6 +1670,7 @@ V8에서는 data/control/global source 구분을 지원해야 한다.
   "expected_global_sources": [],
   "forbidden_data_sources": [],
   "forbidden_control_sources": [],
+  "expected_no_sources": false,
   "expected_features": [],
   "allowed_warnings": []
 }
@@ -2309,4 +2318,3 @@ coding agent가 PDB를 core에 엮지 않도록, PDB 작업은 별도 post-core 
 ```
 
 ---
- 

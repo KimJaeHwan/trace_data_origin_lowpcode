@@ -53,7 +53,7 @@ class DataFlowBenchBoundaryProvider:
     adapter instead of becoming general backward-slice semantics.
     """
 
-    cache_key = "boundary:dataflowbench-v2"
+    cache_key = "boundary:dataflowbench-v3"
 
     def is_source_call(self, instr: dict) -> str | None:
         target = self._primary_target(instr)
@@ -68,7 +68,15 @@ class DataFlowBenchBoundaryProvider:
         return None
 
     def source_label(self, name: str) -> str:
-        return f"{name}.ret"
+        # Ghidra may expose a local thunk using an entry-address suffix while
+        # metadata pointer symbols retain the undecorated boundary name.  Both
+        # observations describe the same benchmark boundary and must therefore
+        # share one identity before single-source summary guards inspect them.
+        # Keep this naming rule in the benchmark adapter; the core only sees the
+        # provider's opaque source label.
+        match = re.match(r"^(dfb_source_.+?)_[0-9A-Fa-f]{6,16}$", name or "")
+        canonical_name = match.group(1) if match else name
+        return f"{canonical_name}.ret"
 
     def metadata_source_pointer_markers(self, program: Any) -> list[str]:
         indices = (getattr(program, "data", {}) or {}).get("indices") or {}

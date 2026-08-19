@@ -2868,3 +2868,168 @@ the core graph model and recording provenance on every summary edge.
   labels, or fixed offsets as core semantics. Boundary providers still own
   source/sink interpretation, and unresolved closure evidence expands analysis
   rather than guessing a calling convention.
+
+- 2026-08-17: Adopted recall-first validation for the conservative backward
+  slicer. Positive cases now pass when all expected data/control sources are
+  included, while every source outside the expected set is retained as
+  `REFINEMENT_PENDING` telemetry for a future context-sensitive taint/path
+  refiner. Explicit `expected_no_sources` cases remain hard negative controls:
+  every observed source fails, even when its label was not enumerated. The
+  change affects validation and automation policy only; graph construction
+  remains no-arg/no-ret, convention-free, and unaware of expected/forbidden
+  labels.
+- Verified the policy with five validator unit tests, four harness gate tests,
+  compileall, design lint, and a no-result-cache full Suite09/Suite10 run using
+  parsed caching, rustworkx traversal, demand closure, and six case workers.
+  The matrix remained PASS 1330 / FAIL 0 / ERROR 0 with 32/32 explicit
+  negative controls clean. The new precision channel surfaced 35 pending rows:
+  30 in Suite09 (DFB010/011/013/014/016 across six variants) and five in
+  Suite10 (TV2C637/TV2C649 P0 variants). None matched an oracle forbidden label;
+  they are previously unreported sources outside the expected set. Evidence is
+  saved under `output/harness/recall_first_full_09_10` in the Suite10 repo.
+
+- 2026-08-17: Repaired fused callback-to-partial-copy recall in the observed
+  storage transition layer. Post-call memory redirection now composes a narrow
+  write with the prior wider version when the write leaves lanes uncovered;
+  writes that cover the entire prior contribution retain the existing kill
+  behavior. Refreshed direct-call memory-copy summaries now select inputs from
+  the current composed caller graph, so cross-function callback writes added by
+  earlier passes remain visible, while candidate memory nodes are still
+  restricted to the caller function's architecture-aware storage namespace.
+  Metadata-marker memory transitions are also mirrored into the caller-local
+  graph for later summary selection. The summary cache schema advanced to 147.
+- Verified all eight scoped optimization/architecture variants of the fused
+  callback + byte patch + compiler-lowered object copy regression as PASS with
+  no missing expected sources. The three explicit Suite10 negative controls for
+  indirect-field overwrite, partial-lane kill, and static overwrite stayed
+  source-empty across all eight variants (24/24). The repository partial/copy
+  gate passed 60/60 across x86, x64, AArch64, and ARMv7, and focused unit tests
+  cover both partial composition and full-cover replacement. No ABI roles,
+  helper-name matching, source-label matching, or fixed offsets were added to
+  core semantics.
+
+- 2026-08-17: Repaired the cycle-1 fused-summary regression caused by duplicate
+  boundary identities. Ghidra can name a local source thunk with its entry
+  address appended while metadata pointer symbols retain the undecorated name;
+  once composed summary edges became caller-visible, both labels reached the
+  same memory version and a conservative single-source guard treated them as
+  distinct sources. The DataFlowBench boundary adapter now canonicalizes that
+  extraction-only address decoration when it creates source labels. This keeps
+  benchmark naming outside Engine11, leaves observed Low-PCode storage
+  transitions unchanged, and advances the boundary-provider cache identity.
+- Verified the regressed container/callback memory flow as PASS with only the
+  expected source across all eight P0/P1 x86, x64, ARMv7, and AArch64 scopes.
+  The preceding fused callback/partial-copy repair also remains PASS in all
+  eight scopes, and all three explicit Suite10 negative controls remain empty
+  across the same matrix (24/24). The optimized rustworkx/demand-closure path
+  passes the three formerly failing P0 scopes, the repository DFB001/DFB002
+  smoke gate passes 12/12, and ten focused unit tests plus compileall and diff
+  checks pass.
+
+- 2026-08-17: Repaired late selected-computed-call memory kills in fused heap
+  flows. Computed targets now keep direct/traced/table-address evidence
+  separate from weak same-slot matches in unrelated tables, and only a unique
+  target at the strongest available evidence level is selected. Selected
+  source-to-memory provenance is installed before consumers are redirected, so
+  stale folded values can be replaced using the new observed transition. A
+  bounded final summary convergence pass refreshes callers after late
+  cross-function memory edges appear.
+- Added bounded indexed-loop write coverage for compiler-lowered byte copies.
+  A narrow observed pointer store is widened only when the callee CFG and Low
+  P-code graph jointly show a natural loop, a unique small exit bound, an
+  indexed address derived from the same observed storage that is advanced by
+  one element and stored back, and source flow into the loop store. This turns
+  complete bytewise overwrites into ordinary architecture-aware range kills;
+  loops without the observed induction store-back remain narrow.
+- Verified both supplied UE DebugGame regression scopes with fresh uncached
+  builds: each now reports only the expected replacement source, with no
+  missing or forbidden sources. The focused unit suite passes 17/17, including
+  positive and negative loop-coverage tests, `py_compile` passes for analysis,
+  report, tool, and test modules, and the DFB001/DFB002/DFB034 repository smoke
+  matrix passes 18/18 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7.
+
+- 2026-08-18: Repaired destination-range loss when a compiler-lowered wide
+  memory copy is narrowed to a source subrange and then partially overwritten.
+  The local builder already selected the correct source lanes, but the
+  resulting `LOAD_OVERLAP` edge exposed only the source object's original
+  range. Final non-overlap pruning therefore discarded a valid copied lane when
+  the destination lived at a different offset in the same heap object. Narrowed
+  overlap edges now retain the observed destination memory version that carried
+  the lane, and final pruning accepts that provenance only when its
+  architecture-aware range overlaps the later read. Untagged, genuinely
+  non-overlapping inputs are still removed. The summary cache schema advanced
+  to 149.
+- Verified the supplied partial-payload overwrite scope with a fresh uncached
+  build: UE Development now reports exactly `dfb_source_A.ret`. The DebugGame
+  variant remains recall-complete with its pre-existing extra precision
+  candidate. Four related UE Development negative controls remain source-empty,
+  the focused unit suite passes 19/19, compileall and diff checks pass, and the
+  DFB001/DFB002/DFB034 smoke matrix passes 18/18 across PE x86/x64, Linux
+  x86/x64, AArch64, and ARMv7. The change uses only observed Low-PCode value
+  flow and memory ranges; it adds no ABI roles, function-name rules, case IDs,
+  source-label matching, or fixed offsets to engine semantics.
+
+- 2026-08-18: Repaired fused callback, partial-kill, and compiler-lowered copy
+  precision for explicit negative controls. Observed memory-copy summaries now
+  bind each output write to the exact observed input read ranges that reach it
+  in the callee graph. At the caller boundary, memory versions are selected by
+  descending observed write order and byte coverage: disjoint newer subrange
+  writes jointly shadow an older wide version, while an older version remains
+  available only for bytes that newer writes do not cover. This preserves
+  partial-write recall without letting a killed lane feed an unrelated copied
+  word.
+- Extended source-empty overwrite recognition for compiler-lowered constants.
+  Constant recovery now preserves literal zero and evaluates observed
+  `SUBPIECE(value, byte_offset)` trees, allowing the existing summary-input
+  pruning pass to remove stale helper-source edges attached to later concrete
+  stores. The summary cache schema advanced to 153.
+- Verified the four supplied P0/P1 ARMv7/AArch64 scoped regressions with fresh
+  builds; all four explicit negative controls now have an empty source set.
+  The focused unit suite passes 22/22 and covers full disjoint subrange kills,
+  partial uncovered-byte preservation, and compiler-lowered constant-store
+  pruning; the scoped builds exercise output-specific copy reads. `py_compile`
+  and `git diff --check` also pass, and the DFB001/DFB002/DFB034 smoke matrix
+  passes 18/18 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7. The
+  implementation uses only Low-PCode dependencies, observed storage ranges,
+  write order, and architecture storage identities; it adds no
+  ABI roles, case/helper names, expected labels, or fixed offsets.
+
+- 2026-08-18: Repaired the recall side of fused callback partial-copy
+  composition after output-specific copy reads became precise. A byte-sized
+  observed copy summary no longer limits the transfer to one byte when the
+  callee Low P-code proves a larger contiguous copy: adjacent lowered
+  read/write subranges are merged only when their relative source/destination
+  mapping agrees, and bounded indexed loops reuse the existing CFG/induction
+  proof. At the caller boundary, the copy is clipped to the narrowest concrete
+  sink-observed storage containing the summary's byte anchor. Latest writers
+  are then selected by coverage for that exact range, retaining an older wide
+  write only for lanes left uncovered by a newer partial patch. This restores
+  untouched-lane provenance without returning to an any-size memory fallback.
+  The summary cache schema advanced to 154.
+- Verified all eight P0/P1 x86, x64, ARMv7, and AArch64 callback + byte patch +
+  lowered-copy scopes with fresh builds; every variant reports exactly the two
+  expected sources. The adjacent full-kill negative control remains
+  source-empty across all eight variants. The focused unit suite passes 25/25,
+  including bounded-loop, adjacent-unrolled-copy, sink-width, partial-compose,
+  and full-kill coverage. The repository DFB001/DFB014/DFB046/DFB049 and
+  DFB120-123 matrix passes 48/48 across its six architecture/platform roots.
+  The repair uses only observed Low-PCode dependencies, CFG bounds, storage
+  ranges, call-boundary observations, and write order; it adds no ABI roles,
+  case/helper names, expected labels, or fixed offsets to engine semantics.
+
+- 2026-08-18: Corrected flow-oracle source extraction for fused provenance.
+  `expected_flow` remains the authoritative fallback when a multi-sink oracle
+  uses a placeholder flat source list, but only atomic identifier-like boundary
+  labels are collected. Descriptive compositions such as
+  `source_A.ret+source_C.ret` document a fused sink value; they are not a
+  synthetic source boundary that the convention-free graph must emit. This is
+  confined to the validation adapter and does not change core dataflow or use
+  expected labels as Engine11 semantics.
+- Replayed the eight supplied P0/P1 x86, x64, ARMv7, and AArch64 fused
+  partial-patch scopes with fresh temporary summary caches: all eight are
+  recall-complete for the two atomic expected sources. Six are precision-clean;
+  the two P0 64-bit variants retain one extra source as allowed precision
+  telemetry. The adjacent full-kill negative control remains source-empty in
+  all eight variants. The focused unit suite passes 26/26, including a new
+  composite-flow extraction regression, and the DFB001/014/046/049/120-123
+  smoke matrix passes 48/48 across six architecture/platform roots.

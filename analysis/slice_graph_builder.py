@@ -760,7 +760,23 @@ class SliceGraphBuilder:
                         else []
                     )
                 for narrowed_source in selected_sources:
-                    fg.slice_graph.add_edge(narrowed_source, mem_node, kind="memory", opcode="LOAD_OVERLAP")
+                    edge_attrs = {"kind": "memory", "opcode": "LOAD_OVERLAP"}
+                    if narrowed_source != source_node:
+                        # Narrowing a copied wide value can identify a source
+                        # lane whose original memory range differs from the
+                        # destination range.  Retain the observed destination
+                        # version that carried that lane so later range-safety
+                        # passes do not mistake the valid copy for an unrelated
+                        # non-overlapping memory input.
+                        carrier_storage = fg.slice_graph.nodes[source_node].get("storage") or ""
+                        carrier_range = self._memory_range_for_storage(carrier_storage)
+                        if (
+                            carrier_range is not None
+                            and load_range is not None
+                            and carrier_range.overlaps(load_range)
+                        ):
+                            edge_attrs["narrowed_from_memory_storage"] = carrier_storage
+                    fg.slice_graph.add_edge(narrowed_source, mem_node, **edge_attrs)
             state.memory[mem_key] = mem_node
             state.expressions[mem_node] = self._merged_function_pointer_expression(
                 state,

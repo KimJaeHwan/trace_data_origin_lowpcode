@@ -255,6 +255,262 @@ class BoundedIndexedLoopSummaryTest(unittest.TestCase):
 
         self.assertEqual({wide, patch}, set(selected))
 
+    def test_alias_copy_outputs_share_wider_sink_observation(self):
+        builder = ProgramSliceGraphBuilder()
+        callee, read_node, store_node = self._graph(store_back=True)
+        input_storage = "reg:RSI:0:64"
+        output_address_storage = "reg:RDI:0:64"
+        read_storage = "mem:unknown:register:RSI:0:64:offset:0:1"
+        output_memory = callee.slice_graph.nodes[store_node]["storage"]
+        alias_output = "mem:unknown:register:RAX:0:64:offset:0:1"
+        alias_store = self._node("mem", "alias_output")
+        self._make_observed_copy_read(
+            callee,
+            read_node,
+            read_storage,
+            input_storage,
+            "alias_sink_width",
+        )
+        callee.slice_graph.add_node(
+            alias_store,
+            kind="value",
+            opcode="STORE_VAL",
+            storage=alias_output,
+            addr="120",
+        )
+        callee.slice_graph.add_edge(read_node, alias_store, kind="memory", opcode="STORE")
+        caller, callsite_key, wide, patch, target = self._caller_with_partial_source_object(
+            input_storage,
+            output_address_storage,
+        )
+        caller.slice_graph.nodes[target]["storage"] = (
+            "mem:synthetic_copy_caller:root:stack:RSP:-64:1"
+        )
+        sink_pre = ValueId(caller.function_name, "root", "call_pre_stack", "alias_sink_memory")
+        sink = ValueId(caller.function_name, "root", "sink", "alias_sink")
+        caller.slice_graph.add_node(
+            sink_pre,
+            kind="call_pre_storage",
+            opcode="CALL_PRE_STACK",
+            storage="call_pre_stack:alias_sink_memory",
+            observed_storage="synthetic_copy_caller:root:stack:RSP:-64:4",
+            addr="250",
+        )
+        caller.slice_graph.add_node(
+            sink,
+            kind="sink_boundary",
+            opcode="SINK_OBSERVED_STORAGE",
+            storage="sink:250",
+            addr="250",
+        )
+        caller.sink_index["250"] = sink
+
+        selected = builder._caller_memory_inputs_for_observed_copy_output(
+            caller,
+            callee,
+            input_storage,
+            output_address_storage,
+            callsite_key,
+            {output_memory, alias_output},
+            output_memory,
+            target,
+        )
+
+        self.assertEqual({wide, patch}, set(selected))
+
+    def test_distinct_copy_output_intervals_remain_lane_precise(self):
+        builder = ProgramSliceGraphBuilder()
+        callee, read_node, store_node = self._graph(store_back=True)
+        input_storage = "reg:RSI:0:64"
+        output_address_storage = "reg:RDI:0:64"
+        read_storage = "mem:unknown:register:RSI:0:64:offset:0:1"
+        output_memory = callee.slice_graph.nodes[store_node]["storage"]
+        adjacent_output = "mem:unknown:register:RDI:0:64:offset:1:1"
+        self._make_observed_copy_read(
+            callee,
+            read_node,
+            read_storage,
+            input_storage,
+            "distinct_sink_width",
+        )
+        caller, callsite_key, _, patch, target = self._caller_with_partial_source_object(
+            input_storage,
+            output_address_storage,
+        )
+        caller.slice_graph.nodes[target]["storage"] = (
+            "mem:synthetic_copy_caller:root:stack:RSP:-64:1"
+        )
+        sink_pre = ValueId(caller.function_name, "root", "call_pre_stack", "distinct_sink_memory")
+        sink = ValueId(caller.function_name, "root", "sink", "distinct_sink")
+        caller.slice_graph.add_node(
+            sink_pre,
+            kind="call_pre_storage",
+            opcode="CALL_PRE_STACK",
+            storage="call_pre_stack:distinct_sink_memory",
+            observed_storage="synthetic_copy_caller:root:stack:RSP:-64:4",
+            addr="250",
+        )
+        caller.slice_graph.add_node(
+            sink,
+            kind="sink_boundary",
+            opcode="SINK_OBSERVED_STORAGE",
+            storage="sink:250",
+            addr="250",
+        )
+        caller.sink_index["250"] = sink
+
+        selected = builder._caller_memory_inputs_for_observed_copy_output(
+            caller,
+            callee,
+            input_storage,
+            output_address_storage,
+            callsite_key,
+            {output_memory, adjacent_output},
+            output_memory,
+            target,
+        )
+
+        self.assertEqual([patch], selected)
+
+    def test_bounded_byte_copy_maps_a_non_anchor_destination_read(self):
+        builder = ProgramSliceGraphBuilder()
+        callee, read_node, store_node = self._graph(store_back=True)
+        input_storage = "reg:RSI:0:64"
+        output_address_storage = "reg:RDI:0:64"
+        read_storage = "mem:unknown:register:RSI:0:64:offset:0:1"
+        output_memory = callee.slice_graph.nodes[store_node]["storage"]
+        self._make_observed_copy_read(
+            callee,
+            read_node,
+            read_storage,
+            input_storage,
+            "non_anchor",
+        )
+        caller, callsite_key, wide, _, target = self._caller_with_partial_source_object(
+            input_storage,
+            output_address_storage,
+        )
+        caller.slice_graph.nodes[target]["storage"] = (
+            "mem:synthetic_copy_caller:root:stack:RSP:-62:2"
+        )
+        coverage = builder._callee_observed_copy_coverage_components(
+            callee,
+            input_storage,
+            {output_memory},
+        )
+
+        self.assertEqual([(0, 4, 0)], coverage)
+        self.assertEqual(
+            [target],
+            builder._caller_observed_copy_output_nodes_for_coverage(
+                caller,
+                callsite_key,
+                output_address_storage,
+                coverage,
+            ),
+        )
+        self.assertEqual(
+            [wide],
+            builder._caller_memory_inputs_for_observed_copy_output(
+                caller,
+                callee,
+                input_storage,
+                output_address_storage,
+                callsite_key,
+                {output_memory},
+                output_memory,
+                target,
+                coverage,
+            ),
+        )
+
+    def test_wide_copy_output_carrier_maps_a_narrow_later_read(self):
+        builder = ProgramSliceGraphBuilder()
+        callee, read_node, store_node = self._graph(store_back=True)
+        input_storage = "reg:RSI:0:64"
+        output_address_storage = "reg:RDI:0:64"
+        read_storage = "mem:unknown:register:RSI:0:64:offset:0:1"
+        output_memory = callee.slice_graph.nodes[store_node]["storage"]
+        self._make_observed_copy_read(
+            callee,
+            read_node,
+            read_storage,
+            input_storage,
+            "wide_carrier",
+        )
+        caller, callsite_key, _, _, target = self._caller_with_partial_source_object(
+            input_storage,
+            output_address_storage,
+        )
+        wide_post = ValueId(caller.function_name, "root", "call_post_mem", "wide_output")
+        caller.slice_graph.add_node(
+            wide_post,
+            kind="call_post_storage",
+            opcode="CALL_POST_OBSERVED_MEMORY",
+            storage="mem:synthetic_copy_caller:root:stack:RSP:-64:8",
+            addr="200",
+        )
+        coverage = builder._callee_observed_copy_coverage_components(
+            callee,
+            input_storage,
+            {output_memory},
+        )
+
+        self.assertEqual(
+            [target],
+            builder._caller_observed_copy_output_nodes_for_coverage(
+                caller,
+                callsite_key,
+                output_address_storage,
+                coverage,
+            ),
+        )
+
+    def test_wide_copy_output_carrier_does_not_expand_copy_coverage(self):
+        builder = ProgramSliceGraphBuilder()
+        callee, read_node, store_node = self._graph(store_back=True)
+        input_storage = "reg:RSI:0:64"
+        output_address_storage = "reg:RDI:0:64"
+        read_storage = "mem:unknown:register:RSI:0:64:offset:0:1"
+        output_memory = callee.slice_graph.nodes[store_node]["storage"]
+        self._make_observed_copy_read(
+            callee,
+            read_node,
+            read_storage,
+            input_storage,
+            "wide_carrier_bound",
+        )
+        caller, callsite_key, _, _, target = self._caller_with_partial_source_object(
+            input_storage,
+            output_address_storage,
+        )
+        caller.slice_graph.nodes[target]["storage"] = (
+            "mem:synthetic_copy_caller:root:stack:RSP:-60:4"
+        )
+        wide_post = ValueId(caller.function_name, "root", "call_post_mem", "wide_output")
+        caller.slice_graph.add_node(
+            wide_post,
+            kind="call_post_storage",
+            opcode="CALL_POST_OBSERVED_MEMORY",
+            storage="mem:synthetic_copy_caller:root:stack:RSP:-64:8",
+            addr="200",
+        )
+        coverage = builder._callee_observed_copy_coverage_components(
+            callee,
+            input_storage,
+            {output_memory},
+        )
+
+        self.assertEqual(
+            [],
+            builder._caller_observed_copy_output_nodes_for_coverage(
+                caller,
+                callsite_key,
+                output_address_storage,
+                coverage,
+            ),
+        )
+
     def test_adjacent_lowered_byte_copies_form_contiguous_observed_coverage(self):
         builder = ProgramSliceGraphBuilder()
         callee = FunctionGraph(
@@ -304,6 +560,107 @@ class BoundedIndexedLoopSummaryTest(unittest.TestCase):
         )
 
         self.assertEqual({wide, patch}, set(selected))
+
+    def test_indexed_source_lanes_ignore_contiguous_stores_from_other_functions(self):
+        builder = ProgramSliceGraphBuilder()
+        caller = FunctionGraph(
+            function_name="synthetic_indexed_caller",
+            context_id="root",
+            architecture=ArchitectureSpec.from_preset("x86_64"),
+        )
+        graph = caller.slice_graph
+
+        input_node = ValueId(caller.function_name, "root", "call_pre_reg", "input")
+        indexed_load = ValueId(caller.function_name, "root", "reg", "RDX:0:32", 1)
+        address = ValueId(caller.function_name, "root", "unique", "indexed_address", 1)
+        index_memory = ValueId(caller.function_name, "root", "mem", "index", 1)
+        index_load = ValueId(caller.function_name, "root", "unique", "index_load", 1)
+        scale = ValueId(caller.function_name, "root", "const", "scale")
+        index_range = "mem:synthetic_indexed_caller:root:stack:RSP:-8:8"
+        graph.add_node(input_node, opcode="CALL_PRE_REG", storage="call_pre_reg:input", addr="300")
+        graph.add_node(indexed_load, opcode="LOAD", storage="reg:RDX:0:32", addr="220")
+        graph.add_node(address, opcode="INT_MULT", storage="unique:indexed_address", addr="220")
+        graph.add_node(index_memory, opcode="STORE_VAL", storage=index_range, addr="50")
+        graph.add_node(index_load, opcode="LOAD", storage="unique:index_load", addr="220")
+        graph.add_node(scale, kind="constant", opcode="CONST", storage="0x4", addr="220")
+        graph.add_edge(indexed_load, input_node, kind="data", opcode="CALL_PRE_REG")
+        graph.add_edge(address, indexed_load, kind="address", opcode="LOAD_ADDRESS")
+        graph.add_edge(index_memory, index_load, kind="memory", opcode="LOAD")
+        graph.add_edge(index_load, address, kind="data", opcode="INT_MULT")
+        graph.add_edge(scale, address, kind="data", opcode="INT_MULT")
+
+        expected_lanes = []
+        for offset, label in ((-32, "first.ret"), (-28, "second.ret")):
+            source = ValueId(caller.function_name, "root", "boundary", label)
+            lane = ValueId(caller.function_name, "root", "mem", f"lane:{offset}", 1)
+            graph.add_node(source, kind="source_boundary", source_label=label, addr="90")
+            graph.add_node(
+                lane,
+                opcode="STORE_VAL",
+                storage=f"mem:synthetic_indexed_caller:root:stack:RSP:{offset}:4",
+                addr=str(100 + len(expected_lanes) * 10),
+            )
+            graph.add_edge(source, lane, kind="memory", opcode="STORE")
+            expected_lanes.append(lane)
+
+        # Reachable functions share the composed graph.  This equally shaped
+        # foreign object must not become a second candidate source array for
+        # the caller's indexed load.
+        for offset, label in ((0, "foreign_first.ret"), (4, "foreign_second.ret")):
+            source = ValueId("foreign_writer", "root", "boundary", label)
+            lane = ValueId("foreign_writer", "root", "mem", f"lane:{offset}", 1)
+            graph.add_node(source, kind="source_boundary", source_label=label, addr="80")
+            graph.add_node(
+                lane,
+                opcode="STORE_VAL",
+                storage=f"mem:foreign_writer:root:stack:RSP:{offset}:4",
+                addr=str(80 + offset),
+            )
+            graph.add_edge(source, lane, kind="memory", opcode="STORE")
+
+        self.assertEqual(
+            expected_lanes,
+            builder._bounded_indexed_scalar_source_lanes(
+                caller,
+                input_node,
+                {builder._slice_memory_range_for_storage(index_range)},
+                4,
+                2,
+                0x200,
+                0x300,
+            ),
+        )
+
+    def test_register_offset_with_affine_stack_base_materializes_stack_storage(self):
+        builder = ProgramSliceGraphBuilder()
+        caller = FunctionGraph(
+            function_name="synthetic_affine_stack_pointer",
+            context_id="root",
+            architecture=ArchitectureSpec.from_preset("x86_64"),
+        )
+        graph = caller.slice_graph
+        stack = ValueId(caller.function_name, "root", "reg", "RSP:0:64", 1)
+        displacement = ValueId(caller.function_name, "root", "const", "eight")
+        temporary = ValueId(caller.function_name, "root", "reg", "RDI:0:64", 1)
+        graph.add_node(stack, opcode="OBSERVED_INPUT", storage="reg:RSP:0:64", addr="10")
+        graph.add_node(displacement, kind="constant", opcode="CONST", storage="0x8", addr="20")
+        graph.add_node(temporary, opcode="INT_ADD", storage="reg:RDI:0:64", addr="20")
+        graph.add_edge(stack, temporary, kind="data", opcode="INT_ADD")
+        graph.add_edge(displacement, temporary, kind="data", opcode="INT_ADD")
+
+        self.assertEqual(
+            "synthetic_affine_stack_pointer:root:stack:RSP:-40:4",
+            builder._memory_key_from_expression(
+                caller,
+                {
+                    "kind": "register_offset",
+                    "base": "RDI:0:64",
+                    "base_node": temporary,
+                    "offset": -48,
+                },
+                "mem:summary:field:4",
+            ),
+        )
 
 
 if __name__ == "__main__":

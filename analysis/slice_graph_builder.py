@@ -799,17 +799,45 @@ class SliceGraphBuilder:
                     state,
                     memory_nodes,
                 ) or {"kind": "value"}
-        elif self._should_materialize_observed_memory(mem_key):
-            mem_node = self._new_synthetic_value(fg, state, "mem", mem_key, instr, "OBSERVED_MEMORY")
-            fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
-            fg.slice_graph.nodes[mem_node]["memory_object"] = mem_key
-            if addr_node is not None:
-                fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
-            state.memory[mem_key] = mem_node
-            fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
-            observed_expr = self._observed_memory_load_expression(fg, mem_key, mem_node, output)
-            state.expressions[mem_node] = dict(observed_expr)
-            state.expressions[out_node] = dict(observed_expr)
+        elif any(self._should_materialize_observed_memory(candidate_key) for candidate_key in mem_keys):
+            # A joined pointer can name several observed locations even when no
+            # local definition for any of them has been seen yet.  Preserve
+            # every bounded alternative: choosing only mem_keys[0] loses a
+            # valid storage transition before interprocedural summaries have a
+            # chance to attach to the corresponding observed-memory node.
+            observed_nodes: list[ValueId] = []
+            for candidate_key in mem_keys:
+                if not self._should_materialize_observed_memory(candidate_key):
+                    continue
+                mem_node = self._new_synthetic_value(
+                    fg,
+                    state,
+                    "mem",
+                    candidate_key,
+                    instr,
+                    "OBSERVED_MEMORY",
+                )
+                fg.slice_graph.nodes[mem_node]["kind"] = "observed_memory"
+                fg.slice_graph.nodes[mem_node]["memory_object"] = candidate_key
+                if addr_node is not None:
+                    fg.slice_graph.add_edge(addr_node, mem_node, kind="address", opcode="LOAD_ADDRESS")
+                state.memory[candidate_key] = mem_node
+                fg.slice_graph.add_edge(mem_node, out_node, kind="memory", opcode="LOAD")
+                observed_expr = self._observed_memory_load_expression(
+                    fg,
+                    candidate_key,
+                    mem_node,
+                    output,
+                )
+                state.expressions[mem_node] = dict(observed_expr)
+                observed_nodes.append(mem_node)
+            if len(observed_nodes) == 1:
+                state.expressions[out_node] = dict(state.expressions[observed_nodes[0]])
+            else:
+                state.expressions[out_node] = self._merged_function_pointer_expression(
+                    state,
+                    observed_nodes,
+                ) or {"kind": "value"}
         elif addr_node is not None:
             fg.slice_graph.add_edge(addr_node, out_node, kind="address", opcode="LOAD")
             state.expressions[out_node] = {"kind": "value"}
@@ -1648,30 +1676,36 @@ class SliceGraphBuilder:
         byte_offset: int,
         byte_size: int,
     ) -> list[ValueId]:
-        load_range = self._load_range_for_memory_predecessors(fg, load_node)
-        if load_range is None:
+        load_ranges = self._load_ranges_for_memory_predecessors(fg, load_node)
+        if not load_ranges:
             return []
-        wanted = MemoryRange(load_range.identity, load_range.start + byte_offset, byte_size)
         memory_attrs = fg.slice_graph.nodes[memory_node]
         memory_range = self._memory_range_for_storage(memory_attrs.get("storage") or "")
-        if memory_attrs.get("kind") == "memory_range":
-            if memory_range == wanted:
-                return [memory_node]
-            selected: list[ValueId] = []
-            for pred in fg.slice_graph.predecessors(memory_node):
-                edge_kind = fg.slice_graph.edges[pred, memory_node].get("kind")
-                if not self._is_memory_dependency_kind(edge_kind):
+        selected: list[ValueId] = []
+        for load_range in load_ranges:
+            wanted = MemoryRange(load_range.identity, load_range.start + byte_offset, byte_size)
+            if memory_attrs.get("kind") == "memory_range":
+                if memory_range == wanted:
+                    if memory_node not in selected:
+                        selected.append(memory_node)
                     continue
-                if edge_kind in {"call_out_mem", "call_out_global"}:
-                    selected.append(pred)
-                    continue
-                pred_range = self._memory_range_for_storage(fg.slice_graph.nodes[pred].get("storage") or "")
-                if pred_range is not None and pred_range.overlaps(wanted):
-                    selected.append(pred)
-            return selected
-        if memory_range is not None and memory_range.overlaps(wanted):
-            return [memory_node]
-        return []
+                for pred in fg.slice_graph.predecessors(memory_node):
+                    edge_kind = fg.slice_graph.edges[pred, memory_node].get("kind")
+                    if not self._is_memory_dependency_kind(edge_kind):
+                        continue
+                    if edge_kind in {"call_out_mem", "call_out_global"}:
+                        if pred not in selected:
+                            selected.append(pred)
+                        continue
+                    pred_range = self._memory_range_for_storage(
+                        fg.slice_graph.nodes[pred].get("storage") or ""
+                    )
+                    if pred_range is not None and pred_range.overlaps(wanted) and pred not in selected:
+                        selected.append(pred)
+                continue
+            if memory_range is not None and memory_range.overlaps(wanted) and memory_node not in selected:
+                selected.append(memory_node)
+        return selected
 
     def _narrow_memory_node_to_range(
         self,
@@ -2003,6 +2037,14 @@ class SliceGraphBuilder:
         return bounded if len(bounded) <= 16 else set()
 
     def _load_range_for_memory_predecessors(self, fg: FunctionGraph, load_node: ValueId) -> MemoryRange | None:
+        ranges = self._load_ranges_for_memory_predecessors(fg, load_node)
+        return max(ranges, key=lambda item: item.size) if ranges else None
+
+    def _load_ranges_for_memory_predecessors(
+        self,
+        fg: FunctionGraph,
+        load_node: ValueId,
+    ) -> list[MemoryRange]:
         exact_ranges: list[MemoryRange] = []
         ranges: list[MemoryRange] = []
         for pred in fg.slice_graph.predecessors(load_node):
@@ -2014,10 +2056,26 @@ class SliceGraphBuilder:
                 ranges.append(memory_range)
                 if edge.get("opcode") == "LOAD":
                     exact_ranges.append(memory_range)
+            carrier_range = self._memory_range_for_storage(
+                edge.get("narrowed_from_memory_storage") or ""
+            )
+            if carrier_range is not None:
+                ranges.append(carrier_range)
+                exact_ranges.append(carrier_range)
         if exact_ranges:
-            return max(exact_ranges, key=lambda item: item.size)
+            exact_width = max(item.size for item in exact_ranges)
+            # LOAD_OVERLAP can denote either another fragment of the same
+            # object or a full-width alternative selected by a joined
+            # pointer.  Equal-width ranges are the latter and must remain
+            # independent location candidates during later byte narrowing.
+            full_width_alternatives = [
+                item
+                for item in ranges
+                if item.size == exact_width
+            ]
+            return list(dict.fromkeys(exact_ranges + full_width_alternatives))
         if not ranges:
-            return None
+            return []
         identities = {item.identity for item in ranges}
         if len(identities) == 1:
             ordered = sorted(ranges, key=lambda item: (item.start, item.end))
@@ -2030,8 +2088,8 @@ class SliceGraphBuilder:
                     break
                 union_end = max(union_end, item.end)
             if contiguous and union_end > union_start and union_end - union_start <= 64:
-                return MemoryRange(ordered[0].identity, union_start, union_end - union_start)
-        return max(ranges, key=lambda item: item.size)
+                return [MemoryRange(ordered[0].identity, union_start, union_end - union_start)]
+        return [max(ranges, key=lambda item: item.size)]
 
     def _register_byte_range(self, storage: str) -> tuple[str, int, int] | None:
         text = storage
@@ -2149,10 +2207,19 @@ class SliceGraphBuilder:
     def _bind_sink(self, fg: FunctionGraph, state: BuildState, instr: dict, name: str) -> None:
         target = self.boundary_provider.choose_sink_target(fg, state, instr)
         anchor_key = f"{instr.get('address')}:{name}:observed_storage0"
-        sink_node = self._new_synthetic_value(fg, state, "sink", anchor_key, instr, "SINK_OBSERVED_STORAGE")
-        fg.slice_graph.nodes[sink_node]["kind"] = "sink_boundary"
-        fg.slice_graph.nodes[sink_node]["sink_name"] = name
-        fg.sink_index[anchor_key] = sink_node
+        sink_node = fg.sink_index.get(anchor_key)
+        if sink_node is None:
+            sink_node = self._new_synthetic_value(
+                fg,
+                state,
+                "sink",
+                anchor_key,
+                instr,
+                "SINK_OBSERVED_STORAGE",
+            )
+            fg.slice_graph.nodes[sink_node]["kind"] = "sink_boundary"
+            fg.slice_graph.nodes[sink_node]["sink_name"] = name
+            fg.sink_index[anchor_key] = sink_node
         if target is not None:
             fg.slice_graph.add_edge(target, sink_node, kind="data", opcode="SINK_OBSERVED_STORAGE")
         else:
@@ -2346,6 +2413,13 @@ class SliceGraphBuilder:
         expression = self._callind_target_expression(fg, state, instr)
         if not expression or expression.get("kind") != "function_ptr":
             return fallback
+        # A loop revisit can observe one concrete slot of a function-pointer
+        # table before the induction value is merged.  That observation proves
+        # the value for that iteration, not a singleton target for the shared
+        # CALLIND instruction.  Keep the call unresolved so the program-level
+        # pass can account for the complete, bounded table traversal.
+        if self._is_observed_indexed_function_pointer_table_loop_call(fg, state, instr):
+            return fallback
         name = str(expression.get("name") or "")
         address = str(expression.get("address") or "")
         if not name or not address:
@@ -2370,6 +2444,141 @@ class SliceGraphBuilder:
             name=name,
             confidence=str(target["confidence"]),
         )
+
+    def _is_observed_indexed_function_pointer_table_loop_call(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+    ) -> bool:
+        pointer_size = max(1, fg.architecture.pointer_size)
+        if not self._callind_has_pointer_sized_index(instr, pointer_size):
+            return False
+        call_addr = str(instr.get("address") or "")
+        if not call_addr or not self._cfg_node_is_in_natural_loop(fg, call_addr):
+            return False
+
+        target_node = self._callind_target_node(fg, state, instr)
+        if target_node is None:
+            return False
+        graph = fg.slice_graph
+        ancestors: set[ValueId] = set()
+        stack = [target_node]
+        while stack and len(ancestors) < 192:
+            current = stack.pop()
+            if current in ancestors or not graph.has_node(current):
+                continue
+            ancestors.add(current)
+            for pred in graph.predecessors(current):
+                if graph.edges[pred, current].get("kind") in {"data", "memory", "address"}:
+                    stack.append(pred)
+
+        slots_by_identity: dict[str, list[tuple[MemoryRange, dict, ValueId]]] = {}
+        anchor_ranges: set[MemoryRange] = set()
+        for storage, node in state.memory.items():
+            memory_range = self._memory_range_for_key(storage)
+            expression = state.expressions.get(node) or {}
+            if (
+                memory_range is None
+                or memory_range.size != pointer_size
+                or expression.get("kind") != "function_ptr"
+                or not expression.get("name")
+                or not expression.get("address")
+            ):
+                continue
+            slots_by_identity.setdefault(memory_range.identity, []).append(
+                (memory_range, expression, node)
+            )
+            if node in ancestors:
+                anchor_ranges.add(memory_range)
+        if not anchor_ranges:
+            return False
+
+        for identity, slots in slots_by_identity.items():
+            ordered = sorted(slots, key=lambda item: (item[0].start, item[0].end))
+            run: list[tuple[MemoryRange, dict, ValueId]] = []
+            for slot in ordered:
+                if run and slot[0].start != run[-1][0].end:
+                    if self._function_pointer_run_contains_anchor(run, anchor_ranges):
+                        return True
+                    run = []
+                run.append(slot)
+            if self._function_pointer_run_contains_anchor(run, anchor_ranges):
+                return True
+        return False
+
+    def _function_pointer_run_contains_anchor(
+        self,
+        run: list[tuple[MemoryRange, dict, ValueId]],
+        anchor_ranges: set[MemoryRange],
+    ) -> bool:
+        if len(run) < 2 or not any(item[0] in anchor_ranges for item in run):
+            return False
+        targets = {
+            (str(item[1].get("name") or ""), str(item[1].get("address") or ""))
+            for item in run
+        }
+        return len(targets) > 1
+
+    def _callind_target_node(
+        self,
+        fg: FunctionGraph,
+        state: BuildState,
+        instr: dict,
+    ) -> ValueId | None:
+        for pcode in reversed(instr.get("low_pcode") or []):
+            if pcode.get("opcode") != "CALLIND":
+                continue
+            inputs = pcode.get("inputs") or []
+            if not inputs:
+                return None
+            storage = self._storage_key(fg, inputs[0])
+            return self._current_value_for_storage(state, storage) if storage else None
+        return None
+
+    def _callind_has_pointer_sized_index(self, instr: dict, pointer_size: int) -> bool:
+        shift = pointer_size.bit_length() - 1 if pointer_size > 0 else -1
+        for pcode in instr.get("low_pcode") or []:
+            opcode = str(pcode.get("opcode") or "")
+            inputs = pcode.get("inputs") or []
+            constants = {
+                parse_int(value.get("offset") or value.get("address"))
+                for value in inputs
+                if value.get("is_constant") or str(value.get("space") or "").startswith("const")
+            }
+            if opcode in {"INT_MULT", "PTRADD"} and pointer_size in constants:
+                return True
+            if opcode == "INT_LEFT" and shift in constants:
+                return True
+        return False
+
+    def _cfg_node_is_in_natural_loop(self, fg: FunctionGraph, node: str) -> bool:
+        cfg = fg.cfg
+        if not cfg.has_node(node):
+            return False
+        for tail, header in cfg.edges:
+            tail_addr = parse_int(tail) or 0
+            header_addr = parse_int(header) or 0
+            if tail_addr <= header_addr:
+                continue
+            if self._cfg_reaches(cfg, header, node) and self._cfg_reaches(cfg, node, tail):
+                return True
+        return False
+
+    def _cfg_reaches(self, cfg, start: str, target: str) -> bool:
+        if start == target:
+            return True
+        seen = {start}
+        pending = [start]
+        while pending and len(seen) < 4096:
+            current = pending.pop()
+            for successor in cfg.successors(current):
+                if successor == target:
+                    return True
+                if successor not in seen:
+                    seen.add(successor)
+                    pending.append(successor)
+        return False
 
     def _callind_target_expression(
         self,
@@ -2557,7 +2766,14 @@ class SliceGraphBuilder:
             if merged is not None:
                 return merged
         if opcode in {"INT_ADD", "PTRADD", "PTRSUB"} and len(exprs) >= 2:
-            stack_expr = next((expr for expr in exprs if expr and expr.get("kind") == "stack"), None)
+            stack_expr = next(
+                (
+                    expr
+                    for expr in exprs
+                    if expr and expr.get("kind") in {"stack", "stack_set"}
+                ),
+                None,
+            )
             heap_expr = next((expr for expr in exprs if expr and expr.get("kind") == "heap_ptr"), None)
             expr_pairs = [
                 (node, state.expressions.get(node))

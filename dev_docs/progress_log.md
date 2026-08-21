@@ -3033,3 +3033,243 @@ the core graph model and recording provenance on every summary edge.
   all eight variants. The focused unit suite passes 26/26, including a new
   composite-flow extraction regression, and the DFB001/014/046/049/120-123
   smoke matrix passes 48/48 across six architecture/platform roots.
+
+- 2026-08-20: Repaired fused callback-loop provenance through joined pointers,
+  partial writes, and compiler-lowered wide copies. Loads through bounded
+  observed stack-pointer sets now materialize every candidate location, and
+  byte-range narrowing keeps equal-width overlap inputs as distinct location
+  alternatives. Post-call copy redirection retains its observed carrier and
+  maps narrowed destinations back to matching source subranges. Aggregate
+  reads can collect adjacent observed lanes, while effective callsite ordering
+  and per-range latest-writer selection preserve disjoint live fields.
+- Added a convention-free bounded callback-table loop proof. A computed call is
+  expanded only when observed Low-PCode establishes a natural loop, a unique
+  constant bound, a unit stored induction step, pointer-width address scaling,
+  and a contiguous table containing multiple observed function pointers. This
+  avoids freezing a loop call to its first observed singleton target while
+  keeping non-loop indirect calls precise. Initial sink observations are also
+  retained across CFG revisits so a widened loop state cannot replace a more
+  precise sink anchor. The summary cache schema advanced to 155. No ABI roles,
+  signatures, helper names, case IDs, expected labels, or fixed offsets enter
+  the core semantics.
+- Focused validation passes all eight supplied P0/P1 x86, x64, ARMv7, and
+  AArch64 callback-loop scopes. The P0 variants retain one allowed extra source
+  as precision telemetry; all expected sources are present. Seven adjacent
+  controls pass, including two hard-negative scopes that remain source-empty.
+  The repository unit suite passes 32/32, including joined-memory, wide-copy,
+  adjacent-lane collection, and loop sink-revisit regressions. `py_compile` and
+  `git diff --check` pass. The full cache-disabled 09/10 regression remains for
+  the outer harness.
+
+- 2026-08-20: Repaired the cycle-2 regressions exposed by retaining only the
+  first sink observation and by treating any later overlapping post-call
+  observation as the output of an earlier call. A stable sink anchor now
+  accumulates the data targets observed on its bounded CFG revisits. This
+  preserves both the early and converged loop states without selecting either
+  by traversal order. Post-call memory matching now requires complete byte
+  coverage of a summary write, and it refuses observations that occur after an
+  intervening call has already consumed the requested storage. A later exact
+  observation therefore cannot erase earlier consumed lanes, while a narrow
+  patch cannot impersonate a wider output and kill its untouched provenance.
+  The rules use only Low-PCode call ordering, observed storage ranges, and CFG
+  revisit states; no ABI roles, signatures, names, source labels, case IDs, or
+  fixed offsets enter core semantics.
+- Replayed all 17 cycle-2 regression scopes and all five original fused
+  callback-loop failure scopes with demand closure; every scope passes the
+  recall-first validator. The callback-loop P0 scopes retain one allowed extra
+  source as precision telemetry. All 40 explicit Suite10 negative-control
+  scopes remain source-empty. The focused unit suite passes 35/35, `py_compile`
+  and `git diff --check` pass, and a ten-case DFB smoke matrix passes 60/60
+  across PE x86/x64, Linux x86/x64, AArch64, and ARMv7. The full cache-disabled
+  09/10 regression remains for the outer harness.
+
+- 2026-08-20: Repaired fused partial-object provenance across direct helpers
+  and ambiguous computed callbacks. A wide callee store is now decomposed into
+  source-bearing byte ranges only when its Low-PCode value expression proves
+  distinct lane provenance. Computed candidates compare equivalent
+  candidate-local stack roots by their observed layout, and a memory write is
+  propagated only when every resolved candidate exposes the same observed
+  input/address/output transition. This recovers common callback patch data
+  without choosing a target from metadata or ABI roles.
+- Partial post-call writes now materialize their exact caller range even when a
+  later wide observation already exists. Rewriting a memory edge into a
+  register/unique load derives the read range from the memory predecessor, so
+  patched lanes compose with untouched lanes. Single-source late-read
+  shortcuts do not collapse an explicitly composed read. When an intermediate
+  post-call placeholder is source-empty, the uncovered lanes reconnect only
+  to the latest source-bearing pre-call memory version with a containing
+  architecture-aware range. Summary-edge callsite order also participates in
+  intervening-write checks, preventing an older summary result from masking a
+  later partial patch. These rules use only observed Low-PCode dependencies,
+  storage ranges, and write order; they add no case/helper names, expected
+  labels, fixed offsets, signatures, or calling-convention roles.
+- Replayed all ten supplied cycle-1 failing scopes across P0/P1 x86, x64,
+  ARMv7, and AArch64: 10/10 are recall-complete. Five callback variants retain
+  the neighboring source as allowed positive precision telemetry. All
+  32 explicit Suite10 source-empty negative controls remain PASS, the focused
+  unit suite passes 39/39, `py_compile` and `git diff --check` pass, and the
+  DFB001/002/014/034/046/049/120-123 smoke matrix passes 60/60 across PE
+  x86/x64, Linux x86/x64, AArch64, and ARMv7. The full cache-disabled 09/10
+  regression remains for the outer harness.
+
+- 2026-08-20: Repaired provenance convergence for a fused partial write that
+  crosses an internal callback and a later compiler-lowered memory copy. A
+  trusted observed copy now materializes exact post-call destination ranges
+  even when no destination read existed when the summary was first injected.
+  Latest-writer coverage composes a narrow patch with the surviving lanes of
+  an older wide write, while source-empty terminal lanes continue to kill stale
+  provenance. Refreshed summaries converge these materialized transitions
+  through subsequent call boundaries, including callback outputs that are
+  themselves produced by an observed copy. The summary cache schema advanced
+  to 156.
+- External-copy materialization now consults the composed caller graph for
+  interprocedural source evidence. Its observed destination version may cross
+  an unrelated pre-call storage snapshot, because a snapshot is an observation
+  rather than a write; an actual intervening observed write still creates its
+  own post-memory version and redirects later consumers. The supplied AArch64
+  fused callback/partial-copy scope now reports exactly its two expected
+  origins. The repository unit suite passes 44/44, including new partial-copy,
+  full-overwrite, interprocedural-source, incidental-snapshot, and terminal
+  writer regressions. `py_compile` and `git diff --check` pass. The full
+  cache-disabled 09/10 regression remains for the outer harness.
+
+- 2026-08-20: A fresh replay of the next fused heap case exposed a remaining
+  distinction between trusted external copies and internal compiler-lowered
+  copies. The callee CFG already proved that a byte-copy loop covered a bounded
+  contiguous object range, but call-summary application considered only the
+  anchor byte represented in the local summary. Caller reads at another offset
+  inside the proven range therefore had no observed copy transition and could
+  fall through to a weaker optional metadata marker.
+- Internal observed-copy summaries now enumerate actual post-call memory reads
+  anywhere inside the uniquely mapped, CFG-proven coverage component. Each read
+  is translated back to its exact input subrange before latest-writer selection;
+  reads outside the coverage, across ambiguous relative mappings, or superseded
+  before observation are not connected. The summary cache schema advanced to
+  157. This uses only Low-PCode read/write dependencies, natural-loop bounds,
+  pointer expressions, architecture-aware ranges, and observed call order.
+- Fresh-cache validation passes the four supplied P0 x86, x64, ARMv7, and
+  AArch64 failures with exactly `dfb_source_A.ret`. All 32 P0/P1 architecture
+  scopes for TV2C680--TV2C683 remain recall-complete, and all 32 explicit
+  Suite10 source-empty controls remain empty. The complete repository unit suite
+  passes 45/45, the DFB001/014/120/123 smoke matrix passes 24/24 across six
+  architecture/platform roots, and `py_compile` plus `git diff --check` pass.
+  The full cache-disabled 09/10 regression remains for the outer harness.
+
+- 2026-08-20: Repaired internal observed-copy composition when a callee writes
+  a wide destination range but the caller later consumes only a contained
+  subrange. The destination matcher now recognizes a later observed read only
+  when it lies inside the same pointer-derived post-call carrier and inside one
+  uniquely mapped Low-PCode copy-coverage component. The exact consumed width
+  is then translated back to the input object before latest-writer selection,
+  so partial callback writes compose without pulling in overwritten neighboring
+  lanes. The summary cache schema advanced to 158.
+- Fresh-cache replay of the supplied callback + partial overlay + lowered-copy
+  scope reports exactly the two expected origins on x86, x64, ARMv7, and
+  AArch64; the overwritten neighboring source remains absent. The complete
+  repository unit suite passes 47/47, including positive and out-of-coverage
+  negative wide-carrier/narrow-read regressions. A DFB001/DFB120 smoke matrix
+  passes 12/12 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7;
+  `compileall` and `git diff --check` also pass. The repair uses only observed
+  pointer expressions, architecture-aware byte ranges, Low-PCode copy
+  coverage, and call order; it adds no ABI roles, signatures, helper/case
+  names, expected labels, or fixed benchmark offsets. The full cache-disabled
+  09/10 regression remains for the outer harness.
+
+- 2026-08-20: Repaired fused callback loops whose exact partial writes cross a
+  wrapper/core boundary and a later compiler-lowered aggregate copy. Internal
+  direct tail stubs now expose their target summary when Low P-code proves that
+  all writes are stack-local and every modified general register is restored
+  to its observed entry storage. Non-tail forwarding wrappers may expose one
+  summary-bearing internal target only when the nested call's scalar and
+  pointer storages are observed unchanged; transformed or ambiguous wrappers
+  remain unresolved.
+- A computed call inside a natural loop is expanded into per-iteration storage
+  transitions only when the observed CFG proves a zero-initialized, unit-step,
+  bounded induction variable; the callee store is affine in that same observed
+  index; and the caller scalar load selects one unique contiguous source range.
+  Each source lane is correlated with its exact output byte range. Adjacent
+  decoys outside the proven range are therefore not admitted. Partial summary
+  writes also feed register-valued wide loads and split LOAD/LOAD_RANGE forms,
+  preserving exact lanes through lowered copies without treating a containing
+  call snapshot as a narrow write.
+- Fresh demand-closure replay of all eight supplied P0/P1 x86, x64, ARMv7, and
+  AArch64 scopes reports exactly the two expected origins; the forbidden
+  neighboring origin is absent. Copy-coverage observations are correlated with
+  their pointer-relative summary interval, and multiple affine copy elements
+  are not each widened to the whole consumed aggregate; this keeps concrete
+  partial kills from being cross-connected to adjacent destination lanes. All
+  32 explicit Suite10 source-empty negative-control scopes remain empty. The
+  complete repository unit suite passes 54/54, the DFB001/DFB002 smoke matrix
+  passes 12/12 across six architecture/platform roots, and `py_compile` plus
+  `git diff --check` pass.
+  The repair uses observed Low-PCode storage, CFG, affine-address, and byte-range
+  evidence only; it adds no ABI roles, signatures, case/helper names, expected
+  labels, or fixed offsets. The full cache-disabled 09/10 regression remains
+  for the outer harness.
+
+- 2026-08-20: Repaired a recall regression in compiler-lowered copy
+  composition when joined pointer analysis exposed multiple storage identities
+  for the same affine output byte interval. The copy-summary precision guard
+  had counted those aliases as distinct output lanes and therefore refused to
+  widen the anchor byte to the caller's wider, sink-observed range. Output
+  candidates now compare their architecture-aware relative intervals: aliases
+  with the same start and end may share the uniquely mapped copy coverage,
+  while genuinely adjacent or disjoint intervals remain lane-precise. Latest
+  writer coverage then composes narrow patches with the surviving bytes of an
+  older wide write. The summary cache schema advanced to 159.
+- Fresh-cache demand-closure replay reports exactly the two expected origins
+  across all eight P0/P1 x86, x64, ARMv7, and AArch64 positive scopes. The
+  adjacent explicit partial-kill/copy negative remains source-empty across the
+  same eight variants. The complete repository unit suite passes 56/56,
+  including same-interval alias and distinct-interval controls; the
+  DFB001/DFB120 smoke matrix passes 12/12 across six architecture/platform
+  roots; `compileall` and `git diff --check` pass. The repair uses only
+  observed Low-PCode pointer identities, affine byte intervals, copy coverage,
+  sink-observed storage width, and write order. It adds no ABI roles,
+  signatures, helper/case names, expected labels, or fixed offsets to engine
+  semantics. The full cache-disabled 09/10 regression remains for the outer
+  harness.
+
+- 2026-08-20: Repaired two composition gaps exposed by fused callback/copy
+  cases. Bounded indexed scalar-source discovery now considers only stores in
+  the caller function even when querying the composed program graph. Reachable
+  helpers with an equally shaped contiguous object can therefore no longer
+  create a second artificial source-lane run and suppress an otherwise unique
+  caller-local loop proof. Separately, a `register_offset` pointer whose
+  observed base node has one affine stack-storage term is materialized as that
+  architecture-aware stack range instead of an unrelated unknown-register
+  identity. This lets a summarized post-call write meet a later load lowered
+  independently from the frame/stack expression and correctly shadow the
+  pre-call value.
+- The supplied ARMv7 partial-lane callback scope now reports exactly
+  `dfb_source_A.ret` plus `dfb_source_B.ret`; the supplied P1 x64 correlated
+  callback overwrite scope reports exactly `dfb_source_A.ret`, with the stale
+  C origin absent. All 32 explicit Suite10 source-empty controls remain empty
+  across P0/P1 x86, x64, ARMv7, and AArch64. Eleven additional full-directory
+  TV2C686--TV2C688 checks completed precision-clean before the disproportionately
+  slow extra AArch64 build was stopped; the interruption affected only a
+  temporary cache. The focused unit suite passes 58/58, including caller-local
+  lane-selection and affine-stack materialization regressions. DFB001/DFB002
+  pass 12/12 across PE x86/x64, Linux x86/x64, AArch64, and ARMv7;
+  `compileall` and `git diff --check` also pass. The repair uses only observed
+  Low-PCode graph membership, affine storage expressions, architecture stack
+  identities, and byte widths; it adds no ABI roles, signatures, helper/case
+  names, expected labels, or fixed test offsets. The full cache-disabled 09/10
+  regression remains for the outer harness.
+
+- 2026-08-21: Closed the legacy engine development line after the GPT-5.6
+  frontier round. The final independent, cache-disabled Suite09/Suite10
+  NetworkX reference run passed 1446/1446 cases: Suite09 488/488 and Suite10
+  958/958, with zero missing-required-source failures, zero crashes, and zero
+  negative-control failures. The recall-first validator recorded 68
+  `PRECISION_PENDING` results for extra sources (30 in Suite09 and 38 in
+  Suite10); these are intentionally not recall failures. All 58 repository
+  unit tests, `compileall`, `git diff --check`, and the harness design lint
+  passed.
+- The final frontier repairs remain convention-free and use observed
+  Low-PCode storage, CFG, byte-range, copy, and call-order evidence. No case
+  identifiers, source labels, helper names, fixed benchmark offsets, or ABI
+  parameter/return roles were added to engine semantics. This checkpoint is
+  retained as the behavioral reference for a separately developed V2 engine;
+  the large legacy interprocedural pattern pipeline will not be used as the V2
+  architecture.
